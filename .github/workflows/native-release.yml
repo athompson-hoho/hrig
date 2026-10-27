@@ -47,10 +47,13 @@ jobs:
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64 libxss1 libxtst6 rpm
-      - run: npm ci
+      - name: Install dependencies
+        timeout-minutes: 8
+        run: npm ci
       - name: Unit and transport checks
         run: npm test
       - run: npm run build
+      - run: npm run mobile:build
       - name: Native packaging
         env:
           CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || '' }}

@@ -42,10 +42,12 @@ try {
   let page = await app.firstWindow();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.getByRole("button", { name: "New panel", exact: true }).waitFor();
-  const runtime = await app.evaluate(() => ({
+  const runtime = await app.evaluate(({app}) => ({
     platform: process.platform,
     arch: process.arch,
+    mobileAssets: require('node:fs').existsSync(require('node:path').join(app.getAppPath(), 'dist-mobile/index.html')),
   }));
+  if (!runtime.mobileAssets) throw new Error('Packaged mobile web assets are missing.');
   if (runtime.platform !== latest.platform || runtime.arch !== latest.arch)
     throw new Error(
       "Packaged runtime architecture differs from the build manifest.",
@@ -176,6 +178,7 @@ try {
         passed: true,
         checks: {
           ...checks,
+          mobileAssets: true,
           pty: true,
           editor: true,
           boardRestart: true,
