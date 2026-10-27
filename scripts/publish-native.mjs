@@ -3,8 +3,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 const repo = "athompson-hoho/hrig";
-const run = (file, args) =>
+const run = (file, args, input) =>
   execFileSync(file, args, {
+    input,
     encoding: "utf8",
     windowsHide: true,
     maxBuffer: 16 * 1024 * 1024,
@@ -153,21 +154,20 @@ let remote = api(`repos/${repo}/releases?per_page=100`).find(
   (r) => r.tag_name === tag,
 );
 if (!remote) {
-  gh(
-    "release",
-    "create",
-    tag,
-    "--repo",
-    repo,
-    "--verify-tag",
-    "--draft",
-    "--title",
-    `HRig ${version} - macOS, Linux and Windows`,
-    "--notes-file",
-    notesFile,
-  );
-  remote = api(`repos/${repo}/releases?per_page=100`).find(
-    (r) => r.tag_name === tag,
+  // Use the creation response's ID. A just-created draft can be missing from
+  // the list endpoint briefly even though creation succeeded.
+  remote = JSON.parse(
+    run(
+      "gh",
+      ["api", `repos/${repo}/releases`, "--method", "POST", "--input", "-"],
+      JSON.stringify({
+        tag_name: tag,
+        target_commitish: commit,
+        name: `HRig ${version} - macOS, Linux and Windows`,
+        body: notes,
+        draft: true,
+      }),
+    ),
   );
 }
 if (!remote) throw new Error("Release draft not found.");
