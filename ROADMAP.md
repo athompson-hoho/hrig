@@ -89,3 +89,5 @@ Visual update validation: TypeScript/Vite production build, the Electron designe
 ### 0.6.2 - Match the rig designer to HRig
 
 Reworked the wizard around existing tool-panel styling: compact heading and steps, shared control styling and surface tokens, smaller choice/seat layouts, flat review rows, and responsive form columns. Removed separate studio branding, gradients, shadows, and the rounded outer frame. Existing preview and confirmation behavior stays intact.
+
+Validation: isolated production build, Electron designer workflow (including narrow-panel overflow, revision, preview, launch and deletion confirmation), wide/narrow screenshot review, and packaged native-terminal/editor/doctor/Git smoke test passed. Fresh README screenshots match this version.
