@@ -91,3 +91,7 @@ Visual update validation: TypeScript/Vite production build, the Electron designe
 Reworked the wizard around existing tool-panel styling: compact heading and steps, shared control styling and surface tokens, smaller choice/seat layouts, flat review rows, and responsive form columns. Removed separate studio branding, gradients, shadows, and the rounded outer frame. Existing preview and confirmation behavior stays intact.
 
 Validation: isolated production build, Electron designer workflow (including narrow-panel overflow, revision, preview, launch and deletion confirmation), wide/narrow screenshot review, and packaged native-terminal/editor/doctor/Git smoke test passed. Fresh README screenshots match this version.
+
+### 0.7.0 - Full settings and coordinated theming
+
+Delivered 33 searchable, working preferences with user/project overrides, modified filters, defaults/reset, JSON import/export, shortcut reference and About. Implemented five themes plus OS following across app surfaces, Monaco, xterm, and popouts; accent, font, density and reduced-motion options; editor/diff controls; live terminal preferences and local shell selection; refresh frequency, connection/rig defaults and notifications. Settings do not bypass agent policy or unsaved-file protection. See SETTINGS.md for the design rationale and catalog.

@@ -33,7 +33,7 @@ The rig designer guides you from a goal to an editable team and a launch review.
 
 ## Run the desktop app
 
-Open **`release/HRig 0.6.2.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.7.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -160,3 +160,6 @@ The designer uses a three-step progress indicator, visual work and team choices,
 ### Wizard appearance (0.6.2)
 
 The rig designer now follows the workspace tool panels: compact headings and steps, shared control styling, flat surfaces, restrained mint selections, and denser forms and seat layouts. The screenshots above show the updated interface.
+### Settings and themes (0.7.0)
+
+Open **Settings** from the activity rail, Tools, the command center, or **Ctrl+,**. Search 33 preferences across appearance, editor, terminal, workspace, connection/rig defaults, and notifications. User and local project scopes include modified filters, resets, and validated JSON import/export. Five palettes plus Follow Windows coordinate the app, editors, terminals, and detached panels. Changes to terminal appearance preserve the running session. See [SETTINGS.md](SETTINGS.md) for the feature plan, catalog, scope rules, and follow-up ideas.

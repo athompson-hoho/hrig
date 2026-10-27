@@ -8,6 +8,8 @@ import { Save, FileCode2 } from "lucide-react";
 import { ErrorBox, Loading, Modal } from "./components";
 import type { PanelConfig } from "./types";
 import { buffers, problems } from "./editor-buffers";
+import { useSettings } from "./SettingsContext";
+import { themes, themeId, themeColor } from "./themes";
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === "json") return new JsonWorker();
@@ -73,6 +75,51 @@ export default function EditorPanel({
   onDirty: (id: string, dirty: boolean) => void;
   onSaved: () => void;
 }) {
+  const { effective: preferences } = useSettings();
+  const colorTheme = themeId(preferences),
+    palette = themes[colorTheme];
+  useEffect(() => {
+    monaco.editor.defineTheme("hrig-settings", {
+      base: palette.dark ? "vs-dark" : "vs",
+      inherit: true,
+      rules:
+        colorTheme === "hrig-dark"
+          ? [
+              { token: "comment", foreground: "697386" },
+              { token: "string", foreground: "a1d6b8" },
+              { token: "keyword", foreground: "b8abed" },
+            ]
+          : [],
+      colors: {
+        "editor.background": palette.panel,
+        "editor.foreground": palette.text,
+        "editorLineNumber.foreground": palette.muted,
+        "editorCursor.foreground": themeColor(
+          "#98e2c2",
+          colorTheme,
+          preferences["appearance.accent"],
+        ),
+      },
+    });
+    monaco.editor.setTheme("hrig-settings");
+  }, [colorTheme, preferences["appearance.accent"]]);
+  const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
+    fontSize: preferences["editor.fontSize"],
+    fontFamily: preferences["editor.fontFamily"],
+    tabSize: preferences["editor.tabSize"],
+    insertSpaces: preferences["editor.insertSpaces"],
+    detectIndentation: false,
+    wordWrap: preferences["editor.wordWrap"] as "on" | "off",
+    minimap: { enabled: preferences["editor.minimap"] },
+    lineNumbers: preferences["editor.lineNumbers"] as "on" | "relative" | "off",
+    fontLigatures: preferences["editor.fontLigatures"],
+    renderWhitespace: preferences["editor.renderWhitespace"] as
+      "selection" | "all" | "none",
+    bracketPairColorization: { enabled: preferences["editor.bracketPairs"] },
+    automaticLayout: true,
+    scrollBeyondLastLine: false,
+    smoothScrolling: !preferences["appearance.reduceMotion"],
+  };
   const [value, setValue] = useState<string | undefined>(
     buffers.get(id)?.content,
   );
@@ -182,7 +229,10 @@ export default function EditorPanel({
         });
         const buffer = buffers.get(id);
         if (!active || !buffer || buffer.revision === current.revision) return;
-        if (buffer.content === buffer.saved) {
+        if (
+          buffer.content === buffer.saved &&
+          preferences["editor.autoReload"]
+        ) {
           buffer.content = current.content;
           buffer.saved = current.content;
           buffer.revision = current.revision;
@@ -205,7 +255,7 @@ export default function EditorPanel({
       clearInterval(timer);
       window.removeEventListener("focus", check);
     };
-  }, [id, diff]);
+  }, [id, diff, preferences["editor.autoReload"]]);
   return (
     <div className="editor-panel">
       <div className="editor-toolbar">
@@ -264,13 +314,12 @@ export default function EditorPanel({
           original={compare ? external?.content || "" : original}
           modified={value}
           language={language(config.path)}
-          theme="hrig"
+          theme="hrig-settings"
           options={{
+            ...editorOptions,
             readOnly: true,
             automaticLayout: true,
-            renderSideBySide: true,
-            minimap: { enabled: false },
-            fontSize: 13,
+            renderSideBySide: preferences["editor.diffSideBySide"],
             scrollBeyondLastLine: false,
           }}
         />
@@ -279,7 +328,7 @@ export default function EditorPanel({
           path={`${config.connection.id}/${config.root}/${config.path}`}
           value={value}
           language={language(config.path)}
-          theme="hrig"
+          theme="hrig-settings"
           onChange={(text) => {
             const b = buffers.get(id);
             if (!b) return;
@@ -314,16 +363,11 @@ export default function EditorPanel({
             window.dispatchEvent(new Event("hrig:problems"));
           }}
           options={{
+            ...editorOptions,
             automaticLayout: true,
-            fontFamily: '"Cascadia Code", Consolas, monospace',
-            fontSize: 13,
-            lineHeight: 23,
-            minimap: { enabled: false },
+            lineHeight: Math.round(preferences["editor.fontSize"] * 1.7),
             padding: { top: 16 },
             scrollBeyondLastLine: false,
-            wordWrap: "on",
-            smoothScrolling: true,
-            bracketPairColorization: { enabled: true },
           }}
         />
       )}

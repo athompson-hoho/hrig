@@ -60,6 +60,8 @@ export interface RoleTemplate {
   model: IJsonModel;
 }
 export interface WorkspaceState {
+  preferences?: import("./settings").Overrides;
+  projectPreferences?: Record<string, import("./settings").Overrides>;
   version: 1;
   connections: Connection[];
   activeConnection: string;
@@ -165,6 +167,7 @@ export interface HrigAPI {
     seatId?: string;
     cols: number;
     rows: number;
+    localShell?: string;
   }): Promise<{ id: string; buffer: string; reused?: boolean }>;
   closeTerminal(id: string): Promise<void>;
   writeTerminal(id: string, data: string): void;

@@ -4,7 +4,14 @@ import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import type { PanelConfig } from "./types";
+import { useSettings } from "./SettingsContext";
+import { themeId, terminalTheme } from "./themes";
 export default function TerminalPanel({ config }: { config: PanelConfig }) {
+  const { effective: preferences } = useSettings();
+  const colorTheme = themeId(preferences);
+  const terminalRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<FitAddon | null>(null);
+  const localShell = useRef(preferences["terminal.localShell"]).current;
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState("");
   const [ended, setEnded] = useState<number | null>(null);
@@ -22,7 +29,12 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
     [],
   );
   useEffect(() => {
-    if (!config.seat || (!error && ended === null) || retries.current >= 6)
+    if (
+      !preferences["terminal.autoReconnect"] ||
+      !config.seat ||
+      (!error && ended === null) ||
+      retries.current >= 6
+    )
       return;
     const delay = Math.min(15000, 1000 * 2 ** retries.current++);
     setRetrying(true);
@@ -34,7 +46,7 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
       clearTimeout(timer);
       setRetrying(false);
     };
-  }, [error, ended, config.seat?.id]);
+  }, [error, ended, config.seat?.id, preferences["terminal.autoReconnect"]]);
   useEffect(() => {
     if (!host.current) return;
     let disposed = false,
@@ -68,6 +80,8 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
       },
     });
     const fit = new FitAddon();
+    terminalRef.current = term;
+    fitRef.current = fit;
     term.loadAddon(fit);
     term.open(host.current);
     const id = config.terminalId!;
@@ -116,6 +130,7 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
         root: config.root,
         session: config.seat?.session,
         seatId: config.seat?.id,
+        localShell,
         cols: term.cols,
         rows: term.rows,
       });
@@ -145,8 +160,30 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
       unsubscribe();
       input.dispose();
       term.dispose();
+      if (terminalRef.current === term) {
+        terminalRef.current = null;
+        fitRef.current = null;
+      }
     };
   }, [config.terminalId, config.seat?.session, attempt]);
+  useEffect(() => {
+    const term = terminalRef.current;
+    if (!term) return;
+    term.options.fontFamily = preferences["terminal.fontFamily"];
+    term.options.fontSize = preferences["terminal.fontSize"];
+    term.options.lineHeight = preferences["terminal.lineHeight"];
+    term.options.cursorStyle = preferences["terminal.cursorStyle"] as
+      "bar" | "block" | "underline";
+    term.options.cursorBlink =
+      preferences["terminal.cursorBlink"] &&
+      !preferences["appearance.reduceMotion"];
+    term.options.scrollback = preferences["terminal.scrollback"];
+    term.options.theme = terminalTheme(preferences, colorTheme);
+    try {
+      fitRef.current?.fit();
+      window.hrig.resizeTerminal(config.terminalId!, term.cols, term.rows);
+    } catch {}
+  }, [preferences, colorTheme, attempt, config.seat?.session]);
   return (
     <div className="terminal-panel">
       <div className="session-toolbar">
@@ -159,7 +196,9 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
             {config.seat
               ? `${config.seat.runtime}${config.seat.model ? " · " + config.seat.model : ""}`
               : config.connection.kind === "local"
-                ? "Windows PowerShell"
+                ? localShell === "cmd"
+                  ? "Command Prompt"
+                  : "Windows PowerShell"
                 : "Bash"}
           </span>
         </div>

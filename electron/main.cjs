@@ -389,8 +389,13 @@ handle("terminal:create", async (event, options) => {
   }
   let file, args;
   if (connection.kind === "local") {
-    file = "powershell.exe";
-    args = ["-NoLogo", "-NoProfile"];
+    if (
+      options.localShell &&
+      !["powershell", "cmd"].includes(options.localShell)
+    )
+      throw new Error("Unsupported local shell");
+    file = options.localShell === "cmd" ? "cmd.exe" : "powershell.exe";
+    args = options.localShell === "cmd" ? ["/Q"] : ["-NoLogo", "-NoProfile"];
   } else {
     const directory =
       !root || root === "~"

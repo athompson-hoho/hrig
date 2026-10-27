@@ -16,6 +16,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import type { Connection, Rig, Seat as RigSeat } from "./types";
+import { useSettings } from "./SettingsContext";
 import { ErrorBox, Loading } from "./components";
 
 type Agent = { id: string; name: string; summary?: string };
@@ -127,12 +128,13 @@ export default function RigDesigner({
   root: string;
   onChanged: () => void;
 }) {
+  const { effective: preferences } = useSettings();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [kind, setKind] = useState<keyof typeof goals>("build");
-  const [size, setSize] = useState(2);
-  const [runtime, setRuntime] = useState("codex");
+  const [size, setSize] = useState(preferences["rig.defaultTeamSize"]);
+  const [runtime, setRuntime] = useState(preferences["rig.defaultRuntime"]);
   const [folder, setFolder] = useState(root);
   const [folders, setFolders] = useState<
     Awaited<ReturnType<typeof window.hrig.projects>>

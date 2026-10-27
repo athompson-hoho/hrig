@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useMemo,
   useEffect,
   useRef,
   useState,
@@ -73,6 +74,17 @@ import {
   StatusDot,
 } from "./components";
 import Sidebar from "./Sidebar";
+import SettingsPage from "./SettingsPage";
+import { SettingsContext } from "./SettingsContext";
+import {
+  safeOverrides,
+  validateOverrides,
+  resolveSettings,
+  projectKey,
+  type Overrides,
+  type SettingsScope,
+} from "./settings";
+import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
 import TerminalPanel from "./TerminalPanel";
 import {
@@ -188,6 +200,73 @@ export default function App() {
     state.connections[0] ||
     local;
   const root = state.roots[connection.id] || connection.root;
+  const projectId = projectKey(connection.id, root);
+  const userPreferences = useMemo(
+    () => safeOverrides(state.preferences),
+    [state.preferences],
+  );
+  const projectPreferences = useMemo(
+    () => safeOverrides(state.projectPreferences?.[projectId]),
+    [state.projectPreferences, projectId],
+  );
+  const preferences = useMemo(
+    () => resolveSettings(userPreferences, projectPreferences),
+    [userPreferences, projectPreferences],
+  );
+  const themeDocuments = useRef(new Set<Document>([document]));
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const changed = () => setSystemDark(media.matches);
+    media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, []);
+  useEffect(() => {
+    for (const doc of themeDocuments.current)
+      applyTheme(doc, preferences, systemDark);
+  }, [preferences, systemDark]);
+  const changePreferences = (
+    scope: SettingsScope,
+    change: (current: Overrides) => Overrides,
+  ) =>
+    setState((s) =>
+      scope === "user"
+        ? { ...s, preferences: change(safeOverrides(s.preferences)) }
+        : {
+            ...s,
+            projectPreferences: {
+              ...s.projectPreferences,
+              [projectId]: change(
+                safeOverrides(s.projectPreferences?.[projectId]),
+              ),
+            },
+          },
+    );
+  const settingsContext = {
+    effective: preferences,
+    user: userPreferences,
+    project: projectPreferences,
+    update: (
+      scope: SettingsScope,
+      key: keyof typeof preferences,
+      value: unknown,
+    ) =>
+      changePreferences(scope, (current) => ({
+        ...current,
+        ...validateOverrides({ [key]: value }),
+      })),
+    replace: (scope: SettingsScope, value: Overrides) =>
+      changePreferences(scope, () => validateOverrides(value)),
+    reset: (scope: SettingsScope, key?: keyof typeof preferences) =>
+      changePreferences(scope, (current) => {
+        const next = { ...current };
+        if (key) delete next[key];
+        else return {};
+        return next;
+      }),
+  };
   const workspace = `${connection.id}::${root}::${state.activeRig}`;
   const seats = (inventory?.seats || []).filter(
     (s) => !state.activeRig || s.rigId === state.activeRig,
@@ -278,7 +357,15 @@ export default function App() {
         if (!saved && localFound)
           connections[connections.findIndex((c) => c.id === "local")] =
             localFound;
-        setState({ ...base, connections });
+        setState({
+          ...base,
+          connections,
+          preferences:
+            base.preferences ??
+            (base.desktopNotifications
+              ? { "notifications.desktop": true }
+              : {}),
+        });
         setLoaded(true);
         log("Workspace ready. Connect a machine or open a project.");
       })
@@ -292,7 +379,7 @@ export default function App() {
   }, [loaded, workspace]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
-    if (!inventory || !state.desktopNotifications) return;
+    if (!inventory || !preferences["notifications.desktop"]) return;
     const current = new Set<string>();
     for (const seat of inventory.seats.filter(
       (s) => s.status === "attention" || (s.status === "failed" && s.error),
@@ -309,7 +396,7 @@ export default function App() {
         );
     }
     attentionSeen.current = current;
-  }, [inventory, state.desktopNotifications, connection.id]);
+  }, [inventory, preferences["notifications.desktop"], connection.id]);
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(
@@ -353,7 +440,10 @@ export default function App() {
       }
     };
     load();
-    const timer = setInterval(load, 15000);
+    const timer = setInterval(
+      load,
+      preferences["workspace.refreshInterval"] * 1000,
+    );
     return () => {
       active = false;
       clearInterval(timer);
@@ -365,6 +455,7 @@ export default function App() {
     connection.host,
     connection.distro,
     refresh,
+    preferences["workspace.refreshInterval"],
   ]);
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -428,9 +519,9 @@ export default function App() {
         ? {
             id: "",
             name: "",
-            kind: "wsl",
+            kind: preferences["connections.defaultKind"] as "wsl" | "ssh",
             distro: detected.find((c) => c.kind === "wsl")?.distro || "Ubuntu",
-            root: "~",
+            root: preferences["connections.defaultRoot"],
           }
         : { ...connection },
     );
@@ -530,7 +621,11 @@ export default function App() {
     const id = uid();
     addPanel(
       "terminal",
-      connection.kind === "local" ? "PowerShell" : "Shell",
+      connection.kind === "local"
+        ? preferences["terminal.localShell"] === "cmd"
+          ? "Command Prompt"
+          : "PowerShell"
+        : "Shell",
       { terminalId: id },
       id,
     );
@@ -708,9 +803,15 @@ export default function App() {
         config: { connection: { ...connection }, root, seat, terminalId: id },
       });
   };
+  const openSettings = () => {
+    setModal(null);
+    addPanel("settings", "Settings", {}, "settings");
+  };
   const factory = (node: TabNode) => {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
+      case "settings":
+        return <SettingsPage project={connection.name + " / " + root} />;
       case "terminal":
         return (
           <TerminalPanel
@@ -825,9 +926,15 @@ export default function App() {
               config.connection.id === connection.id ? inventory : null
             }
             onSeat={openSeat}
-            notifications={!!state.desktopNotifications}
+            notifications={preferences["notifications.desktop"]}
             onNotifications={(value) =>
-              setState((s) => ({ ...s, desktopNotifications: value }))
+              settingsContext.update(
+                Object.hasOwn(projectPreferences, "notifications.desktop")
+                  ? "project"
+                  : "user",
+                "notifications.desktop",
+                value,
+              )
             }
           />
         );
@@ -974,6 +1081,12 @@ export default function App() {
     setModal("palette");
   };
   const commands = [
+    {
+      name: "Open settings",
+      hint: "Preferences and themes",
+      icon: <Settings2 size={16} />,
+      action: openSettings,
+    },
     ...[
       ["Visual workspace arranger", "arranger"],
       ["Connection doctor", "doctor"],
@@ -1081,6 +1194,10 @@ export default function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey) {
+        if (event.key === ",") {
+          event.preventDefault();
+          openSettings();
+        }
         if (event.key.toLowerCase() === "k") {
           event.preventDefault();
           openPalette();
@@ -1179,820 +1296,892 @@ export default function App() {
   const tabCount = allTabs().filter((t) => t.component === "terminal").length;
   void revision;
   return (
-    <div className="app">
-      <header className="titlebar">
-        <div className="brand">
-          <span className="brand-mark">
-            <Layers3 size={18} />
-          </span>
-          <strong>
-            hrig<span>.</span>
-          </strong>
-          <span className="titlebar-divider" />
-          <span className="titlebar-label">OPENRIG WORKSPACE</span>
-        </div>
-        <button className="command-trigger" onClick={openPalette}>
-          <Search size={13} />
-          <span>Find a session, file, or command…</span>
-          <kbd>Ctrl K</kbd>
-        </button>
-        <div className="window-controls">
-          <button
-            aria-label="Minimize window"
-            onClick={() => window.hrig.window("minimize")}
-          >
-            <Minus size={15} />
-          </button>
-          <button
-            aria-label="Maximize window"
-            onClick={() => window.hrig.window("maximize")}
-          >
-            <Square size={12} />
-          </button>
-          <button
-            aria-label="Close window"
-            onClick={() => window.hrig.window("close")}
-          >
-            <X size={16} />
-          </button>
-        </div>
-      </header>
-      <div className="main-shell">
-        <nav className="activity-rail">
-          <div>
-            <IconButton
-              title="Sessions"
-              active={section === "sessions" && sidebar}
-              onClick={() => {
-                setSection("sessions");
-                setSidebar(true);
-              }}
-            >
-              <PanelsIcon />
-            </IconButton>
-            <IconButton
-              title="Explorer"
-              active={section === "files" && sidebar}
-              onClick={() => {
-                setSection("files");
-                setSidebar(true);
-              }}
-            >
-              <FolderOpen size={21} />
-            </IconButton>
-            <IconButton
-              title="Source control"
-              active={section === "changes" && sidebar}
-              onClick={() => {
-                setSection("changes");
-                setSidebar(true);
-              }}
-            >
-              <GitBranch size={21} />
-            </IconButton>
-            <span className="rail-divider" />
-            <IconButton
-              title="Task queue"
-              onClick={() =>
-                addPanel("queue", "Task queue", { mode: currentRig?.name })
-              }
-            >
-              <ListTodo size={21} />
-            </IconButton>
-            <IconButton
-              title="Messages"
-              onClick={() => addPanel("messages", "Messages")}
-            >
-              <Send size={20} />
-            </IconButton>
+    <SettingsContext.Provider value={settingsContext}>
+      <div className="app">
+        <header className="titlebar">
+          <div className="brand">
+            <span className="brand-mark">
+              <Layers3 size={18} />
+            </span>
+            <strong>
+              hrig<span>.</span>
+            </strong>
+            <span className="titlebar-divider" />
+            <span className="titlebar-label">OPENRIG WORKSPACE</span>
           </div>
-          <div>
-            <IconButton
-              title="Arrange workspace guide"
-              onClick={() => setModal("guide")}
+          <button className="command-trigger" onClick={openPalette}>
+            <Search size={13} />
+            <span>Find a session, file, or command…</span>
+            <kbd>Ctrl K</kbd>
+          </button>
+          <div className="window-controls">
+            <button
+              aria-label="Minimize window"
+              onClick={() => window.hrig.window("minimize")}
             >
-              <CircleHelp size={20} />
-            </IconButton>
-            <IconButton title="Connection settings" onClick={openConnect}>
-              <Settings2 size={20} />
-            </IconButton>
-            <span className="rail-avatar">H</span>
+              <Minus size={15} />
+            </button>
+            <button
+              aria-label="Maximize window"
+              onClick={() => window.hrig.window("maximize")}
+            >
+              <Square size={12} />
+            </button>
+            <button
+              aria-label="Close window"
+              onClick={() => window.hrig.window("close")}
+            >
+              <X size={16} />
+            </button>
           </div>
-        </nav>
-        {sidebar && (
-          <div
-            className="sidebar-container"
-            style={{ width: state.sidebarWidth || 264 }}
-          >
-            <Sidebar
-              onManageRigs={() =>
-                addPanel(
-                  "rigManager",
-                  "Rig manager",
-                  {},
-                  `rig-manager-${connection.id}-${root}`,
-                )
-              }
-              section={section}
-              connection={connection}
-              root={root}
-              inventory={inventory}
-              inventoryError={inventoryError}
-              busy={busy}
-              selectedRig={state.activeRig}
-              onRig={(id) => setState((s) => ({ ...s, activeRig: id }))}
-              onRefresh={refreshAll}
-              onProject={openProject}
-              onConnect={openConnect}
-              onSeat={openSeat}
-              onDrag={dragSeat}
-              onFile={(path) => openFile(path)}
-              onDiff={(path) => openFile(path, true)}
-              fileRevision={fileRevision}
-            />
-            <div className="sidebar-resizer" onPointerDown={resizeSidebar} />
-          </div>
-        )}
-        <main className="workspace">
-          <div className="workspace-toolbar">
-            <div className="breadcrumbs">
+        </header>
+        <div className="main-shell">
+          <nav className="activity-rail">
+            <div>
               <IconButton
-                title={sidebar ? "Hide sidebar" : "Show sidebar"}
-                onClick={() => setSidebar((v) => !v)}
+                title="Sessions"
+                active={section === "sessions" && sidebar}
+                onClick={() => {
+                  setSection("sessions");
+                  setSidebar(true);
+                }}
               >
-                {sidebar ? (
-                  <PanelLeftClose size={16} />
-                ) : (
-                  <PanelLeft size={16} />
-                )}
+                <PanelsIcon />
               </IconButton>
-              <span className="toolbar-divider" />
-              <div className="menu-anchor">
-                <button
-                  className="connection-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenu(menu === "connection" ? null : "connection");
-                  }}
-                >
-                  <span className="host-type">
-                    {connection.kind === "local"
-                      ? "WIN"
-                      : connection.kind.toUpperCase()}
-                  </span>
-                  {connection.name}
-                  <ChevronDown size={12} />
-                </button>
-                {menu === "connection" && (
-                  <div className="dropdown connection-dropdown">
-                    {state.connections.map((c) => (
-                      <button key={c.id} onClick={() => chooseConnection(c.id)}>
-                        <Network size={14} />
-                        <span>{c.name}</span>
-                        <small>{c.kind.toUpperCase()}</small>
-                        {c.id === connection.id && <Check size={13} />}
-                      </button>
-                    ))}
-                    <div className="menu-separator" />
-                    <button onClick={openConnect}>
-                      <Plus size={14} />
-                      Add connection
-                    </button>
-                  </div>
-                )}
-              </div>
-              <span className="crumb-separator">/</span>
-              <span className="current-rig">
-                {currentRig?.name || "Workspace"}
-              </span>
-              <span
-                className={`connection-state ${inventoryError ? "error" : ""}`}
+              <IconButton
+                title="Explorer"
+                active={section === "files" && sidebar}
+                onClick={() => {
+                  setSection("files");
+                  setSidebar(true);
+                }}
               >
-                <StatusDot
-                  status={
-                    busy
-                      ? "unknown"
-                      : connection.kind === "local" || inventory
-                        ? "running"
-                        : "unknown"
-                  }
-                />
-                {busy
-                  ? "Connecting"
-                  : inventoryError
-                    ? "Unavailable"
-                    : connection.kind === "local"
-                      ? "Local"
-                      : inventory
-                        ? "Connected"
-                        : "Ready"}
-              </span>
+                <FolderOpen size={21} />
+              </IconButton>
+              <IconButton
+                title="Source control"
+                active={section === "changes" && sidebar}
+                onClick={() => {
+                  setSection("changes");
+                  setSidebar(true);
+                }}
+              >
+                <GitBranch size={21} />
+              </IconButton>
+              <span className="rail-divider" />
+              <IconButton
+                title="Task queue"
+                onClick={() =>
+                  addPanel("queue", "Task queue", { mode: currentRig?.name })
+                }
+              >
+                <ListTodo size={21} />
+              </IconButton>
+              <IconButton
+                title="Messages"
+                onClick={() => addPanel("messages", "Messages")}
+              >
+                <Send size={20} />
+              </IconButton>
             </div>
-            <div className="workspace-actions">
-              <button
-                className="toolbar-button"
-                onClick={() => setModal("tools")}
+            <div>
+              <IconButton
+                title="Arrange workspace guide"
+                onClick={() => setModal("guide")}
               >
-                <Layers3 size={14} />
-                Tools
-              </button>
-              <div className="menu-anchor">
+                <CircleHelp size={20} />
+              </IconButton>
+              <IconButton title="Connection settings" onClick={openConnect}>
+                <Network size={18} />
+              </IconButton>
+              <IconButton title="Settings" onClick={openSettings}>
+                <Settings2 size={20} />
+              </IconButton>
+              <span className="rail-avatar">H</span>
+            </div>
+          </nav>
+          {sidebar && (
+            <div
+              className="sidebar-container"
+              style={{ width: state.sidebarWidth || 264 }}
+            >
+              <Sidebar
+                onManageRigs={() =>
+                  addPanel(
+                    "rigManager",
+                    "Rig manager",
+                    {},
+                    `rig-manager-${connection.id}-${root}`,
+                  )
+                }
+                section={section}
+                connection={connection}
+                root={root}
+                inventory={inventory}
+                inventoryError={inventoryError}
+                busy={busy}
+                selectedRig={state.activeRig}
+                onRig={(id) => setState((s) => ({ ...s, activeRig: id }))}
+                onRefresh={refreshAll}
+                onProject={openProject}
+                onConnect={openConnect}
+                onSeat={openSeat}
+                onDrag={dragSeat}
+                onFile={(path) => openFile(path)}
+                onDiff={(path) => openFile(path, true)}
+                fileRevision={fileRevision}
+              />
+              <div className="sidebar-resizer" onPointerDown={resizeSidebar} />
+            </div>
+          )}
+          <main className="workspace">
+            <div className="workspace-toolbar">
+              <div className="breadcrumbs">
+                <IconButton
+                  title={sidebar ? "Hide sidebar" : "Show sidebar"}
+                  onClick={() => setSidebar((v) => !v)}
+                >
+                  {sidebar ? (
+                    <PanelLeftClose size={16} />
+                  ) : (
+                    <PanelLeft size={16} />
+                  )}
+                </IconButton>
+                <span className="toolbar-divider" />
+                <div className="menu-anchor">
+                  <button
+                    className="connection-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenu(menu === "connection" ? null : "connection");
+                    }}
+                  >
+                    <span className="host-type">
+                      {connection.kind === "local"
+                        ? "WIN"
+                        : connection.kind.toUpperCase()}
+                    </span>
+                    {connection.name}
+                    <ChevronDown size={12} />
+                  </button>
+                  {menu === "connection" && (
+                    <div className="dropdown connection-dropdown">
+                      {state.connections.map((c) => (
+                        <button
+                          key={c.id}
+                          onClick={() => chooseConnection(c.id)}
+                        >
+                          <Network size={14} />
+                          <span>{c.name}</span>
+                          <small>{c.kind.toUpperCase()}</small>
+                          {c.id === connection.id && <Check size={13} />}
+                        </button>
+                      ))}
+                      <div className="menu-separator" />
+                      <button onClick={openConnect}>
+                        <Plus size={14} />
+                        Add connection
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <span className="crumb-separator">/</span>
+                <span className="current-rig">
+                  {currentRig?.name || "Workspace"}
+                </span>
+                <span
+                  className={`connection-state ${inventoryError ? "error" : ""}`}
+                >
+                  <StatusDot
+                    status={
+                      busy
+                        ? "unknown"
+                        : connection.kind === "local" || inventory
+                          ? "running"
+                          : "unknown"
+                    }
+                  />
+                  {busy
+                    ? "Connecting"
+                    : inventoryError
+                      ? "Unavailable"
+                      : connection.kind === "local"
+                        ? "Local"
+                        : inventory
+                          ? "Connected"
+                          : "Ready"}
+                </span>
+              </div>
+              <div className="workspace-actions">
                 <button
                   className="toolbar-button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenu(menu === "layout" ? null : "layout");
-                  }}
+                  onClick={() => setModal("tools")}
                 >
-                  <Columns2 size={14} />
-                  Arrange
-                  <ChevronDown size={11} />
+                  <Layers3 size={14} />
+                  Tools
                 </button>
-                {menu === "layout" && (
-                  <div className="dropdown layout-dropdown">
-                    <label>LAYOUT PRESETS</label>
-                    <button
-                      onClick={() => {
-                        setMenu(null);
-                        addPanel(
-                          "arranger",
-                          "Arrange workspace",
-                          {},
-                          "arranger:" + workspace,
-                        );
-                      }}
-                    >
-                      <Columns2 size={14} />
-                      Visual workspace arranger
-                    </button>
-                    {[
-                      ["Team", "Grid of sessions"],
-                      ["Focus", "One tab group"],
-                      ["Review", "Code beside sessions"],
-                    ].map(([name, hint]) => (
-                      <button key={name} onClick={() => applyPreset(name)}>
-                        {name === "Team" ? (
-                          <LayoutGrid size={14} />
-                        ) : (
-                          <Columns2 size={14} />
-                        )}
-                        <span>
-                          {name}
-                          <small>{hint}</small>
-                        </span>
+                <div className="menu-anchor">
+                  <button
+                    className="toolbar-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenu(menu === "layout" ? null : "layout");
+                    }}
+                  >
+                    <Columns2 size={14} />
+                    Arrange
+                    <ChevronDown size={11} />
+                  </button>
+                  {menu === "layout" && (
+                    <div className="dropdown layout-dropdown">
+                      <label>LAYOUT PRESETS</label>
+                      <button
+                        onClick={() => {
+                          setMenu(null);
+                          addPanel(
+                            "arranger",
+                            "Arrange workspace",
+                            {},
+                            "arranger:" + workspace,
+                          );
+                        }}
+                      >
+                        <Columns2 size={14} />
+                        Visual workspace arranger
                       </button>
-                    ))}
-                    <div className="menu-separator" />
-                    <button
-                      onClick={() => {
-                        setSaveName("My workspace");
-                        setModal("save");
-                        setMenu(null);
-                      }}
-                    >
-                      <Save size={14} />
-                      Save current layout
-                    </button>
-                    {state.savedLayouts
-                      .filter((s) => s.workspace === workspace)
-                      .map((saved) => (
-                        <button
-                          key={saved.id}
-                          onClick={() =>
-                            protect(() => {
-                              const next = restoreModel(saved.model);
-                              setModel(next);
-                              modelChanged(next);
-                              setMenu(null);
-                              notify(`Restored ${saved.name}`);
-                            })
-                          }
-                        >
-                          <Layers3 size={14} />
-                          <span>{saved.name}</span>
-                          <span
-                            role="button"
-                            aria-label={`Delete layout ${saved.name}`}
-                            className="delete-layout"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setState((s) => ({
-                                ...s,
-                                savedLayouts: s.savedLayouts.filter(
-                                  (x) => x.id !== saved.id,
-                                ),
-                              }));
-                            }}
-                          >
-                            <X size={12} />
+                      {[
+                        ["Team", "Grid of sessions"],
+                        ["Focus", "One tab group"],
+                        ["Review", "Code beside sessions"],
+                      ].map(([name, hint]) => (
+                        <button key={name} onClick={() => applyPreset(name)}>
+                          {name === "Team" ? (
+                            <LayoutGrid size={14} />
+                          ) : (
+                            <Columns2 size={14} />
+                          )}
+                          <span>
+                            {name}
+                            <small>{hint}</small>
                           </span>
                         </button>
                       ))}
-                  </div>
-                )}
+                      <div className="menu-separator" />
+                      <button
+                        onClick={() => {
+                          setSaveName("My workspace");
+                          setModal("save");
+                          setMenu(null);
+                        }}
+                      >
+                        <Save size={14} />
+                        Save current layout
+                      </button>
+                      {state.savedLayouts
+                        .filter((s) => s.workspace === workspace)
+                        .map((saved) => (
+                          <button
+                            key={saved.id}
+                            onClick={() =>
+                              protect(() => {
+                                const next = restoreModel(saved.model);
+                                setModel(next);
+                                modelChanged(next);
+                                setMenu(null);
+                                notify(`Restored ${saved.name}`);
+                              })
+                            }
+                          >
+                            <Layers3 size={14} />
+                            <span>{saved.name}</span>
+                            <span
+                              role="button"
+                              aria-label={`Delete layout ${saved.name}`}
+                              className="delete-layout"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setState((s) => ({
+                                  ...s,
+                                  savedLayouts: s.savedLayouts.filter(
+                                    (x) => x.id !== saved.id,
+                                  ),
+                                }));
+                              }}
+                            >
+                              <X size={12} />
+                            </span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="new-panel-button"
+                  onClick={() => setModal("add")}
+                >
+                  <Plus size={14} />
+                  New panel
+                </button>
               </div>
-              <button
-                className="new-panel-button"
-                onClick={() => setModal("add")}
-              >
-                <Plus size={14} />
-                New panel
+            </div>
+            <div className="layout-host">
+              <Layout
+                ref={layout}
+                model={model}
+                factory={factory}
+                onModelChange={modelChanged}
+                onAction={onAction}
+                realtimeResize
+                onPopoutOpen={(_layout, _window, doc) => {
+                  themeDocuments.current.add(doc);
+                  applyTheme(doc, preferences, systemDark);
+                }}
+                onPopoutClose={(_layout, _window, doc) => {
+                  themeDocuments.current.delete(doc);
+                }}
+                supportsPopout
+                popoutURL="popout.html"
+                onRenderTab={(node, values) => {
+                  values.leading = panelIcon(node.getComponent());
+                  if (node.getConfig()?.dirty)
+                    values.buttons.push(
+                      <span
+                        className="dirty-dot"
+                        key="dirty"
+                        title="Unsaved changes"
+                      />,
+                    );
+                }}
+                onRenderTabSet={(node, values) => {
+                  values.buttons.push(
+                    <button
+                      className="tabset-add"
+                      key="add"
+                      title="Add panel to this group"
+                      aria-label="Add panel to this group"
+                      onClick={() => {
+                        model.doAction(Actions.setActiveTabset(node.getId()));
+                        setModal("add");
+                      }}
+                    >
+                      <Plus size={13} />
+                    </button>,
+                  );
+                }}
+                onTabSetPlaceHolder={() => (
+                  <Empty
+                    icon={<PanelTop size={26} />}
+                    title="Make room for your next session"
+                    description="Drag a session here or add a panel to get started."
+                  >
+                    <button
+                      className="primary-button"
+                      onClick={() => setModal("add")}
+                    >
+                      <Plus size={14} />
+                      Add panel
+                    </button>
+                  </Empty>
+                )}
+              />
+            </div>
+            <div className="workspace-hint">
+              <span>
+                <GripVertical size={12} />
+                Drag tabs to arrange · Drop at an edge to split
+              </span>
+              <button onClick={() => setModal("guide")}>
+                Workspace guide
+                <ArrowUpRight size={11} />
               </button>
             </div>
-          </div>
-          <div className="layout-host">
-            <Layout
-              ref={layout}
-              model={model}
-              factory={factory}
-              onModelChange={modelChanged}
-              onAction={onAction}
-              realtimeResize
-              supportsPopout
-              popoutURL="popout.html"
-              onRenderTab={(node, values) => {
-                values.leading = panelIcon(node.getComponent());
-                if (node.getConfig()?.dirty)
-                  values.buttons.push(
-                    <span
-                      className="dirty-dot"
-                      key="dirty"
-                      title="Unsaved changes"
-                    />,
-                  );
-              }}
-              onRenderTabSet={(node, values) => {
-                values.buttons.push(
-                  <button
-                    className="tabset-add"
-                    key="add"
-                    title="Add panel to this group"
-                    aria-label="Add panel to this group"
-                    onClick={() => {
-                      model.doAction(Actions.setActiveTabset(node.getId()));
-                      setModal("add");
-                    }}
-                  >
-                    <Plus size={13} />
-                  </button>,
-                );
-              }}
-              onTabSetPlaceHolder={() => (
-                <Empty
-                  icon={<PanelTop size={26} />}
-                  title="Make room for your next session"
-                  description="Drag a session here or add a panel to get started."
-                >
-                  <button
-                    className="primary-button"
-                    onClick={() => setModal("add")}
-                  >
-                    <Plus size={14} />
-                    Add panel
-                  </button>
-                </Empty>
-              )}
-            />
-          </div>
-          <div className="workspace-hint">
-            <span>
-              <GripVertical size={12} />
-              Drag tabs to arrange · Drop at an edge to split
-            </span>
-            <button onClick={() => setModal("guide")}>
-              Workspace guide
-              <ArrowUpRight size={11} />
-            </button>
-          </div>
-        </main>
-      </div>
-      <footer className="statusbar">
-        <div>
-          <span className="status-brand">
-            <Network size={11} />
-            {connection.kind === "local"
-              ? "Local workspace"
-              : `${connection.kind.toUpperCase()}: ${connection.name}`}
-          </span>
-          <button
-            onClick={() => {
-              setSection("changes");
-              setSidebar(true);
-            }}
-          >
-            <GitBranch size={11} />
-            Source control
-          </button>
+          </main>
         </div>
-        <div>
-          <span>
-            {tabCount} {tabCount === 1 ? "session" : "sessions"} open
-          </span>
-          <span className="status-divider" />
-          <span>
-            <Check size={11} />
-            Layout autosaved
-          </span>
-          <button onClick={() => addPanel("activity", "Activity")}>
-            <Activity size={12} />
-          </button>
-        </div>
-      </footer>
-      {toast && (
-        <div className="toast" role="status">
-          <Check size={15} />
-          {toast}
-          <button onClick={() => setToast("")}>
-            <X size={13} />
-          </button>
-        </div>
-      )}
-      {modal === "connect" && (
-        <Modal
-          title="Connect your workspace"
-          subtitle="Your agents keep running on their machine. HRig brings them here."
-          onClose={() => setModal(null)}
-        >
-          <div className="segmented">
-            <button
-              className={connectionForm.kind === "wsl" ? "selected" : ""}
-              onClick={() =>
-                setConnectionForm((c) => ({ ...c, kind: "wsl", id: "" }))
-              }
-            >
-              WSL
-            </button>
-            <button
-              className={connectionForm.kind === "ssh" ? "selected" : ""}
-              onClick={() =>
-                setConnectionForm((c) => ({ ...c, kind: "ssh", id: "" }))
-              }
-            >
-              SSH
-            </button>
-          </div>
-          {detected.filter((c) => c.kind === connectionForm.kind).length >
-            0 && (
-            <div className="detected-connections">
-              <span className="field-label">DETECTED ON THIS COMPUTER</span>
-              {detected
-                .filter((c) => c.kind === connectionForm.kind)
-                .map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => setConnectionForm({ ...c })}
-                  >
-                    <Network size={14} />
-                    {c.name}
-                    <ArrowUpRight size={13} />
-                  </button>
-                ))}
+        {preferences["appearance.statusBar"] && (
+          <footer className="statusbar">
+            <div>
+              <span className="status-brand">
+                <Network size={11} />
+                {connection.kind === "local"
+                  ? "Local workspace"
+                  : `${connection.kind.toUpperCase()}: ${connection.name}`}
+              </span>
+              <button
+                onClick={() => {
+                  setSection("changes");
+                  setSidebar(true);
+                }}
+              >
+                <GitBranch size={11} />
+                Source control
+              </button>
             </div>
-          )}
-          <div className="form-grid">
-            <label className="field-label">
-              DISPLAY NAME
-              <input
-                placeholder={
-                  connectionForm.kind === "wsl"
-                    ? "Ubuntu workstation"
-                    : "Development server"
-                }
-                value={connectionForm.name}
-                onChange={(e) =>
-                  setConnectionForm((c) => ({ ...c, name: e.target.value }))
-                }
-              />
-            </label>
-            <label className="field-label">
-              {connectionForm.kind === "wsl"
-                ? "DISTRIBUTION"
-                : "HOST / SSH CONFIG ALIAS"}
-              <input
-                placeholder={
-                  connectionForm.kind === "wsl"
-                    ? "Ubuntu"
-                    : "user@server or dev-server"
-                }
-                value={
-                  connectionForm.kind === "wsl"
-                    ? connectionForm.distro || ""
-                    : connectionForm.host || ""
-                }
-                onChange={(e) =>
-                  setConnectionForm((c) => ({
-                    ...c,
-                    [c.kind === "wsl" ? "distro" : "host"]: e.target.value,
-                  }))
-                }
-              />
-            </label>
+            <div>
+              <span>
+                {tabCount} {tabCount === 1 ? "session" : "sessions"} open
+              </span>
+              <span className="status-divider" />
+              <span>
+                <Check size={11} />
+                Layout autosaved
+              </span>
+              <button onClick={() => addPanel("activity", "Activity")}>
+                <Activity size={12} />
+              </button>
+            </div>
+          </footer>
+        )}
+        {toast && (
+          <div className="toast" role="status">
+            <Check size={15} />
+            {toast}
+            <button onClick={() => setToast("")}>
+              <X size={13} />
+            </button>
           </div>
-          {connectionForm.kind === "ssh" && (
-            <>
+        )}
+        {modal === "connect" && (
+          <Modal
+            title="Connect your workspace"
+            subtitle="Your agents keep running on their machine. HRig brings them here."
+            onClose={() => setModal(null)}
+          >
+            <div className="segmented">
+              <button
+                className={connectionForm.kind === "wsl" ? "selected" : ""}
+                onClick={() =>
+                  setConnectionForm((c) => ({ ...c, kind: "wsl", id: "" }))
+                }
+              >
+                WSL
+              </button>
+              <button
+                className={connectionForm.kind === "ssh" ? "selected" : ""}
+                onClick={() =>
+                  setConnectionForm((c) => ({ ...c, kind: "ssh", id: "" }))
+                }
+              >
+                SSH
+              </button>
+            </div>
+            {detected.filter((c) => c.kind === connectionForm.kind).length >
+              0 && (
+              <div className="detected-connections">
+                <span className="field-label">DETECTED ON THIS COMPUTER</span>
+                {detected
+                  .filter((c) => c.kind === connectionForm.kind)
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setConnectionForm({ ...c })}
+                    >
+                      <Network size={14} />
+                      {c.name}
+                      <ArrowUpRight size={13} />
+                    </button>
+                  ))}
+              </div>
+            )}
+            <div className="form-grid">
               <label className="field-label">
-                PORT
+                DISPLAY NAME
                 <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  placeholder="22 (or SSH config default)"
-                  value={connectionForm.port || ""}
+                  placeholder={
+                    connectionForm.kind === "wsl"
+                      ? "Ubuntu workstation"
+                      : "Development server"
+                  }
+                  value={connectionForm.name}
+                  onChange={(e) =>
+                    setConnectionForm((c) => ({ ...c, name: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="field-label">
+                {connectionForm.kind === "wsl"
+                  ? "DISTRIBUTION"
+                  : "HOST / SSH CONFIG ALIAS"}
+                <input
+                  placeholder={
+                    connectionForm.kind === "wsl"
+                      ? "Ubuntu"
+                      : "user@server or dev-server"
+                  }
+                  value={
+                    connectionForm.kind === "wsl"
+                      ? connectionForm.distro || ""
+                      : connectionForm.host || ""
+                  }
                   onChange={(e) =>
                     setConnectionForm((c) => ({
                       ...c,
-                      port: e.target.value ? Number(e.target.value) : undefined,
+                      [c.kind === "wsl" ? "distro" : "host"]: e.target.value,
                     }))
                   }
                 />
               </label>
-              <p className="field-note">
-                Uses Windows OpenSSH and your SSH config. For a new host or
-                password login, open a shell to accept its host key or
-                authenticate, then refresh rigs. Key / agent authentication is
-                used for background discovery.
-              </p>
-            </>
-          )}
-          <label className="field-label">
-            PROJECT PATH
-            <input
-              placeholder="~/projects/my-project"
-              value={connectionForm.root}
-              onChange={(e) =>
-                setConnectionForm((c) => ({ ...c, root: e.target.value }))
-              }
-            />
-          </label>
-          <label className="field-label">
-            OPENRIG EXECUTABLE <span className="optional">optional</span>
-            <input
-              placeholder="rig (or an absolute path)"
-              value={connectionForm.rigBinary || ""}
-              onChange={(e) =>
-                setConnectionForm((c) => ({ ...c, rigBinary: e.target.value }))
-              }
-            />
-          </label>
-          <p className="field-note">
-            OpenRig, tmux, and Python 3 must be available on the target. HRig
-            attaches to existing seats.
-          </p>
-          {formError && <ErrorBox error={formError} />}
-          <div className="modal-actions">
-            <button className="secondary-button" onClick={() => setModal(null)}>
-              Cancel
-            </button>
-            <button className="primary-button" onClick={saveConnection}>
-              <Network size={14} />
-              Open connection
-            </button>
-          </div>
-        </Modal>
-      )}
-      {modal === "tools" && (
-        <Modal
-          title="Workspace tools"
-          subtitle="Coordinate your rig, arrange sessions, and work on your project."
-          onClose={() => setModal(null)}
-          wide
-        >
-          <div className="panel-picker">
-            {[
-              [
-                "Arrange workspace",
-                "arranger",
-                "Layouts, grouping, undo, and role templates",
-              ],
-              [
-                "Connection doctor",
-                "doctor",
-                "Environment and daemon diagnostics",
-              ],
-              [
-                "Attention center",
-                "attention",
-                "Seats and work needing your input",
-              ],
-              ["Task board", "queue", "Inspect and assign work"],
-              [
-                "Review workspace",
-                "review",
-                "Changes, sessions, and review feedback",
-              ],
-              [
-                "Project tools",
-                "projectTools",
-                "Search text, create, and rename files",
-              ],
-              ["Problems", "problems", "Diagnostics from opened editors"],
-              [
-                "Ports and previews",
-                "ports",
-                "Local servers and SSH forwarding",
-              ],
-              [
-                "Rig manager",
-                "rigManager",
-                "Topology and confirmed lifecycle actions",
-              ],
-            ].map(([name, component, description]) => (
-              <button
-                key={component}
-                onClick={() =>
-                  addPanel(
-                    component,
-                    name,
-                    { mode: currentRig?.name },
-                    "tool:" + component + ":" + workspace,
-                  )
-                }
-              >
-                <Layers3 size={20} />
-                <strong>{name}</strong>
-                <span>{description}</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-      {modal === "project" && (
-        <Modal
-          title="Open a project"
-          subtitle={`Project files will open on ${connection.name}.`}
-          onClose={() => setModal(null)}
-        >
-          {connection.kind !== "local" && (
-            <div className="attached-projects">
-              <div className="field-label">RIG SESSION FOLDERS</div>
-              {projectsLoading && <p>Finding attached folders...</p>}
-              {projectsError && <ErrorBox error={projectsError} />}
-              {!projectsLoading && !projectsError && !projectFolders.length && (
-                <p>
-                  No live rig folders found. You can enter a directory below.
-                </p>
-              )}
-              {[...projectFolders]
-                .sort(
-                  (a, b) =>
-                    Number(b.rigs.some((r) => r.id === state.activeRig)) -
-                    Number(a.rigs.some((r) => r.id === state.activeRig)),
-                )
-                .map((project) => (
-                  <button
-                    key={project.path}
-                    className="attached-project"
-                    onClick={() => void applyProject(project.path)}
-                  >
-                    <FolderOpen size={18} />
-                    <span>
-                      <strong>{project.name}</strong>
-                      <small>{project.path}</small>
-                      <small>
-                        {project.rigs.map((r) => r.name).join(", ")}
-                      </small>
-                    </span>
-                    <ArrowUpRight size={16} />
-                  </button>
-                ))}
             </div>
-          )}
-          <label className="field-label">
-            PROJECT DIRECTORY
-            <div className="input-with-button">
+            {connectionForm.kind === "ssh" && (
+              <>
+                <label className="field-label">
+                  PORT
+                  <input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    placeholder="22 (or SSH config default)"
+                    value={connectionForm.port || ""}
+                    onChange={(e) =>
+                      setConnectionForm((c) => ({
+                        ...c,
+                        port: e.target.value
+                          ? Number(e.target.value)
+                          : undefined,
+                      }))
+                    }
+                  />
+                </label>
+                <p className="field-note">
+                  Uses Windows OpenSSH and your SSH config. For a new host or
+                  password login, open a shell to accept its host key or
+                  authenticate, then refresh rigs. Key / agent authentication is
+                  used for background discovery.
+                </p>
+              </>
+            )}
+            <label className="field-label">
+              PROJECT PATH
               <input
-                autoFocus
-                value={projectPath}
-                onChange={(e) => setProjectPath(e.target.value)}
-                placeholder={
-                  connection.kind === "local"
-                    ? "C:\\Projects\\my-project"
-                    : "/home/me/projects/my-project"
+                placeholder="~/projects/my-project"
+                value={connectionForm.root}
+                onChange={(e) =>
+                  setConnectionForm((c) => ({ ...c, root: e.target.value }))
                 }
               />
-              {connection.kind === "local" && (
-                <button
-                  className="secondary-button"
-                  onClick={async () => {
-                    const path = await window.hrig.pickFolder();
-                    if (path) setProjectPath(path);
-                  }}
-                >
-                  Browse…
-                </button>
-              )}
-            </div>
-          </label>
-          {formError && <ErrorBox error={formError} />}
-          <div className="modal-actions">
-            <button className="secondary-button" onClick={() => setModal(null)}>
-              Cancel
-            </button>
-            <button
-              className="primary-button"
-              disabled={!projectPath.trim()}
-              onClick={() => void applyProject(projectPath.trim())}
-            >
-              <FolderOpen size={14} />
-              Open project
-            </button>
-          </div>
-        </Modal>
-      )}
-      {modal === "add" && (
-        <Modal
-          title="Add to your workspace"
-          subtitle="Every panel can be moved, grouped, split, or detached."
-          onClose={() => setModal(null)}
-        >
-          <div className="panel-picker">
-            {[
-              {
-                name: "Shell",
-                description: `A terminal on ${connection.name}`,
-                icon: <TerminalSquare size={22} />,
-                action: openShell,
-              },
-              {
-                name: "Agent session",
-                description: `${seats.length} available seats`,
-                icon: <Layers3 size={22} />,
-                action: () => {
-                  setSection("sessions");
-                  setSidebar(true);
-                  setModal(null);
-                  if (!seats.length) openConnect();
-                },
-              },
-              {
-                name: "Code editor",
-                description: "Open a file from your project",
-                icon: <FileCode2 size={22} />,
-                action: () => {
-                  setSection("files");
-                  setSidebar(true);
-                  setModal(null);
-                },
-              },
-              {
-                name: "Task queue",
-                description: "Work owned by your rig",
-                icon: <ListTodo size={22} />,
-                action: () =>
-                  addPanel("queue", "Task queue", { mode: currentRig?.name }),
-              },
-              {
-                name: "Messages",
-                description: "Send instructions to a seat",
-                icon: <Send size={22} />,
-                action: () => addPanel("messages", "Messages"),
-              },
-              {
-                name: "Activity",
-                description: "Your workspace event stream",
-                icon: <Activity size={22} />,
-                action: () => addPanel("activity", "Activity"),
-              },
-            ].map((item) => (
-              <button key={item.name} onClick={item.action}>
-                {item.icon}
-                <strong>{item.name}</strong>
-                <span>{item.description}</span>
+            </label>
+            <label className="field-label">
+              OPENRIG EXECUTABLE <span className="optional">optional</span>
+              <input
+                placeholder="rig (or an absolute path)"
+                value={connectionForm.rigBinary || ""}
+                onChange={(e) =>
+                  setConnectionForm((c) => ({
+                    ...c,
+                    rigBinary: e.target.value,
+                  }))
+                }
+              />
+            </label>
+            <p className="field-note">
+              OpenRig, tmux, and Python 3 must be available on the target. HRig
+              attaches to existing seats.
+            </p>
+            {formError && <ErrorBox error={formError} />}
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancel
               </button>
-            ))}
-          </div>
-          {seats.length > 0 && (
-            <div className="seat-picker">
-              <span className="field-label">RUNNING SEATS</span>
-              {seats.map((s) => (
+              <button className="primary-button" onClick={saveConnection}>
+                <Network size={14} />
+                Open connection
+              </button>
+            </div>
+          </Modal>
+        )}
+        {modal === "tools" && (
+          <Modal
+            title="Workspace tools"
+            subtitle="Coordinate your rig, arrange sessions, and work on your project."
+            onClose={() => setModal(null)}
+            wide
+          >
+            <div className="panel-picker">
+              {[
+                [
+                  "Arrange workspace",
+                  "arranger",
+                  "Layouts, grouping, undo, and role templates",
+                ],
+                [
+                  "Connection doctor",
+                  "doctor",
+                  "Environment and daemon diagnostics",
+                ],
+                [
+                  "Attention center",
+                  "attention",
+                  "Seats and work needing your input",
+                ],
+                ["Task board", "queue", "Inspect and assign work"],
+                [
+                  "Review workspace",
+                  "review",
+                  "Changes, sessions, and review feedback",
+                ],
+                [
+                  "Project tools",
+                  "projectTools",
+                  "Search text, create, and rename files",
+                ],
+                ["Problems", "problems", "Diagnostics from opened editors"],
+                [
+                  "Ports and previews",
+                  "ports",
+                  "Local servers and SSH forwarding",
+                ],
+                [
+                  "Settings",
+                  "settings",
+                  "Themes, editor, terminal, and workspace preferences",
+                ],
+                [
+                  "Rig manager",
+                  "rigManager",
+                  "Topology and confirmed lifecycle actions",
+                ],
+              ].map(([name, component, description]) => (
                 <button
-                  key={s.id}
-                  onClick={() => openSeat(s)}
-                  disabled={!s.session}
+                  key={component}
+                  onClick={() =>
+                    component === "settings"
+                      ? openSettings()
+                      : addPanel(
+                          component,
+                          name,
+                          { mode: currentRig?.name },
+                          "tool:" + component + ":" + workspace,
+                        )
+                  }
                 >
-                  <StatusDot status={s.status} />
-                  <span>{s.name}</span>
-                  <small>{s.rigName}</small>
-                  <Plus size={13} />
+                  <Layers3 size={20} />
+                  <strong>{name}</strong>
+                  <span>{description}</span>
                 </button>
               ))}
             </div>
-          )}
-        </Modal>
-      )}
-      {modal === "save" && (
-        <Modal
-          title="Save this arrangement"
-          subtitle="Keep a named layout for this machine, project, and rig."
-          onClose={() => setModal(null)}
-        >
-          <label className="field-label">
-            LAYOUT NAME
-            <input
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && saveName.trim()) {
+          </Modal>
+        )}
+        {modal === "project" && (
+          <Modal
+            title="Open a project"
+            subtitle={`Project files will open on ${connection.name}.`}
+            onClose={() => setModal(null)}
+          >
+            {connection.kind !== "local" && (
+              <div className="attached-projects">
+                <div className="field-label">RIG SESSION FOLDERS</div>
+                {projectsLoading && <p>Finding attached folders...</p>}
+                {projectsError && <ErrorBox error={projectsError} />}
+                {!projectsLoading &&
+                  !projectsError &&
+                  !projectFolders.length && (
+                    <p>
+                      No live rig folders found. You can enter a directory
+                      below.
+                    </p>
+                  )}
+                {[...projectFolders]
+                  .sort(
+                    (a, b) =>
+                      Number(b.rigs.some((r) => r.id === state.activeRig)) -
+                      Number(a.rigs.some((r) => r.id === state.activeRig)),
+                  )
+                  .map((project) => (
+                    <button
+                      key={project.path}
+                      className="attached-project"
+                      onClick={() => void applyProject(project.path)}
+                    >
+                      <FolderOpen size={18} />
+                      <span>
+                        <strong>{project.name}</strong>
+                        <small>{project.path}</small>
+                        <small>
+                          {project.rigs.map((r) => r.name).join(", ")}
+                        </small>
+                      </span>
+                      <ArrowUpRight size={16} />
+                    </button>
+                  ))}
+              </div>
+            )}
+            <label className="field-label">
+              PROJECT DIRECTORY
+              <div className="input-with-button">
+                <input
+                  autoFocus
+                  value={projectPath}
+                  onChange={(e) => setProjectPath(e.target.value)}
+                  placeholder={
+                    connection.kind === "local"
+                      ? "C:\\Projects\\my-project"
+                      : "/home/me/projects/my-project"
+                  }
+                />
+                {connection.kind === "local" && (
+                  <button
+                    className="secondary-button"
+                    onClick={async () => {
+                      const path = await window.hrig.pickFolder();
+                      if (path) setProjectPath(path);
+                    }}
+                  >
+                    Browse…
+                  </button>
+                )}
+              </div>
+            </label>
+            {formError && <ErrorBox error={formError} />}
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={!projectPath.trim()}
+                onClick={() => void applyProject(projectPath.trim())}
+              >
+                <FolderOpen size={14} />
+                Open project
+              </button>
+            </div>
+          </Modal>
+        )}
+        {modal === "add" && (
+          <Modal
+            title="Add to your workspace"
+            subtitle="Every panel can be moved, grouped, split, or detached."
+            onClose={() => setModal(null)}
+          >
+            <div className="panel-picker">
+              {[
+                {
+                  name: "Shell",
+                  description: `A terminal on ${connection.name}`,
+                  icon: <TerminalSquare size={22} />,
+                  action: openShell,
+                },
+                {
+                  name: "Agent session",
+                  description: `${seats.length} available seats`,
+                  icon: <Layers3 size={22} />,
+                  action: () => {
+                    setSection("sessions");
+                    setSidebar(true);
+                    setModal(null);
+                    if (!seats.length) openConnect();
+                  },
+                },
+                {
+                  name: "Code editor",
+                  description: "Open a file from your project",
+                  icon: <FileCode2 size={22} />,
+                  action: () => {
+                    setSection("files");
+                    setSidebar(true);
+                    setModal(null);
+                  },
+                },
+                {
+                  name: "Task queue",
+                  description: "Work owned by your rig",
+                  icon: <ListTodo size={22} />,
+                  action: () =>
+                    addPanel("queue", "Task queue", { mode: currentRig?.name }),
+                },
+                {
+                  name: "Messages",
+                  description: "Send instructions to a seat",
+                  icon: <Send size={22} />,
+                  action: () => addPanel("messages", "Messages"),
+                },
+                {
+                  name: "Activity",
+                  description: "Your workspace event stream",
+                  icon: <Activity size={22} />,
+                  action: () => addPanel("activity", "Activity"),
+                },
+              ].map((item) => (
+                <button key={item.name} onClick={item.action}>
+                  {item.icon}
+                  <strong>{item.name}</strong>
+                  <span>{item.description}</span>
+                </button>
+              ))}
+            </div>
+            {seats.length > 0 && (
+              <div className="seat-picker">
+                <span className="field-label">RUNNING SEATS</span>
+                {seats.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => openSeat(s)}
+                    disabled={!s.session}
+                  >
+                    <StatusDot status={s.status} />
+                    <span>{s.name}</span>
+                    <small>{s.rigName}</small>
+                    <Plus size={13} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </Modal>
+        )}
+        {modal === "save" && (
+          <Modal
+            title="Save this arrangement"
+            subtitle="Keep a named layout for this machine, project, and rig."
+            onClose={() => setModal(null)}
+          >
+            <label className="field-label">
+              LAYOUT NAME
+              <input
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && saveName.trim()) {
+                    setState((s) => ({
+                      ...s,
+                      savedLayouts: [
+                        ...s.savedLayouts.filter(
+                          (l) =>
+                            !(
+                              l.workspace === workspace &&
+                              l.name === saveName.trim()
+                            ),
+                        ),
+                        {
+                          id: uid(),
+                          name: saveName.trim(),
+                          workspace,
+                          model: model.toJson(),
+                        },
+                      ],
+                    }));
+                    setModal(null);
+                    notify("Layout saved");
+                  }
+                }}
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                className="secondary-button"
+                onClick={() => setModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary-button"
+                disabled={!saveName.trim()}
+                onClick={() => {
                   setState((s) => ({
                     ...s,
                     savedLayouts: [
@@ -2013,198 +2202,167 @@ export default function App() {
                   }));
                   setModal(null);
                   notify("Layout saved");
-                }
-              }}
-            />
-          </label>
-          <div className="modal-actions">
-            <button className="secondary-button" onClick={() => setModal(null)}>
-              Cancel
-            </button>
-            <button
-              className="primary-button"
-              disabled={!saveName.trim()}
-              onClick={() => {
-                setState((s) => ({
-                  ...s,
-                  savedLayouts: [
-                    ...s.savedLayouts.filter(
-                      (l) =>
-                        !(
-                          l.workspace === workspace &&
-                          l.name === saveName.trim()
-                        ),
-                    ),
-                    {
-                      id: uid(),
-                      name: saveName.trim(),
-                      workspace,
-                      model: model.toJson(),
-                    },
-                  ],
-                }));
-                setModal(null);
-                notify("Layout saved");
-              }}
-            >
-              <Save size={14} />
-              Save layout
-            </button>
-          </div>
-        </Modal>
-      )}
-      {modal === "palette" && (
-        <Modal title="Command center" onClose={() => setModal(null)} wide>
-          <div className="palette-input">
-            <Search size={18} />
-            <input
-              aria-label="Search commands and sessions"
-              placeholder="Where do you want to go?"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const item = commands.find((c) =>
-                    `${c.name} ${c.hint}`
-                      .toLowerCase()
-                      .includes(search.toLowerCase()),
-                  );
-                  if (item) {
-                    setModal(null);
-                    item.action();
-                  } else if (fileMatches.length) {
-                    setModal(null);
-                    openFile(fileMatches[0].path);
+                }}
+              >
+                <Save size={14} />
+                Save layout
+              </button>
+            </div>
+          </Modal>
+        )}
+        {modal === "palette" && (
+          <Modal title="Command center" onClose={() => setModal(null)} wide>
+            <div className="palette-input">
+              <Search size={18} />
+              <input
+                aria-label="Search commands and sessions"
+                placeholder="Where do you want to go?"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const item = commands.find((c) =>
+                      `${c.name} ${c.hint}`
+                        .toLowerCase()
+                        .includes(search.toLowerCase()),
+                    );
+                    if (item) {
+                      setModal(null);
+                      item.action();
+                    } else if (fileMatches.length) {
+                      setModal(null);
+                      openFile(fileMatches[0].path);
+                    }
                   }
-                }
-              }}
-            />
-            <kbd>ESC</kbd>
-          </div>
-          <div className="command-list">
-            {commands
-              .filter((c) =>
-                `${c.name} ${c.hint}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((c) => (
+                }}
+              />
+              <kbd>ESC</kbd>
+            </div>
+            <div className="command-list">
+              {commands
+                .filter((c) =>
+                  `${c.name} ${c.hint}`
+                    .toLowerCase()
+                    .includes(search.toLowerCase()),
+                )
+                .map((c) => (
+                  <button
+                    key={c.name + c.hint}
+                    onClick={() => {
+                      setModal(null);
+                      c.action();
+                    }}
+                  >
+                    {c.icon}
+                    <span>{c.name}</span>
+                    <small>{c.hint}</small>
+                    <ArrowUpRight size={13} />
+                  </button>
+                ))}
+              {fileMatches.length > 0 && (
+                <div className="palette-section-label">PROJECT FILES</div>
+              )}
+              {fileMatches.map((file) => (
                 <button
-                  key={c.name + c.hint}
+                  key={file.path}
                   onClick={() => {
                     setModal(null);
-                    c.action();
+                    openFile(file.path);
                   }}
                 >
-                  {c.icon}
-                  <span>{c.name}</span>
-                  <small>{c.hint}</small>
+                  <FileCode2 size={16} />
+                  <span>{file.name}</span>
+                  <small>{file.path}</small>
                   <ArrowUpRight size={13} />
                 </button>
               ))}
-            {fileMatches.length > 0 && (
-              <div className="palette-section-label">PROJECT FILES</div>
-            )}
-            {fileMatches.map((file) => (
+            </div>
+          </Modal>
+        )}
+        {modal === "guide" && (
+          <Modal
+            title="A place for every session"
+            subtitle="Arrange the workspace with your mouse. Your rig keeps running."
+            onClose={() => setModal(null)}
+          >
+            <div className="guide-list">
+              {[
+                {
+                  icon: <GripVertical />,
+                  title: "Drag a tab or session",
+                  text: "Drag any panel tab, or a seat from the sidebar. Drop onto a tab strip to group panels.",
+                },
+                {
+                  icon: <Columns2 />,
+                  title: "Drop at an edge to split",
+                  text: "Move to the left, right, top, or bottom of a panel. The highlighted area shows exactly where it will go.",
+                },
+                {
+                  icon: <ExternalLink />,
+                  title: "Float or open another window",
+                  text: "Use the tab group’s float or popout button to make room. Double-click the group background to maximize it.",
+                },
+                {
+                  icon: <Save />,
+                  title: "Keep the arrangement",
+                  text: "Layouts save automatically per connection, project, and rig. Use Arrange → Save current layout for a named preset.",
+                },
+                {
+                  icon: <Keyboard />,
+                  title: "A few useful shortcuts",
+                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
+                },
+              ].map((item) => (
+                <div key={item.title}>
+                  {item.icon}
+                  <section>
+                    <h3>{item.title}</h3>
+                    <p>{item.text}</p>
+                  </section>
+                </div>
+              ))}
+            </div>
+          </Modal>
+        )}
+        {pending && (
+          <Modal
+            title={pending.title}
+            subtitle={pending.description}
+            onClose={() => setPending(null)}
+          >
+            {actionError && <ErrorBox error={actionError} />}
+            <div className="modal-actions">
               <button
-                key={file.path}
+                className="secondary-button"
+                onClick={() => setPending(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-button danger"
                 onClick={() => {
-                  setModal(null);
-                  openFile(file.path);
+                  const ids = pending.tabId
+                    ? [pending.tabId]
+                    : dirtyInLayout().map((t) => t.id!);
+                  for (const id of ids) {
+                    clearBuffer(id);
+                    dirtyTabs.current.delete(id);
+                  }
+                  pending.run();
+                  setPending(null);
                 }}
               >
-                <FileCode2 size={16} />
-                <span>{file.name}</span>
-                <small>{file.path}</small>
-                <ArrowUpRight size={13} />
+                Discard changes
               </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-      {modal === "guide" && (
-        <Modal
-          title="A place for every session"
-          subtitle="Arrange the workspace with your mouse. Your rig keeps running."
-          onClose={() => setModal(null)}
-        >
-          <div className="guide-list">
-            {[
-              {
-                icon: <GripVertical />,
-                title: "Drag a tab or session",
-                text: "Drag any panel tab, or a seat from the sidebar. Drop onto a tab strip to group panels.",
-              },
-              {
-                icon: <Columns2 />,
-                title: "Drop at an edge to split",
-                text: "Move to the left, right, top, or bottom of a panel. The highlighted area shows exactly where it will go.",
-              },
-              {
-                icon: <ExternalLink />,
-                title: "Float or open another window",
-                text: "Use the tab group’s float or popout button to make room. Double-click the group background to maximize it.",
-              },
-              {
-                icon: <Save />,
-                title: "Keep the arrangement",
-                text: "Layouts save automatically per connection, project, and rig. Use Arrange → Save current layout for a named preset.",
-              },
-              {
-                icon: <Keyboard />,
-                title: "A few useful shortcuts",
-                text: "Ctrl K: command center · Ctrl O: open project · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
-              },
-            ].map((item) => (
-              <div key={item.title}>
-                {item.icon}
-                <section>
-                  <h3>{item.title}</h3>
-                  <p>{item.text}</p>
-                </section>
-              </div>
-            ))}
-          </div>
-        </Modal>
-      )}
-      {pending && (
-        <Modal
-          title={pending.title}
-          subtitle={pending.description}
-          onClose={() => setPending(null)}
-        >
-          {actionError && <ErrorBox error={actionError} />}
-          <div className="modal-actions">
-            <button
-              className="secondary-button"
-              onClick={() => setPending(null)}
-            >
-              Cancel
-            </button>
-            <button
-              className="secondary-button danger"
-              onClick={() => {
-                const ids = pending.tabId
-                  ? [pending.tabId]
-                  : dirtyInLayout().map((t) => t.id!);
-                for (const id of ids) {
-                  clearBuffer(id);
-                  dirtyTabs.current.delete(id);
-                }
-                pending.run();
-                setPending(null);
-              }}
-            >
-              Discard changes
-            </button>
-            <button className="primary-button" onClick={savePending}>
-              <Save size={14} />
-              Save and continue
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
+              <button className="primary-button" onClick={savePending}>
+                <Save size={14} />
+                Save and continue
+              </button>
+            </div>
+          </Modal>
+        )}
+      </div>
+    </SettingsContext.Provider>
   );
 }
 function PanelsIcon() {
