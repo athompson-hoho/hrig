@@ -70,7 +70,10 @@ for (const release of releases) {
   const exe = path.resolve("release", `HRig ${version}.exe`);
   const digest = await hash(exe);
   const checksum = path.resolve("release", `HRig-${version}-SHA256SUMS.txt`);
-  await fs.writeFile(checksum, `${digest}  ${path.basename(exe)}\n`);
+  await fs.writeFile(
+    checksum,
+    `${digest}  ${path.basename(exe).replaceAll(" ", ".")}\n`,
+  );
   let ref = git("tag", "--list", tag) ? tag : sourceRef;
   const commit = git("rev-parse", ref + "^{commit}");
   const pkg = JSON.parse(git("show", commit + ":package.json"));
@@ -85,7 +88,10 @@ for (const release of releases) {
     assets: [
       { file: exe, hash: digest },
       { file: checksum, hash: await hash(checksum) },
-    ],
+    ].map((asset) => ({
+      ...asset,
+      name: path.basename(asset.file).replaceAll(" ", "."),
+    })),
   });
   console.log(
     `${tag}: source ${commit.slice(0, 12)}, notes and executable checked`,
@@ -123,7 +129,7 @@ for (const release of prepared) {
     Boolean,
   );
   for (const asset of assets) {
-    if (!remote.assets.some((a) => a.name === path.basename(asset.file))) {
+    if (!remote.assets.some((a) => a.name === asset.name)) {
       console.log(`Uploading ${tag}: ${path.basename(asset.file)}`);
       gh("release", "upload", tag, asset.file, "--repo", repo);
     }
@@ -134,15 +140,12 @@ for (const release of prepared) {
       assets.every((a) =>
         r.assets.some(
           (uploaded) =>
-            uploaded.name === path.basename(a.file) &&
-            uploaded.state === "uploaded",
+            uploaded.name === a.name && uploaded.state === "uploaded",
         ),
       ),
   );
   for (const asset of assets) {
-    const uploaded = remote.assets.find(
-      (a) => a.name === path.basename(asset.file),
-    );
+    const uploaded = remote.assets.find((a) => a.name === asset.name);
     if (
       !uploaded ||
       uploaded.state !== "uploaded" ||
