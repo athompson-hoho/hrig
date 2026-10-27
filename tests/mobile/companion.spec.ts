@@ -44,12 +44,6 @@ test.beforeAll(async () => {
       messages.push(args);
       return "sent";
     },
-    readTask: async () => ({
-      id: "work",
-      title: "Build the mobile client",
-      body: "Full mobile task details.",
-      state: "active",
-    }),
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   address = `http://127.0.0.1:${server.address().port}`;
@@ -62,9 +56,7 @@ test("phone pairing, sessions, screen, messaging, tasks and disconnect", async (
   page,
 }) => {
   await page.goto(address);
-  await page
-    .getByRole("button", { name: "Legacy shared-key connection" })
-    .click();
+  await page.getByRole("button", { name: "Legacy shared-key connection" }).click();
   await page.getByLabel("Pairing key").fill("wrong");
   await page.getByRole("button", { name: "Connect to hRig" }).click();
   await expect(page.getByRole("alert")).toHaveText("Pairing key rejected.");
@@ -83,12 +75,8 @@ test("phone pairing, sessions, screen, messaging, tasks and disconnect", async (
     ["send", "builder@Product team", "Please report status."],
   ]);
   await page.getByRole("button", { name: "Tasks", exact: false }).click();
-  await page.getByRole("button", { name: /Build the mobile client/ }).click();
   await expect(
     page.getByRole("heading", { name: "Build the mobile client" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Full mobile task details.", { exact: true }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -103,8 +91,6 @@ test("phone pairing, sessions, screen, messaging, tasks and disconnect", async (
     fullPage: true,
   });
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Legacy shared-key connection" })
-    .click();
+  await page.getByRole("button", { name: "Legacy shared-key connection" }).click();
   await expect(page.getByLabel("Pairing key")).toHaveValue("");
 });

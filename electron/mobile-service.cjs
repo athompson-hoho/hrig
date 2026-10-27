@@ -8,11 +8,9 @@ const { createGateway } = require("./mobile-gateway.cjs");
 function mobileService({
   directory,
   connections,
-  activeConnection,
   assets,
   backend,
   runRig,
-  readTask,
   listenPort = 5182,
 }) {
   let server = null,
@@ -90,11 +88,9 @@ function mobileService({
         auth: store(),
         tls,
         connections,
-        activeConnection,
         assets,
         backend,
         runRig,
-        readTask,
       });
       server.requestTimeout = 15000;
       server.headersTimeout = 10000;

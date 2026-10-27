@@ -99,7 +99,7 @@ test("mobile gateway authenticates, confines connections, resolves seats and rej
     })
   ).json();
   assert.equal(screen.result, "terminal screen");
-  assert.match(receipts[0], /'=managed:'/);
+  assert.match(receipts[0], /'=managed'/);
   assert.equal(
     (
       await post({

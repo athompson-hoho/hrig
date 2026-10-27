@@ -12,13 +12,9 @@ function createGateway({
   auth,
   tls,
   connections,
-  activeConnection,
   assets,
   backend = core,
   runRig = features.runRig,
-  readTask = (connection, id) =>
-    features.rigAction(connection, { op: "taskShow", id }),
-  platform = process.platform,
 }) {
   if (!auth && (typeof token !== "string" || token.length < 32))
     throw new Error("HRIG_MOBILE_TOKEN must contain at least 32 characters.");
@@ -130,21 +126,12 @@ function createGateway({
         const saved = await connections();
         let result;
         if (request.op === "connections") {
-          const selected = activeConnection ? await activeConnection() : null;
           result = saved
-            .filter((c) => c.kind !== "local" || platform !== "win32")
-            .map((c) => ({
-              id: c.id,
-              name: c.name,
-              ...(selected
-                ? { selected: c.id === selected, kind: c.kind }
-                : {}),
-            }));
+            .filter((c) => c.kind !== "local")
+            .map((c) => ({ id: c.id, name: c.name }));
         } else {
           const connection = saved.find(
-            (c) =>
-              c.id === request.connectionId &&
-              (c.kind !== "local" || platform !== "win32"),
+            (c) => c.id === request.connectionId && c.kind !== "local",
           );
           if (!connection)
             throw new Error("Choose a connection saved on the HRig host.");
@@ -153,20 +140,7 @@ function createGateway({
             result = await backend.inventory(connection);
           else if (request.op === "queue")
             result = await backend.queue(connection);
-          else if (request.op === "task") {
-            if (
-              typeof request.id !== "string" ||
-              !request.id ||
-              request.id.length > 200
-            )
-              throw new Error("Choose a valid task.");
-            const tasks = await backend.queue(connection);
-            if (!tasks.some((task) => task.id === request.id))
-              throw new Error(
-                "Task is no longer in the current task list. Refresh tasks.",
-              );
-            result = await readTask(connection, request.id);
-          } else if (request.op === "message" || request.op === "screen") {
+          else if (request.op === "message" || request.op === "screen") {
             const inventory = await backend.inventory(connection);
             const seat = inventory.seats.find((s) => s.id === request.seatId);
             if (!seat)
@@ -190,7 +164,7 @@ function createGateway({
               backend.sessionCommand(seat.session);
               result = await backend.remote(
                 connection,
-                `tmux capture-pane -p -J -S -200 -t ${backend.quote("=" + seat.session + ":")}`,
+                `tmux capture-pane -p -J -S -200 -t ${backend.quote("=" + seat.session)}`,
               );
             }
           } else throw new Error("Unknown mobile operation.");
@@ -252,8 +226,6 @@ if (require.main === module) {
       assets: path.join(__dirname, "../dist-mobile"),
       connections: async () =>
         JSON.parse(await fs.readFile(stateFile, "utf8")).connections || [],
-      activeConnection: async () =>
-        JSON.parse(await fs.readFile(stateFile, "utf8")).activeConnection,
     });
     const host = process.env.HRIG_MOBILE_HOST || "127.0.0.1";
     const port = Number(process.env.HRIG_MOBILE_PORT || 5180);

@@ -231,7 +231,11 @@ export default function PairComputer({
         </button>
       )}
       {!invitation && (
-        <button disabled={busy} onClick={() => setManual(!manual)}>
+        <button
+          disabled={busy}
+          onClick={() => setManual(!manual)}
+          style={{ margin: 8 }}
+        >
           Enter pairing details
         </button>
       )}
