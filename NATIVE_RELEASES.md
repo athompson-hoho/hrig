@@ -1,6 +1,6 @@
 # Native desktop builds
 
-Supported targets: Windows x64 portable EXE; macOS arm64/x64 DMG + ZIP; Linux x64/arm64 AppImage + tar.gz. Build each OS/architecture on a matching host. Native terminal dependencies are rebuilt for Electron on Unix. Packaging does not publish automatically.
+Supported targets: Windows x64 setup + portable EXE; macOS arm64/x64 DMG + ZIP; Linux x64/arm64 AppImage + tar.gz + DEB + RPM. Build each OS/architecture on a matching host. Native terminal dependencies are rebuilt for Electron on Unix. Packaging does not publish automatically.
 
 On a native host, install Node.js 22 and the compiler prerequisites for node-pty, run `npm ci`, `npm run build`, then `node scripts/package.mjs`. For local smoke checks run `node scripts/smoke-native.mjs`; headless Linux requires `xvfb-run -a node scripts/smoke-native.mjs`. The smoke uses its own temporary project/data and a local OpenRig fixture, never real rig mutations. The Windows-specific development regression suite remains available separately.
 
@@ -13,3 +13,5 @@ Build references: [electron-builder native multi-platform constraints](https://w
 Verified release: [0.8.1](https://github.com/athompson-hoho/hrig/releases/tag/v0.8.1), source `bce6937fe45a805efcea7e4a5ec066c6bef60bbf`. All five native targets passed; all nine application download hashes and the checksum/QA metadata digests were verified. [Native runner evidence](https://github.com/athompson-hoho/hrig/actions/runs/40464745845). The source tag is unchanged by later publisher/documentation maintenance.
 
 Starting with 0.9.0, the native workflow also produces a per-user Windows setup installer, Linux DEB/RPM packages, architecture-specific update feeds/blockmaps and performance reports. It verifies metadata/feed hashes and configured signatures, exercises install/uninstall on disposable Windows CI, and records 0/12/24-terminal baselines. Signing support is prepared; actual credentials are deferred. See DISTRIBUTION.md for the exact secret names and update guard behavior.
+
+Verified release: [0.9.0](https://github.com/athompson-hoho/hrig/releases/tag/v0.9.0), source `d10e89bc7ac6eca6a90c15cbf963cb3664f21597`. All five native targets passed, including Windows installer lifecycle and all architecture-specific feed/package checks. Published checksums, asset digests and source-tagged QA evidence were independently verified. [Native runner evidence](https://github.com/athompson-hoho/hrig/actions/runs/40511570258). Signing remains unconfigured; updates remain manual. [Performance baseline](PERFORMANCE.md).

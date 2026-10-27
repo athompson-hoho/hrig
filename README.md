@@ -262,3 +262,7 @@ HRig 0.8.1 adds native macOS downloads for Apple Silicon and Intel, and Linux do
 ## Installed desktop foundation (0.9.0)
 
 Electron remains the desktop runtime. Windows gains an assisted per-user installer plus portable download; Linux adds DEB/RPM alongside AppImage/archive. Settings > Updates provides explicit stable-version checks and release notes. Unsigned builds use manual release downloads; signed in-app installation is prepared but remains disabled until real signing credentials are configured. [Installation/update policy and signing setup](DISTRIBUTION.md). [Architecture decision](docs/architecture/ADR-001-electron.md). Native CI captures 0/12/24-terminal performance baselines before publication.
+
+[Download HRig 0.9.0 for Windows, macOS or Linux](https://github.com/athompson-hoho/hrig/releases/tag/v0.9.0). Includes Windows setup/portable, macOS DMG/ZIP and Linux AppImage/archive/DEB/RPM. [Measured performance](PERFORMANCE.md).
+
+![Packaged HRig Updates settings with manual downloads while signing credentials are deferred](docs/screenshots/updates.png)
