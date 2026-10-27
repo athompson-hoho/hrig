@@ -8,7 +8,9 @@ const { version } = JSON.parse(await fs.readFile("package.json", "utf8"));
 try {
   await fs.access("dist-mobile/index.html");
 } catch {
-  throw new Error("Mobile web assets are missing. Run npm run mobile:build before packaging.");
+  throw new Error(
+    "Mobile web assets are missing. Run npm run mobile:build before packaging.",
+  );
 }
 const {
   makePolicy,

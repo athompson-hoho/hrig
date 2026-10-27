@@ -2,6 +2,8 @@ import { _electron as electron, expect } from "@playwright/test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 const latest = JSON.parse(await fs.readFile("release/latest.json", "utf8"));
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hrig-native-smoke-"));
 const c = { id: "native-qa", name: "Native QA", kind: "local", root: dir };
@@ -42,12 +44,19 @@ try {
   let page = await app.firstWindow();
   page.on("pageerror", (e) => errors.push(e.message));
   await page.getByRole("button", { name: "New panel", exact: true }).waitFor();
-  const runtime = await app.evaluate(({app}) => ({
+  const runtime = await app.evaluate(({ app }) => ({
     platform: process.platform,
     arch: process.arch,
-    mobileAssets: require('node:fs').existsSync(require('node:path').join(app.getAppPath(), 'dist-mobile/index.html')),
+    appPath: app.getAppPath(),
   }));
-  if (!runtime.mobileAssets) throw new Error('Packaged mobile web assets are missing.');
+  const mobileIndex = runtime.appPath.endsWith(".asar")
+    ? require("@electron/asar").extractFile(
+        runtime.appPath,
+        "dist-mobile/index.html",
+      )
+    : await fs.readFile(path.join(runtime.appPath, "dist-mobile/index.html"));
+  if (!mobileIndex.length)
+    throw new Error("Packaged mobile web assets are missing.");
   if (runtime.platform !== latest.platform || runtime.arch !== latest.arch)
     throw new Error(
       "Packaged runtime architecture differs from the build manifest.",
