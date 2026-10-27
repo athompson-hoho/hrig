@@ -105,14 +105,17 @@ for (const release of prepared) {
       "--notes-file",
       notesFile,
     );
-  let remote = api(`repos/${repo}/releases/tags/${tag}`);
+  let remote = api(`repos/${repo}/releases?per_page=100`).find(
+    (r) => r.tag_name === tag,
+  );
+  if (!remote) throw new Error("Release creation was not confirmed: " + tag);
   for (const asset of assets) {
     if (!remote.assets.some((a) => a.name === path.basename(asset.file))) {
       console.log(`Uploading ${tag}: ${path.basename(asset.file)}`);
       gh("release", "upload", tag, asset.file, "--repo", repo);
     }
   }
-  remote = api(`repos/${repo}/releases/tags/${tag}`);
+  remote = api(`repos/${repo}/releases/${remote.id}`);
   for (const asset of assets) {
     const uploaded = remote.assets.find(
       (a) => a.name === path.basename(asset.file),
@@ -160,7 +163,7 @@ for (const release of prepared) {
     "--draft=false",
     `--latest=${version === manifest.at(-1).version}`,
   );
-  remote = api(`repos/${repo}/releases/tags/${tag}`);
+  remote = api(`repos/${repo}/releases/${remote.id}`);
   if (remote.draft || remote.body.trim() !== notes.trim())
     throw new Error("Release publication verification failed: " + tag);
   console.log(`Published and verified: ${remote.html_url}`);
