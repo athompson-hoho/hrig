@@ -5,7 +5,9 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { version } = JSON.parse(await fs.readFile("package.json", "utf8"));
 // Fresh output avoids Windows archive handles held by an open app or IDE.
-const output = path.resolve("release", `staging-${version}-${Date.now()}`);
+const output = process.env.HRIG_PACKAGE_STAGING
+  ? path.resolve(process.env.HRIG_PACKAGE_STAGING)
+  : path.resolve("release", `staging-${version}-${Date.now()}`);
 const child = spawn(
   process.execPath,
   [

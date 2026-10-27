@@ -22,15 +22,17 @@ import json,sys,os
 root=os.path.dirname(__file__)
 def value(flag,default=''):
  return sys.argv[sys.argv.index(flag)+1] if flag in sys.argv else default
-if '--help' in sys.argv: print('--json --snapshot --cwd --existing --plan --source --destination --summary --body --to')
+if '--help' in sys.argv: print('--json --delete --snapshot --cwd --existing --plan --source --destination --summary --body --to')
 elif sys.argv[1]=='--version': print('0.6.14-test-fixture')
 elif sys.argv[1]=='ps':
  session=open(root+'/session.txt').read().strip() if os.path.exists(root+'/session.txt') else ${JSON.stringify(session)}
  print(json.dumps([{'rigId':'test-rig','rigName':'fixture','logicalId':'builder','runtime':'test-shell','canonicalSessionName':session,'sessionStatus':'running','needsAttention':os.path.exists(root+'/attention')}] if '--nodes' in sys.argv else [{'rigId':'test-rig','name':'fixture','nodeCount':1,'status':'running'}]))
-elif sys.argv[1]=='specs': print(json.dumps([{'name':'starter','kind':'rig'}] if sys.argv[2]=='ls' else {'name':'starter','seats':['builder']}))
+elif sys.argv[1]=='specs':
+ if '--kind' in sys.argv and value('--kind')=='agent': print(json.dumps([{'id':name,'name':name,'kind':'agent','sourcePath':root+'/'+name+'/agent.yaml','summary':'Fixture '+name} for name in ['implementer','reviewer','qa','orchestrator','researcher','planner','product-designer']]))
+ else: print(json.dumps([{'name':'starter','kind':'rig'}] if sys.argv[2]=='ls' else {'name':'starter','seats':['builder']}))
 elif sys.argv[1] in ['up','down']:
  with open(root+'/actions.jsonl','a') as f: f.write(json.dumps(sys.argv[1:])+'\\n')
- print(json.dumps({'preview':'--plan' in sys.argv,'operation':sys.argv[1],'name':sys.argv[2]}))
+ print(json.dumps({'preview':'--plan' in sys.argv,'operation':sys.argv[1],'name':sys.argv[2], 'deleted':'--delete' in sys.argv and not os.path.exists(root+'/block-delete'), 'deleteBlocked':os.path.exists(root+'/block-delete'), 'errors':['Fixture preflight blocked'] if '--plan' in sys.argv and os.path.exists(root+'/block-plan') else []}))
 elif sys.argv[1]=='send':
  with open(root+'/sent.jsonl','a') as f: f.write(json.dumps(sys.argv[2:])+'\\n')
  print('Delivered by test fixture')

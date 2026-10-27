@@ -2716,3 +2716,26 @@ button:hover {
   opacity: 0.7;
   margin-top: 4px;
 }
+
+.rig-designer {
+  margin: 20px 0;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.rig-designer > p {
+  line-height: 1.6;
+  margin: 12px 0;
+}
+.designer-seat {
+  padding: 16px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.rig-designer pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

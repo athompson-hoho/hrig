@@ -120,6 +120,7 @@ export default function Sidebar({
   onRefresh,
   onProject,
   onConnect,
+  onManageRigs,
   onSeat,
   onDrag,
   onFile,
@@ -137,6 +138,7 @@ export default function Sidebar({
   onRefresh: () => void;
   onProject: () => void;
   onConnect: () => void;
+  onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -311,6 +313,14 @@ export default function Sidebar({
             </button>
           </div>
           <div className="rig-list">
+            <button
+              className="rig-row"
+              onClick={onManageRigs}
+              title="Design, launch, stop, or delete rigs"
+            >
+              <Plus size={14} />
+              <span>Manage rigs</span>
+            </button>
             <button
               className={`rig-row ${!selectedRig ? "selected" : ""}`}
               onClick={() => onRig("")}

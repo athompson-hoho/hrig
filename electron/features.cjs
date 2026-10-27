@@ -281,6 +281,21 @@ async function rigAction(connection, a) {
     throw new Error("A rig name or task ID cannot start with a dash.");
   let args;
   switch (a.op) {
+    case "agents":
+      args = ["specs", "ls", "--kind", "agent", "--json"];
+      break;
+    case "delete": {
+      if (!name || a.confirmation !== name)
+        throw new Error("Type the rig name to confirm deletion.");
+      const current = await core.inventory(connection);
+      const rig = current.rigs.find((r) => r.id === a.id);
+      if (!rig || rig.name !== name)
+        throw new Error(
+          "The rig changed or no longer exists. Refresh and select it again.",
+        );
+      args = ["down", text(a.id), "--delete", "--snapshot", "--json"];
+      break;
+    }
     case "specs":
       args = ["specs", "ls", "--kind", "rig", "--json"];
       break;
@@ -349,7 +364,7 @@ async function rigAction(connection, a) {
       throw new Error("Unsupported OpenRig action.");
   }
   // Verify the installed CLI advertises required flags before any mutation.
-  if (["start", "stop", "taskCreate", "taskHandoff"].includes(a.op)) {
+  if (["start", "stop", "delete", "taskCreate", "taskHandoff"].includes(a.op)) {
     const help = await runRig(connection, [
       args[0],
       ...(args[0] === "queue" ? [args[1]] : []),
@@ -364,13 +379,180 @@ async function rigAction(connection, a) {
   const output = await runRig(
     connection,
     args,
-    ["start", "stop"].includes(a.op) ? 180000 : 30000,
+    ["start", "stop", "delete"].includes(a.op) ? 180000 : 30000,
   );
+  if (a.op === "delete") {
+    const result = core.parseJson(output);
+    if (!result.deleted || result.deleteBlocked || result.errors?.length)
+      throw new Error(
+        "OpenRig did not fully delete the rig: " + JSON.stringify(result),
+      );
+    return result;
+  }
   try {
     return core.parseJson(output);
   } catch {
     return { output };
   }
+}
+const designPreviews = new Map();
+const designFiles = new Map();
+async function designRig(connection, a) {
+  if (!/^[a-z][a-z0-9-]{0,47}$/.test(a.name || ""))
+    throw new Error(
+      "Use a lowercase rig name starting with a letter, up to 48 letters, digits or hyphens.",
+    );
+  if (typeof a.goal !== "string" || !a.goal.trim() || a.goal.length > 4000)
+    throw new Error("Describe the goal in 1 to 4,000 characters.");
+  if (!["preview", "launch"].includes(a.op))
+    throw new Error("Unsupported design action.");
+  if (!Array.isArray(a.seats) || !a.seats.length || a.seats.length > 6)
+    throw new Error("Choose between one and six seats.");
+  if (a.op === "launch" && a.confirmation !== a.name)
+    throw new Error("Type the rig name to confirm launch.");
+  const inventory = await core.inventory(connection);
+  if (inventory.rigs.some((r) => r.name === a.name))
+    throw new Error(
+      "A rig with this name already exists. Choose another name to keep it intact.",
+    );
+  const catalog = await rigAction(connection, { op: "agents" });
+  const agents = Array.isArray(catalog)
+    ? catalog
+    : catalog.entries || catalog.items || [];
+  const ids = new Set();
+  const members = a.seats.map((s) => {
+    if (!/^[a-z][a-z0-9-]{0,31}$/.test(s.id || "") || ids.has(s.id))
+      throw new Error(
+        "Seat IDs must be unique lowercase names, starting with a letter.",
+      );
+    ids.add(s.id);
+    if (!["codex", "claude-code"].includes(s.runtime))
+      throw new Error("Select a supported runtime.");
+    const agent = agents.find((row) => row.id === s.agentId);
+    const source = agent?.resolvedSourcePath || agent?.sourcePath;
+    if (
+      typeof source !== "string" ||
+      !source.startsWith("/") ||
+      source.includes("\0")
+    )
+      throw new Error("Select an installed agent for every seat.");
+    return {
+      id: s.id,
+      agent_ref:
+        "path:" +
+        (/\/agent\.ya?ml$/.test(source) ? path.posix.dirname(source) : source),
+      profile: "default",
+      runtime: s.runtime,
+      cwd: ".",
+    };
+  });
+  await core.fileOperation(connection, { op: "list", root: a.root, path: "" });
+  const spec = {
+    version: "0.2",
+    name: a.name,
+    summary: a.goal.trim(),
+    pods: [
+      {
+        id: "team",
+        label: "Team",
+        members,
+        edges: members.slice(1).map((s) => ({
+          kind: "collaborates_with",
+          from: members[0].id,
+          to: s.id,
+        })),
+      },
+    ],
+    edges: [],
+  };
+  const content = JSON.stringify(spec, null, 2) + "\n";
+  const filename = "hrig-" + a.name + ".yaml";
+  const key = JSON.stringify([connection, a.root, filename]);
+  const previousPreview = designPreviews.get(a.previewToken);
+  const owner = designFiles.get(key);
+  const designId =
+    typeof a.designId === "string" && /^[a-f0-9-]{36}$/.test(a.designId)
+      ? a.designId
+      : null;
+  if (
+    a.op === "launch" &&
+    (!previousPreview ||
+      previousPreview.key !== key ||
+      previousPreview.content !== content)
+  )
+    throw new Error("Preview this exact design before launching.");
+  // Exclusive creation keeps existing designs intact. Identical previews can be retried.
+  try {
+    await edit(connection, {
+      op: "create",
+      root: a.root,
+      path: filename,
+      content,
+    });
+  } catch (error) {
+    const previous = await edit(connection, {
+      op: "read",
+      root: a.root,
+      path: filename,
+    }).catch(() => null);
+    if (previous?.content !== content) {
+      if (
+        a.op !== "preview" ||
+        !(
+          (previousPreview?.key === key &&
+            previousPreview.content === previous?.content) ||
+          (designId &&
+            owner?.id === designId &&
+            owner.content === previous?.content)
+        )
+      )
+        throw error;
+      await edit(connection, {
+        op: "save",
+        root: a.root,
+        path: filename,
+        content,
+        revision: previous.revision,
+      });
+    }
+  }
+  if (designId) {
+    if (designFiles.size >= 100)
+      designFiles.delete(designFiles.keys().next().value);
+    designFiles.set(key, { id: designId, content });
+  }
+  const resolved = await python(
+    connection,
+    `import os,json,sys
+a=json.load(sys.stdin)
+print(json.dumps(os.path.join(os.path.realpath(os.path.expanduser(a['root'])),a['filename'])))`,
+    { root: a.root, filename },
+  );
+  const args = [
+    "up",
+    resolved,
+    "--cwd",
+    a.root,
+    "--json",
+    ...(a.op === "preview" ? ["--plan"] : []),
+  ];
+  const help = await runRig(connection, ["up", "--help"]);
+  for (const flag of args.filter((v) => v.startsWith("--")))
+    if (!help.includes(flag))
+      throw new Error("Installed OpenRig does not advertise " + flag);
+  const result = core.parseJson(await runRig(connection, args, 180000));
+  if (result.ok === false || result.error || result.errors?.length)
+    throw new Error(
+      "OpenRig could not accept this design: " + JSON.stringify(result),
+    );
+  if (a.previewToken) designPreviews.delete(a.previewToken);
+  const previewToken = crypto.randomUUID();
+  if (a.op === "preview") {
+    if (designPreviews.size >= 100)
+      designPreviews.delete(designPreviews.keys().next().value);
+    designPreviews.set(previewToken, { key, content });
+  }
+  return { path: resolved, spec, result, previewToken };
 }
 async function ports(connection) {
   if (connection.kind === "local") {
@@ -429,6 +611,7 @@ print(json.dumps(sorted(folders.values(),key=lambda row:row['path'])))`,
   );
 }
 module.exports = {
+  designRig,
   projects,
   python,
   rigCommand,

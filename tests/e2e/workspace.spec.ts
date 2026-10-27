@@ -139,9 +139,9 @@ test("editor saves files, warns on unsaved close, and Git displays changes", asy
   await page
     .getByRole("button", { name: "Save and continue", exact: true })
     .click();
-  expect(await fs.readFile(path.join(project, "hello.ts"), "utf8")).toContain(
-    "HRIG_EDITOR_VERIFIED",
-  );
+  await expect
+    .poll(() => fs.readFile(path.join(project, "hello.ts"), "utf8"))
+    .toContain("HRIG_EDITOR_VERIFIED");
   await page
     .getByRole("button", { name: "Source control", exact: true })
     .first()

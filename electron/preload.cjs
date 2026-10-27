@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("hrig", {
   doctor: invoke("connection:doctor"),
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
+  designRig: invoke("rig:design"),
   ports: invoke("ports:list"),
   openPreview: invoke("preview:open"),
   closePreview: invoke("preview:close"),

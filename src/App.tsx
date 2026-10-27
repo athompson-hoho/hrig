@@ -892,6 +892,15 @@ export default function App() {
       case "rigManager":
         return (
           <RigManager
+            onDeleted={(id) => {
+              setState((s) =>
+                s.activeConnection === config.connection.id &&
+                s.activeRig === id
+                  ? { ...s, activeRig: "" }
+                  : s,
+              );
+              notify("Rig deleted");
+            }}
             connection={config.connection}
             root={config.root}
             inventory={inventory}
@@ -1276,6 +1285,14 @@ export default function App() {
             style={{ width: state.sidebarWidth || 264 }}
           >
             <Sidebar
+              onManageRigs={() =>
+                addPanel(
+                  "rigManager",
+                  "Rig manager",
+                  {},
+                  `rig-manager-${connection.id}-${root}`,
+                )
+              }
               section={section}
               connection={connection}
               root={root}

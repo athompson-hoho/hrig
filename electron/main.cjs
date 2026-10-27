@@ -248,6 +248,9 @@ handle("connection:doctor", (_event, connection) =>
 handle("rig:action", (_event, connection, request) =>
   features.rigAction(connection, request),
 );
+handle("rig:design", (_event, connection, request) =>
+  features.designRig(connection, request),
+);
 handle("editor:operation", (_event, connection, request) =>
   features.edit(connection, request),
 );

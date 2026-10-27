@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Connection, Seat, Inventory, PanelConfig } from "./types";
 import { ErrorBox, Loading, StatusDot, Empty } from "./components";
+import RigDesigner, { DeleteRig } from "./RigDesigner";
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState("");
@@ -469,13 +470,19 @@ export function RigManager({
   inventory,
   onChanged,
   onSeat,
+  onDeleted,
 }: {
   connection: Connection;
   root: string;
   inventory: Inventory | null;
   onChanged: () => void;
   onSeat: (seat: Seat) => void;
+  onDeleted: (id: string) => void;
 }) {
+  const [designer, setDesigner] = useState(false);
+  const [deleting, setDeleting] = useState<Inventory["rigs"][number] | null>(
+    null,
+  );
   const [specs, setSpecs] = useState<any[]>([]);
   const [name, setName] = useState("");
   const [existing, setExisting] = useState(false);
@@ -543,6 +550,36 @@ export function RigManager({
           </p>
         </div>
       </div>
+      <button
+        className="primary-button"
+        disabled={connection.kind === "local" || !!deleting}
+        onClick={() => setDesigner((v) => !v)}
+      >
+        {designer ? "Close rig designer" : "Design a new rig"}
+      </button>
+      {designer && (
+        <RigDesigner
+          connection={connection}
+          root={root}
+          onChanged={onChanged}
+        />
+      )}
+      {deleting && (
+        <DeleteRig
+          key={deleting.id}
+          connection={connection}
+          rig={deleting}
+          seats={inventory?.seats.filter((s) => s.rigId === deleting.id) || []}
+          onCancel={() => setDeleting(null)}
+          onDone={() => {
+            setDeleting(null);
+            change("", false);
+            onChanged();
+            setResult({ deleted: true, name: deleting.name });
+            onDeleted(deleting.id);
+          }}
+        />
+      )}
       <div className="topology-list">
         {inventory?.rigs.map((r) => (
           <div key={r.id}>
@@ -555,6 +592,16 @@ export function RigManager({
               <span>
                 {r.status} · {r.nodeCount} seats
               </span>
+            </button>
+            <button
+              className="small-button danger"
+              disabled={!!deleting}
+              onClick={() => {
+                setDesigner(false);
+                setDeleting(r);
+              }}
+            >
+              Delete {r.name}
             </button>
             <div className="topology-seats">
               {inventory.seats

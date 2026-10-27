@@ -4,7 +4,7 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Run the desktop app
 
-Open **`release/HRig 0.5.2.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.6.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -111,3 +111,9 @@ The ten scoped improvements are integrated into the 0.5 preview. SSH password-ba
 ### Rig project folders (0.5.2)
 
 Press Ctrl+O or click the project card to choose a working folder discovered from your live rig sessions. The selected rig's folders appear first; shared folders appear once with all associated rig names. Click a folder to open it without typing its path. Discovery uses the active connection (WSL or SSH) and only includes managed OpenRig sessions. Stopped sessions have no live folder to discover; manual paths and Windows Browse remain available.
+
+### Rig designer and deletion (0.6.0)
+
+Click **Manage rigs** in the session sidebar, or **Tools > Rig manager**. **Design a new rig** walks through the goal, work type, team size, runtime and project folder; recommends roles from the installed agent library; and lets you change every seat's agent and runtime. Recommendations use role-name matching, with explicit choices required for unmatched roles. Save and preview writes `hrig-<name>.yaml` (JSON syntax accepted by YAML) in the chosen project, then asks OpenRig to validate and plan it. Review the resulting warnings before typing the new rig name to launch. Changed designs require another preview. Existing rigs cannot be replaced through the wizard, and unrelated files are preserved. Agent paths refer to the current host's installed library; rerun the wizard if those agents move. The goal is saved as the summary; assign work through messages or tasks after launch.
+
+Each rig has a **Delete** action showing its ID and affected seats. Type its name to confirm. HRig calls OpenRig's `down <id> --delete --snapshot --json`, which stops managed seats, attempts a snapshot and removes the rig record. The project folder and library spec are retained; restoring the deleted record by name is unavailable. OpenRig can refuse deletion; HRig displays that failure.

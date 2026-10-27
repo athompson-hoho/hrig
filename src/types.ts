@@ -89,6 +89,15 @@ export interface TerminalEvent {
   exitCode?: number;
 }
 export interface HrigAPI {
+  designRig(
+    connection: Connection,
+    request: Record<string, unknown>,
+  ): Promise<{
+    path: string;
+    spec: unknown;
+    result: any;
+    previewToken: string;
+  }>;
   doctor(connection: Connection): Promise<{
     healthy: boolean;
     checks: { name: string; ok: boolean; detail: string }[];

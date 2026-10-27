@@ -70,3 +70,12 @@ Patch validation: 11 core/WSL checks and 14 desktop journeys passed, as did the 
 Implemented one-click project opening from live managed tmux session folders over WSL/SSH. Deduplicates shared paths, labels rig ownership, prioritizes the selected rig, and validates folders before switching. Manual entry and local Browse remain available. Covered by the isolated WSL backend fixture and a desktop journey that opens a discovered folder without entering a path.
 
 Validation: production build, 11 core/WSL checks, 15 desktop journeys, and packaged Windows native-terminal/editor/doctor/Git smoke test passed. Portable executable: `release/HRig 0.5.2.exe`.
+
+### 0.6.0 - Rig design wizard and deletion
+
+- Added sidebar Manage rigs shortcut and per-rig deletion with affected seats, typed confirmation, fresh ID/name verification, snapshot request, and explicit handling of blocked or partial deletion.
+- Added three-step needs/team/review wizard with build, research, review and product-design recommendations; solo/pair/team choices; installed agent selection and per-seat runtimes; and live project folder selection.
+- Generated specs save exclusively to the project, preserve unrelated files and existing rigs, allow revision of the wizard's own saved design, and require a successful matching preview before launch.
+- Verified a generated two-seat rig against installed OpenRig 0.6.14 with real --plan/preflight; no live rigs were launched, stopped or deleted. Destructive journeys use an isolated CLI fixture.
+
+Validation: production build, 12 core/WSL checks (including blocked deletion, exact-ID targeting, preview receipts, safe design revisions and failed-preflight recovery), 16 desktop journeys, visual review of the designer, and packaged Windows smoke test passed. Portable: `release/HRig 0.6.0.exe`. Packaging supports `HRIG_PACKAGE_STAGING` for staging outside watched directories when Windows locks extraction renames.
