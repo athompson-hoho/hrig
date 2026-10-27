@@ -1,6 +1,6 @@
 # SignPath Foundation application preparation
 
-Status: repository preparation only. No application has been submitted, no SignPath organization/project has been assigned, and no signed Windows release has been produced by this work.
+Status (2026-10-27): MIT licensing, package metadata, privacy/signing policies, CI license checks and portable signature verification are published. The Foundation application is filled with maintainer-approved contact details and required consents; submission is awaiting human CAPTCHA completion. No successful submission receipt or approval has been observed. No SignPath organization/project has been assigned, and no trusted signed Windows release has been produced.
 
 ## Project details
 
@@ -20,11 +20,11 @@ Status: repository preparation only. No application has been submitted, no SignP
 
 ## Before applying
 
-1. Publish the reviewed MIT license, matching npm metadata, policy and privacy statement in the public repository. Public visibility was verified during preparation; the live repository did not yet report a license at that point.
+1. Completed: published the approved MIT license, matching package/lockfile metadata, signing/privacy policies, CI legal-metadata check and packaging notices. GitHub reports the repository license as MIT. The release download page explicitly describes the SignPath application and current unsigned status.
 2. Confirm repository ownership, GitHub MFA and the signing approver identity. Enable SignPath MFA when onboarding. Confirm who may review code and approve releases; this checklist cannot verify account settings.
 3. Review the licenses and notices of bundled dependencies, native modules, Electron and theme assets against the Foundation's conditions. The local open-source check verifies HRig's own license metadata and notices; it is not a full dependency-license audit or an eligibility decision.
 4. Ensure a released Windows build and its public description are available. Provide build provenance/release history when requested. Acceptance is discretionary and may require additional project reputation or review.
-5. Apply at [SignPath Foundation](https://signpath.org/apply), providing the contact email through their form. Do not submit signing credentials, tokens or private user/project data in a GitHub issue.
+5. Application prepared at [SignPath Foundation](https://signpath.org/apply) using maintainer-provided contact information. Required Code of Conduct and data-processing consents were explicitly approved; optional marketing stays unchecked. A CAPTCHA currently prevents verified submission. Complete it in the prepared visible browser, then verify a success receipt before marking the application submitted. Do not publish credentials, tokens or private application contact details in a GitHub issue.
 
 ## After approval
 
