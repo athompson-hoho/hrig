@@ -85,3 +85,7 @@ Validation: production build, 12 core/WSL checks (including blocked deletion, ex
 Polished the rig wizard with a clear progress rail, keyboard-accessible work/team choice cards, responsive seat cards, a team roster summary, compact preview success state and expandable technical details. Kept warnings visible and launch/deletion confirmations intact. Established version-specific release notes, artifact checksums and an explicit publisher that verifies private visibility, tagged package versions and uploaded asset hashes before publication. All preserved versions are included; v0.1.0 uses an accurately labeled snapshot recovered from its original packaged app.
 
 Visual update validation: TypeScript/Vite production build, the Electron designer journey (including card selection and narrow-panel overflow), rendered wide/narrow screenshots, and packaged Windows smoke test passed. Desktop release builds are isolated from concurrent mobile work.
+
+### 0.6.2 - Match the rig designer to HRig
+
+Reworked the wizard around existing tool-panel styling: compact heading and steps, shared control styling and surface tokens, smaller choice/seat layouts, flat review rows, and responsive form columns. Removed separate studio branding, gradients, shadows, and the rounded outer frame. Existing preview and confirmation behavior stays intact.

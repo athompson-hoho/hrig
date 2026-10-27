@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Sparkles,
   Code2,
   Search,
   ScanSearch,
@@ -219,17 +218,16 @@ export default function RigDesigner({
     <section className="rig-designer" aria-label="Rig designer">
       <header className="designer-header">
         <div className="designer-mark">
-          <Sparkles size={22} />
+          <Network size={17} />
         </div>
         <div>
-          <span className="designer-eyebrow">RIG STUDIO</span>
-          <h3>Build the right team.</h3>
-          <p>A few choices. A team shaped around your work.</p>
+          <h3>Rig designer</h3>
+          <p>Configure a team for your project.</p>
         </div>
         <span className="designer-host">{connection.name}</span>
       </header>
       <ol className="designer-steps" aria-label="Design progress">
-        {["Your needs", "Your team", "Review & launch"].map((label, i) => (
+        {["Needs", "Seats", "Review"].map((label, i) => (
           <li
             key={label}
             className={step === i ? "current" : step > i ? "complete" : ""}
@@ -237,7 +235,6 @@ export default function RigDesigner({
           >
             <span>{step > i ? <Check size={14} /> : i + 1}</span>
             <div>
-              <small>STEP 0{i + 1}</small>
               <strong>{label}</strong>
             </div>
           </li>
@@ -246,34 +243,38 @@ export default function RigDesigner({
       {step === 0 && (
         <div className="designer-body designer-needs">
           <div className="designer-section-heading">
-            <h4>What are we working on?</h4>
-            <p>Give your rig a purpose, then choose how you want to work.</p>
+            <h4>Project and goal</h4>
+            <p>Choose the work, team size, and project folder.</p>
           </div>
-          <label className="field-label">
-            RIG NAME
-            <input
-              aria-label="New rig name"
-              value={name}
-              maxLength={48}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="my-project-team"
-            />
-          </label>
-          <p className="field-note">
-            Start with a lowercase letter. Use up to 48 lowercase letters,
-            digits or hyphens.
-          </p>
-          <label className="field-label">
-            WHAT SHOULD THIS TEAM ACHIEVE?
-            <textarea
-              aria-label="Rig goal"
-              value={goal}
-              maxLength={4000}
-              rows={3}
-              onChange={(e) => setGoal(e.target.value)}
-              placeholder="Describe the outcome and constraints."
-            />
-          </label>
+          <div className="designer-intent-fields">
+            <div>
+              <label className="field-label">
+                RIG NAME
+                <input
+                  aria-label="New rig name"
+                  value={name}
+                  maxLength={48}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="my-project-team"
+                />
+              </label>
+              <p className="field-note">
+                Start with a lowercase letter. Use up to 48 lowercase letters,
+                digits or hyphens.
+              </p>
+            </div>
+            <label className="field-label">
+              GOAL
+              <textarea
+                aria-label="Rig goal"
+                value={goal}
+                maxLength={4000}
+                rows={3}
+                onChange={(e) => setGoal(e.target.value)}
+                placeholder="Describe the outcome and constraints."
+              />
+            </label>
+          </div>
           <fieldset className="designer-choice-group">
             <legend>Type of work</legend>
             <div className="designer-work-options">
@@ -295,7 +296,7 @@ export default function RigDesigner({
                       onChange={() => setKind(id as keyof typeof goals)}
                       value={id}
                     />
-                    <Icon size={21} />
+                    <Icon size={16} />
                     <strong>{g.label}</strong>
                     <span>
                       {
@@ -352,7 +353,7 @@ export default function RigDesigner({
                     checked={size === choice.value}
                     onChange={() => setSize(choice.value)}
                   />
-                  <choice.icon size={20} />
+                  <choice.icon size={16} />
                   <strong>
                     {choice.title}
                     {choice.value === 2 && <em>Recommended</em>}
@@ -369,44 +370,46 @@ export default function RigDesigner({
             More seats increase model usage and coordination. A pair is a good
             starting point for work that benefits from independent review.
           </p>
-          <label className="field-label">
-            DEFAULT RUNTIME
-            <select
-              aria-label="Default runtime"
-              value={runtime}
-              onChange={(e) => setRuntime(e.target.value)}
-            >
-              <option value="codex">Codex</option>
-              <option value="claude-code">Claude Code</option>
-            </select>
-          </label>
-          {!!folders.length && (
+          <div className="designer-project-settings">
             <label className="field-label">
-              ATTACHED PROJECT
+              DEFAULT RUNTIME
               <select
-                aria-label="Designer attached project"
-                value={folders.some((f) => f.path === folder) ? folder : ""}
-                onChange={(e) => {
-                  if (e.target.value) setFolder(e.target.value);
-                }}
+                aria-label="Default runtime"
+                value={runtime}
+                onChange={(e) => setRuntime(e.target.value)}
               >
-                <option value="">Choose a live rig folder</option>
-                {folders.map((f) => (
-                  <option key={f.path} value={f.path}>
-                    {f.path} ({f.rigs.map((r) => r.name).join(", ")})
-                  </option>
-                ))}
+                <option value="codex">Codex</option>
+                <option value="claude-code">Claude Code</option>
               </select>
             </label>
-          )}
-          <label className="field-label">
-            PROJECT FOLDER
-            <input
-              aria-label="Designer project folder"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
-            />
-          </label>
+            {!!folders.length && (
+              <label className="field-label">
+                ATTACHED PROJECT
+                <select
+                  aria-label="Designer attached project"
+                  value={folders.some((f) => f.path === folder) ? folder : ""}
+                  onChange={(e) => {
+                    if (e.target.value) setFolder(e.target.value);
+                  }}
+                >
+                  <option value="">Choose a live rig folder</option>
+                  {folders.map((f) => (
+                    <option key={f.path} value={f.path}>
+                      {f.path} ({f.rigs.map((r) => r.name).join(", ")})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="field-label">
+              PROJECT FOLDER
+              <input
+                aria-label="Designer project folder"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+              />
+            </label>
+          </div>
           {!agents.length && (
             <p>
               No installed agents were found. Add agent specifications to
@@ -430,7 +433,7 @@ export default function RigDesigner({
       {step === 1 && (
         <div className="designer-body">
           <div className="designer-section-heading">
-            <h4>A seat for every part of the work.</h4>
+            <h4>Recommended seats</h4>
             <p>{goals[kind].why}</p>
           </div>
           <p className="field-note">
@@ -531,17 +534,13 @@ export default function RigDesigner({
       {step === 2 && (
         <div className="designer-body">
           <div className="designer-section-heading">
-            <h4>
-              {launched ? "Your team is ready." : "Ready for a final look?"}
-            </h4>
-            <p>
-              Review your team and preview the launch before starting any seats.
-            </p>
+            <h4>{launched ? "Rig launched" : "Review rig"}</h4>
+            <p>Check the configuration, then preview it before launch.</p>
           </div>
           <div className="designer-review-card">
             <div className="designer-review-title">
               <span className="designer-mark">
-                <Network size={24} />
+                <Network size={17} />
               </span>
               <div>
                 <h4>{name}</h4>

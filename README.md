@@ -4,36 +4,36 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Screenshots
 
-Rig Studio guides you from a goal to an editable team and a launch review. These screenshots use an isolated demonstration rig.
+The rig designer guides you from a goal to an editable team and a launch review. These screenshots use an isolated demonstration rig.
 
 **Review the team before launching**
 
-![Rig Studio review showing the project goal, working directory, and agent roster](docs/screenshots/rig-designer-review.png)
+![Rig designer review showing the project goal, working directory, and agent roster](docs/screenshots/rig-designer-review.png)
 
 <details>
 <summary>Choose your goal, type of work, and team size</summary>
 
-![Rig Studio needs step with work type cards and solo, pair, and team choices](docs/screenshots/rig-designer-needs.png)
+![Rig designer needs step with work type cards and solo, pair, and team choices](docs/screenshots/rig-designer-needs.png)
 
 </details>
 
 <details>
 <summary>Customize agents and runtimes for each seat</summary>
 
-![Rig Studio team step with side-by-side agent seat cards](docs/screenshots/rig-designer-team.png)
+![Rig designer team step with side-by-side agent seat cards](docs/screenshots/rig-designer-team.png)
 
 </details>
 
 <details>
 <summary>Use the designer in a narrow docked panel</summary>
 
-![Rig Studio review adapting to a narrow workspace panel](docs/screenshots/rig-designer-narrow.png)
+![Rig designer review adapting to a narrow workspace panel](docs/screenshots/rig-designer-narrow.png)
 
 </details>
 
 ## Run the desktop app
 
-Open **`release/HRig 0.6.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.6.2.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.

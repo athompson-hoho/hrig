@@ -28,5 +28,10 @@
     "version": "0.6.1",
     "title": "A polished rig design experience",
     "sourceRef": "HEAD"
+  },
+  {
+    "version": "0.6.2",
+    "title": "Rig designer aligned with the workspace",
+    "sourceRef": "HEAD"
   }
 ]
