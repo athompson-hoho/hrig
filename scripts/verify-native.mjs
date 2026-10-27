@@ -38,7 +38,7 @@ if (manifest.policy.signed) {
     for (const file of [
       latest.executable,
       ...manifest.files
-        .filter((f) => f.name.endsWith("-setup.exe"))
+        .filter((f) => f.name.endsWith(".exe"))
         .map((f) => path.resolve("release", f.name)),
     ])
       execFileSync(

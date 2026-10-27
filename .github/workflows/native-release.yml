@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - run: node scripts/check-open-source.cjs
       - run: node scripts/release-notes.cjs
   build:
     needs: preflight

@@ -333,3 +333,7 @@ Team assessment compares lean, balanced and throughput proposals, preserves manu
 Packaged HRig checks for new stable versions after startup and every six hours. The prompt offers download or a reminder tomorrow. On Windows, download and verify the update, then explicitly confirm restart and installation; unsaved edits block restart. Unsigned updates require acknowledgment. Portable copies upgrade through Windows setup. Unsigned macOS and Linux use release downloads/package managers. Install 0.12.0 once to enable this flow in older versions. [Update behavior](DISTRIBUTION.md).
 
 ![New-version prompt with explicit unsigned-update restart confirmation, using demonstration versions](docs/screenshots/update-prompt.png)
+
+## License and code signing
+
+HRig is open source under the [MIT license](LICENSE). See the [privacy statement](PRIVACY.md) and [code signing policy](SIGNING.md). We are applying to SignPath Foundation for free Windows code signing; approval and trusted signing are pending. Current release signatures are described in their release notes. Planned attribution after approval: Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is an application, not a claim of current sponsorship.

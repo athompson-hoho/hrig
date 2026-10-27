@@ -74,7 +74,10 @@
       "assets/icon.png",
       "assets/theme-licenses/**/*",
       "THEME_CREDITS.md",
-      "dist-mobile/**/*"
+      "dist-mobile/**/*",
+      "LICENSE",
+      "PRIVACY.md",
+      "SIGNING.md"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
@@ -139,6 +142,6 @@
   "overrides": {
     "dompurify": "3.4.17"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "homepage": "https://github.com/athompson-hoho/hrig"
 }
