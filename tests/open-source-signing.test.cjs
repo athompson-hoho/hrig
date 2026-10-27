@@ -114,7 +114,10 @@ import(${JSON.stringify(moduleUrl)}).catch(e=>{console.error(e.message);process.
           c.file === "powershell.exe" && c.args.includes("Fixture publisher"),
       ),
     );
-    assert.ok(calls.some((c) => c.args.includes(path.join(release, portable))));
+    // macOS resolves /var temp directories to /private/var in child-process cwd.
+    const portableArgs = calls.flatMap(c => c.args).filter(a => typeof a === "string" && a.endsWith("-portable.exe"));
+    assert.equal(portableArgs.length, 1);
+    assert.equal(await fs.realpath(portableArgs[0]), await fs.realpath(path.join(release, portable)));
     const evidence = path.join(release, "distribution-qa-win32-x64.json");
     await fs.unlink(evidence);
     assert.throws(() => run(true), /Portable signature rejected/);
