@@ -88,6 +88,18 @@ import {
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
 import TerminalPanel from "./TerminalPanel";
+import ProjectHub from "./ProjectHub";
+import QuickOpen from "./QuickOpen";
+import PanelNavigator, { type NavigablePanel } from "./PanelNavigator";
+import "./navigation.css";
+import {
+  availableConnection,
+  connectionIdentity,
+  normalizeHistory,
+  projectIdentity,
+  visitProject,
+  type RecentProject,
+} from "./project-history";
 import {
   bufferText,
   clearBuffer,
@@ -96,6 +108,7 @@ import {
   buffers,
   bufferConfigs,
   persistBuffer,
+  editorFocusers,
 } from "./editor-buffers";
 import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
@@ -137,7 +150,16 @@ const defaultState: WorkspaceState = {
   sidebarWidth: 264,
 };
 type ModalKind =
-  "connect" | "project" | "add" | "save" | "palette" | "guide" | "tools" | null;
+  | "connect"
+  | "project"
+  | "quickOpen"
+  | "panels"
+  | "add"
+  | "save"
+  | "palette"
+  | "guide"
+  | "tools"
+  | null;
 type PendingAction = {
   title: string;
   description: string;
@@ -184,6 +206,13 @@ export default function App() {
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
   const [modal, setModal] = useState<ModalKind>(null);
+  const modalRef = useRef(modal);
+  modalRef.current = modal;
+  const projectIntent = useRef(0);
+  const pendingFileFocus = useRef<string | null>(null);
+  const [projectOpening, setProjectOpening] = useState(false);
+  const [recentPanels, setRecentPanels] = useState<string[]>([]);
+  const modelOwners = useRef(new WeakMap<Model, string>());
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
@@ -218,6 +247,14 @@ export default function App() {
     state.connections[0] ||
     local;
   const root = state.roots[connection.id] || connection.root;
+  const projectHistory = useMemo(
+    () => normalizeHistory(state.projectHistory),
+    [state.projectHistory],
+  );
+  const endpoint = connectionIdentity(
+    connection,
+    window.hrig?.platform || "unknown",
+  );
   const projectId = projectKey(connection.id, root);
   const userPreferences = useMemo(
     () => safeOverrides(state.preferences),
@@ -418,6 +455,7 @@ export default function App() {
             localFound;
         setState({
           ...base,
+          projectHistory: normalizeHistory(base.projectHistory),
           connections,
           preferences:
             base.preferences ??
@@ -433,9 +471,30 @@ export default function App() {
   useEffect(() => {
     if (!loaded) return;
     history.current = { past: [], future: [] };
-    setModel(restoreModel(stateRef.current.layouts[workspace]));
+    const next = restoreModel(stateRef.current.layouts[workspace]);
+    modelOwners.current.set(next, workspace);
+    setModel(next);
     setRevision((n) => n + 1);
   }, [loaded, workspace]);
+  useEffect(() => {
+    const selected = model.getActiveTabset()?.getSelectedNode()?.getId();
+    if (selected)
+      setRecentPanels((old) =>
+        [selected, ...old.filter((x) => x !== selected)].slice(0, 500),
+      );
+    const listener = {
+      onAfterAction: (action: Action) => {
+        if (action.type === Actions.SELECT_TAB) {
+          const id = action.data.tabNode as string;
+          setRecentPanels((old) =>
+            [id, ...old.filter((x) => x !== id)].slice(0, 500),
+          );
+        }
+      },
+    };
+    model.addChangeListener(listener);
+    return () => model.removeChangeListener(listener);
+  }, [model]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
     if (!inventory || inventoryError || !preferences["notifications.desktop"])
@@ -557,10 +616,12 @@ export default function App() {
     };
   }, [menu]);
   const modelChanged = (next: Model) => {
+    const owner = modelOwners.current.get(next) || workspaceRef.current;
+    modelOwners.current.set(next, owner);
     setRevision((n) => n + 1);
     setState((s) => ({
       ...s,
-      layouts: { ...s.layouts, [workspaceRef.current]: next.toJson() },
+      layouts: { ...s.layouts, [owner]: next.toJson() },
     }));
   };
   const remember = () => {
@@ -623,23 +684,127 @@ export default function App() {
       cancelled = true;
     };
   }, [modal, connection]);
-  const applyProject = async (path: string) => {
+  const applyProject = async (
+    requested: string,
+    target: Connection = connection,
+    rigId?: string,
+    rigName?: string,
+  ) => {
+    const request = ++projectIntent.current;
+    const previousWorkspace = workspaceRef.current;
+    const platform = window.hrig.platform;
+    const entry = normalizeHistory(stateRef.current.projectHistory).find(
+      (p) => p.id === projectIdentity(target, requested, platform),
+    );
+    const path = entry?.root || requested;
+    const targetEndpoint = connectionIdentity(target, platform);
+    setFormError("");
+    setProjectOpening(true);
     try {
-      await window.hrig.file(connection, { op: "list", root: path, path: "" });
-      setState((s) => ({ ...s, roots: { ...s.roots, [connection.id]: path } }));
+      if (!path.trim() || path.length > 4096 || path.includes("\0"))
+        throw Error("Choose a valid project folder.");
+      await window.hrig.file(target, { op: "list", root: path, path: "" });
+      if (
+        request !== projectIntent.current ||
+        workspaceRef.current !== previousWorkspace ||
+        modalRef.current !== "project"
+      )
+        return;
+      const fresh = stateRef.current.connections.find(
+        (c) => c.id === target.id,
+      );
+      if (!fresh || connectionIdentity(fresh, platform) !== targetEndpoint)
+        throw Error(
+          "The connection target changed while checking this folder. Open it again on the intended host.",
+        );
+      const scope =
+        rigId ?? (target.id === connection.id ? state.activeRig : "");
+      const scopeName =
+        rigName ?? (scope === state.activeRig ? currentRig?.name || "" : "");
+      const snapshot = modelRef.current.toJson();
+      setState((s) => ({
+        ...s,
+        activeConnection: target.id,
+        activeRig: scope,
+        roots: { ...s.roots, [target.id]: path },
+        layouts: { ...s.layouts, [previousWorkspace]: snapshot },
+        projectHistory: visitProject(
+          normalizeHistory(s.projectHistory),
+          fresh,
+          path,
+          platform,
+          scope,
+          scopeName,
+        ),
+      }));
       setSection("files");
       setSidebar(true);
       setModal(null);
       notify("Project opened");
     } catch (e) {
-      setFormError((e as Error).message);
+      if (request === projectIntent.current && modalRef.current === "project")
+        setFormError((e as Error).message);
+    } finally {
+      if (request === projectIntent.current) setProjectOpening(false);
     }
   };
   const openProject = () => {
+    projectIntent.current++;
+    setProjectOpening(false);
     setProjectPath(root);
     setModal("project");
     setFormError("");
   };
+  const closeProject = () => {
+    projectIntent.current++;
+    setProjectOpening(false);
+    setModal(null);
+  };
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    const id = projectIdentity(connection, root, window.hrig.platform);
+    const existing = normalizeHistory(stateRef.current.projectHistory).find(
+      (p) => p.id === id,
+    );
+    const record = () => {
+      if (cancelled || workspaceRef.current !== workspace) return;
+      setState((s) => {
+        const fresh = s.connections.find((c) => c.id === connection.id);
+        if (
+          !fresh ||
+          connectionIdentity(fresh, window.hrig.platform) !== endpoint
+        )
+          return s;
+        return {
+          ...s,
+          projectHistory: visitProject(
+            normalizeHistory(s.projectHistory),
+            fresh,
+            root,
+            window.hrig.platform,
+            s.activeRig,
+            currentRig?.name || "",
+          ),
+        };
+      });
+    };
+    if (existing) {
+      if (
+        existing.rigId !== state.activeRig ||
+        existing.rigName !== (currentRig?.name || "") ||
+        existing.hostName !== connection.name
+      )
+        record();
+    } else
+      window.hrig
+        .file(connection, { op: "list", root, path: "" })
+        .then(record)
+        .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [loaded, root, endpoint, state.activeRig, currentRig?.name]);
   const addPanel = (
     component: string,
     name: string,
@@ -678,6 +843,9 @@ export default function App() {
         );
     }
     modelChanged(model);
+    setRecentPanels((old) =>
+      [tab.id!, ...old.filter((id) => id !== tab.id)].slice(0, 500),
+    );
     setModal(null);
     log(`Opened ${name}`);
   };
@@ -709,10 +877,16 @@ export default function App() {
       id,
     );
   };
-  const openFile = (path: string, diff = false, line?: number, source?: PanelConfig) => {
+  const openFile = (
+    path: string,
+    diff = false,
+    line?: number,
+    source?: PanelConfig,
+  ) => {
     const fileConnection = source?.connection || connection;
     const fileRoot = source?.root || root;
     const id = `${diff ? "diff" : "file"}:${fileConnection.id}:${fileRoot}:${path}`;
+    pendingFileFocus.current = id;
     const existing = model.getNodeById(id) as TabNode | undefined;
     if (existing && line)
       model.doAction(
@@ -726,6 +900,7 @@ export default function App() {
       { path, line, connection: fileConnection, root: fileRoot },
       id,
     );
+    if (existing) focusPanel(id);
   };
   const saveAll = async () => {
     const failures: string[] = [];
@@ -763,6 +938,120 @@ export default function App() {
       if (node instanceof TabNode) tabs.push(node.toJson());
     });
     return tabs;
+  };
+  const panelGroups = () => {
+    const groups: { id: string; name: string }[] = [];
+    model.visitNodes((node) => {
+      if (node.getType() === "tabset")
+        groups.push({
+          id: node.getId(),
+          name:
+            node.getAttributeOwn("name") ||
+            node
+              .getChildren()
+              .map((child) => (child as TabNode).getName())
+              .join(" / ") ||
+            "Empty group",
+        });
+    });
+    return groups;
+  };
+  const panelList = () => {
+    const rows: NavigablePanel[] = [];
+    model.visitNodes((node) => {
+      if (!(node instanceof TabNode)) return;
+      const config = (node.getConfig() || {}) as Partial<PanelConfig>;
+      let group = node.getParent();
+      while (group && group.getType() !== "tabset") group = group.getParent();
+      const buffer = buffers.get(node.getId());
+      rows.push({
+        id: node.getId(),
+        name: node.getName(),
+        component: node.getComponent() || "panel",
+        host: config.connection?.name || connection.name,
+        root: config.root || root,
+        rig: config.seat?.rigName || "",
+        seat: config.seat?.name || "",
+        path: config.path || "",
+        group:
+          group?.getAttributeOwn("name") ||
+          group
+            ?.getChildren()
+            .map((child) => (child as TabNode).getName())
+            .join(" / ") ||
+          "Workspace",
+        detached: !!node.getWindow() && node.getWindow() !== window,
+        dirty: buffer
+          ? buffer.content !== buffer.saved
+          : !!node.getConfig()?.dirty,
+      });
+    });
+    return rows;
+  };
+  const focusPanel = (id: string) => {
+    const node = modelRef.current.getNodeById(id) as TabNode | undefined;
+    if (!node) {
+      setToast("This panel has closed. Open the navigator again.");
+      return;
+    }
+    const activeModel = modelRef.current;
+    const maximized = activeModel.getMaximizedTabset(node.getLayoutId());
+    let group = node.getParent();
+    while (group && group.getType() !== "tabset") group = group.getParent();
+    if (maximized && maximized.getId() !== group?.getId())
+      activeModel.doAction(Actions.maximizeToggle(maximized.getId()));
+    activeModel.doAction(Actions.selectTab(id));
+    if (node.getLayoutId() !== Model.MAIN_LAYOUT_ID)
+      activeModel.doAction(Actions.movePopoutToFront(node.getLayoutId()));
+    modelChanged(activeModel);
+    setModal(null);
+    requestAnimationFrame(() => {
+      if (
+        activeModel
+          .getActiveTabset(node.getLayoutId())
+          ?.getSelectedNode()
+          ?.getId() !== id
+      )
+        return;
+      node.getWindow()?.focus();
+      const focus = editorFocusers.get(id);
+      if (focus) {
+        pendingFileFocus.current = null;
+        focus();
+        return;
+      }
+      if (["editor", "diff"].includes(node.getComponent() || ""))
+        pendingFileFocus.current = id;
+      const panel = node
+        .getDocument()
+        ?.querySelector<HTMLElement>(`[data-panel-id="${CSS.escape(id)}"]`);
+      const element = panel?.querySelector<HTMLElement>(
+        '.xterm-helper-textarea,.monaco-editor textarea,input,button,[tabindex="0"]',
+      );
+      (element || panel)?.focus();
+    });
+  };
+  const movePanel = (id: string, target: string, direction: string) => {
+    const current = modelRef.current;
+    if (
+      !current.getNodeById(id) ||
+      current.getNodeById(target)?.getType() !== "tabset"
+    ) {
+      setToast("The panel or destination group is no longer available.");
+      return;
+    }
+    const location = (
+      {
+        center: DockLocation.CENTER,
+        left: DockLocation.LEFT,
+        right: DockLocation.RIGHT,
+        bottom: DockLocation.BOTTOM,
+      } as Record<string, DockLocation>
+    )[direction];
+    if (!location) return;
+    remember();
+    current.doAction(Actions.moveNode(id, target, location, -1));
+    modelChanged(current);
   };
   const dirtyInLayout = () =>
     allTabs().filter((t) => dirtyTabs.current.has(t.id!));
@@ -848,6 +1137,12 @@ export default function App() {
     return action;
   };
   const markDirty = useCallback((id: string, dirty: boolean) => {
+    if (
+      dirtyTabs.current.has(id) === dirty &&
+      !!(modelRef.current.getNodeById(id) as TabNode | undefined)?.getConfig()
+        ?.dirty === dirty
+    )
+      return;
     dirty ? dirtyTabs.current.add(id) : dirtyTabs.current.delete(id);
     const m = modelRef.current;
     const node = m.getNodeById(id) as TabNode | undefined;
@@ -945,10 +1240,12 @@ export default function App() {
             groups.push({
               id: n.getId(),
               name:
+                n.getAttributeOwn("name") ||
                 n
                   .getChildren()
                   .map((c) => (c as TabNode).getName())
-                  .join(" / ") || "Empty group",
+                  .join(" / ") ||
+                "Empty group",
             });
         });
         return (
@@ -956,6 +1253,14 @@ export default function App() {
             model={model.toJson()}
             tabs={allTabs().filter((t) => t.component !== "arranger")}
             groups={groups}
+            onRenameGroup={(id, name) => {
+              if (model.getNodeById(id)?.getType() !== "tabset") return;
+              remember();
+              model.doAction(
+                Actions.updateNodeAttributes(id, { name: name.slice(0, 80) }),
+              );
+              modelChanged(model);
+            }}
             onPreset={applyPreset}
             onMove={(id, target, dir) => {
               remember();
@@ -1181,6 +1486,17 @@ export default function App() {
               id={node.getId()}
               config={config}
               diff={node.getComponent() === "diff"}
+              onReady={(id) => {
+                if (pendingFileFocus.current !== id) return false;
+                pendingFileFocus.current = null;
+                return (
+                  modalRef.current === null &&
+                  modelRef.current
+                    .getActiveTabset(node.getLayoutId())
+                    ?.getSelectedNode()
+                    ?.getId() === id
+                );
+              }}
               onDirty={markDirty}
               onSaved={() => {
                 setFileRevision((n) => n + 1);
@@ -1225,10 +1541,33 @@ export default function App() {
     }
   };
   const openPalette = () => {
+    projectIntent.current++;
     setSearch("");
     setModal("palette");
   };
+  const openQuickOpen = () => {
+    projectIntent.current++;
+    window.focus();
+    setModal("quickOpen");
+  };
+  const openPanelNavigator = () => {
+    projectIntent.current++;
+    window.focus();
+    setModal("panels");
+  };
   const commands = [
+    {
+      name: "Quick Open project file",
+      hint: "Ctrl P",
+      icon: <FileCode2 size={16} />,
+      action: openQuickOpen,
+    },
+    {
+      name: "Find open panels",
+      hint: "Ctrl Shift P",
+      icon: <Columns2 size={16} />,
+      action: openPanelNavigator,
+    },
     {
       name: "Save All",
       hint: "All open files",
@@ -1355,7 +1694,21 @@ export default function App() {
   ];
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.altKey) return;
       if (event.ctrlKey || event.metaKey) {
+        if (
+          [",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) ||
+          (event.shiftKey && event.key.toLowerCase() === "t")
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        if (event.key.toLowerCase() === "p") {
+          event.preventDefault();
+          event.stopPropagation();
+          event.shiftKey ? openPanelNavigator() : openQuickOpen();
+          return;
+        }
         if (event.key === ",") {
           event.preventDefault();
           openSettings();
@@ -1378,10 +1731,23 @@ export default function App() {
         }
       }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const windows = [
+      ...new Set(
+        [...themeDocuments.current]
+          .map((doc) => doc.defaultView)
+          .filter((value): value is Window & typeof globalThis => !!value),
+      ),
+    ];
+    for (const target of windows)
+      target.addEventListener("keydown", handler, true);
+    return () => {
+      for (const target of windows)
+        target.removeEventListener("keydown", handler, true);
+    };
   });
   const chooseConnection = (id: string) => {
+    projectIntent.current++;
+    setProjectOpening(false);
     setState((s) => ({ ...s, activeConnection: id, activeRig: "" }));
     setMenu(null);
     log(`Selected ${state.connections.find((c) => c.id === id)?.name}`);
@@ -1690,6 +2056,20 @@ export default function App() {
                 </span>
               </div>
               <div className="workspace-actions">
+                <IconButton
+                  title="Quick Open project file (Ctrl P)"
+                  onClick={openQuickOpen}
+                >
+                  <Search size={15} />
+                </IconButton>
+                <button
+                  className="toolbar-button"
+                  onClick={openPanelNavigator}
+                  title="Find open panels (Ctrl Shift P)"
+                >
+                  <Columns2 size={14} />
+                  <span className="navigation-toolbar-label">Panels</span>
+                </button>
                 <button
                   className="toolbar-button"
                   onClick={() => setModal("tools")}
@@ -1805,16 +2185,26 @@ export default function App() {
               <Layout
                 ref={layout}
                 model={model}
-                factory={factory}
+                factory={(node) => (
+                  <div
+                    className="navigation-panel-content"
+                    data-panel-id={node.getId()}
+                    tabIndex={-1}
+                  >
+                    {factory(node)}
+                  </div>
+                )}
                 onModelChange={modelChanged}
                 onAction={onAction}
                 realtimeResize
                 onPopoutOpen={(_layout, _window, doc) => {
                   themeDocuments.current.add(doc);
+                  setRevision((n) => n + 1);
                   applyTheme(doc, preferences, systemDark);
                 }}
                 onPopoutClose={(_layout, _window, doc) => {
                   themeDocuments.current.delete(doc);
+                  setRevision((n) => n + 1);
                 }}
                 supportsPopout
                 popoutURL="popout.html"
@@ -1830,6 +2220,13 @@ export default function App() {
                     );
                 }}
                 onRenderTabSet={(node, values) => {
+                  const groupName = node.getAttributeOwn("name");
+                  if (groupName)
+                    values.leading = (
+                      <span className="navigation-group-name" title={groupName}>
+                        {groupName}
+                      </span>
+                    );
                   values.buttons.push(
                     <button
                       className="tabset-add"
@@ -2153,93 +2550,71 @@ export default function App() {
           </Modal>
         )}
         {modal === "project" && (
-          <Modal
-            title="Open a project"
-            subtitle={`Project files will open on ${connection.name}.`}
-            onClose={() => setModal(null)}
-          >
-            {connection.kind !== "local" && (
-              <div className="attached-projects">
-                <div className="field-label">RIG SESSION FOLDERS</div>
-                {projectsLoading && <p>Finding attached folders...</p>}
-                {projectsError && <ErrorBox error={projectsError} />}
-                {!projectsLoading &&
-                  !projectsError &&
-                  !projectFolders.length && (
-                    <p>
-                      No live rig folders found. You can enter a directory
-                      below.
-                    </p>
-                  )}
-                {[...projectFolders]
-                  .sort(
-                    (a, b) =>
-                      Number(b.rigs.some((r) => r.id === state.activeRig)) -
-                      Number(a.rigs.some((r) => r.id === state.activeRig)),
-                  )
-                  .map((project) => (
-                    <button
-                      key={project.path}
-                      className="attached-project"
-                      onClick={() => void applyProject(project.path)}
-                    >
-                      <FolderOpen size={18} />
-                      <span>
-                        <strong>{project.name}</strong>
-                        <small>{project.path}</small>
-                        <small>
-                          {project.rigs.map((r) => r.name).join(", ")}
-                        </small>
-                      </span>
-                      <ArrowUpRight size={16} />
-                    </button>
-                  ))}
-              </div>
+          <ProjectHub
+            connection={connection}
+            connections={state.connections}
+            history={projectHistory}
+            path={projectPath}
+            onPath={setProjectPath}
+            folders={[...projectFolders].sort(
+              (a, b) =>
+                Number(b.rigs.some((r) => r.id === state.activeRig)) -
+                Number(a.rigs.some((r) => r.id === state.activeRig)),
             )}
-            <label className="field-label">
-              PROJECT DIRECTORY
-              <div className="input-with-button">
-                <input
-                  autoFocus
-                  value={projectPath}
-                  onChange={(e) => setProjectPath(e.target.value)}
-                  placeholder={
-                    connection.kind === "local"
-                      ? "C:\\Projects\\my-project"
-                      : "/home/me/projects/my-project"
-                  }
-                />
-                {connection.kind === "local" && (
-                  <button
-                    className="secondary-button"
-                    onClick={async () => {
-                      const path = await window.hrig.pickFolder();
-                      if (path) setProjectPath(path);
-                    }}
-                  >
-                    Browse…
-                  </button>
-                )}
-              </div>
-            </label>
-            {formError && <ErrorBox error={formError} />}
-            <div className="modal-actions">
-              <button
-                className="secondary-button"
-                onClick={() => setModal(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="primary-button"
-                disabled={!projectPath.trim()}
-                onClick={() => void applyProject(projectPath.trim())}
-              >
-                <FolderOpen size={14} />
-                Open project
-              </button>
-            </div>
-          </Modal>
+            loading={projectsLoading}
+            error={formError || projectsError}
+            opening={projectOpening}
+            onOpen={(path, target, rigId, rigName) =>
+              void applyProject(path, target, rigId, rigName)
+            }
+            onClose={closeProject}
+            onPin={(id) => {
+              const entry = projectHistory.find((p) => p.id === id);
+              if (!entry) return;
+              if (
+                !entry.pinned &&
+                projectHistory.filter((p) => p.pinned).length >= 50
+              ) {
+                setFormError("You can pin up to 50 projects. Unpin one first.");
+                return;
+              }
+              setState((s) => ({
+                ...s,
+                projectHistory: normalizeHistory(s.projectHistory).map((p) =>
+                  p.id === id ? { ...p, pinned: !p.pinned } : p,
+                ),
+              }));
+            }}
+            onRemove={(id) =>
+              setState((s) => ({
+                ...s,
+                projectHistory: normalizeHistory(s.projectHistory).filter(
+                  (p) => p.id !== id,
+                ),
+              }))
+            }
+          />
+        )}
+        {modal === "quickOpen" && (
+          <QuickOpen
+            connection={connection}
+            root={root}
+            onClose={() => setModal(null)}
+            onOpen={(path, line) => {
+              setModal(null);
+              openFile(path, false, line);
+            }}
+          />
+        )}
+        {modal === "panels" && (
+          <PanelNavigator
+            panels={panelList()}
+            recent={recentPanels}
+            groups={panelGroups()}
+            onFocus={focusPanel}
+            onMove={movePanel}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal === "add" && (
           <Modal

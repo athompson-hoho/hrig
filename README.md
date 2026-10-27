@@ -307,3 +307,13 @@ Find text inside each terminal with Ctrl+F/Cmd+F, case/regex matching and next/p
 HRig provides an **agent development environment (ADE)** around OpenRig: a graphical agent workspace with code editing, terminal session management, human-in-the-loop review and project/task boards. OpenRig remains responsible for agent execution, coordination and permissions.
 
 Developers comparing AI coding workspaces such as [Cursor](https://cursor.com/docs), [Orca](https://www.onorca.dev/docs), [Visual Studio Code (VS Code)](https://code.visualstudio.com/docs) and [Zed](https://zed.dev/docs) can evaluate HRig for workflows centered on OpenRig rigs, WSL/SSH hosts and multiple visible agent sessions. The [release notes](https://github.com/athompson-hoho/hrig/releases) describe shipped capabilities; the [roadmap](ROADMAP.md) distinguishes proposed features from implemented ones.
+
+## Project and panel navigation (0.11.0)
+
+Open recent or favorite projects with Ctrl+O/Cmd+O, find files with fuzzy Quick Open (Ctrl+P/Cmd+P), and focus existing panels with Ctrl+Shift+P/Cmd+Shift+P. Name groups and arrange panels with keyboard controls and undo. See [navigation behavior and limits](NAVIGATION.md).
+
+![Project hub with pinned and recent folders labeled by host](docs/screenshots/project-hub.png)
+
+![Fuzzy Quick Open with keyboard file selection](docs/screenshots/quick-open.png)
+
+![Panel navigator for existing groups and native popouts](docs/screenshots/panel-navigator.png)

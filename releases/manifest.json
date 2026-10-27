@@ -66,5 +66,11 @@
     "title": "Terminal search and output tools",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.11.0",
+    "title": "Project hub and faster navigation",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

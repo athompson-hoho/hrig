@@ -12,6 +12,7 @@ import {
   problems,
   bufferConfigs,
   persistBuffer,
+  editorFocusers,
 } from "./editor-buffers";
 import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
@@ -75,12 +76,14 @@ export default function EditorPanel({
   diff = false,
   onDirty,
   onSaved,
+  onReady,
 }: {
   id: string;
   config: PanelConfig;
   diff?: boolean;
   onDirty: (id: string, dirty: boolean) => void;
   onSaved: () => void;
+  onReady?: (id: string) => boolean;
 }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
@@ -161,6 +164,7 @@ export default function EditorPanel({
   const saveRef = useRef<() => void>(() => {});
   const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const focusRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (config.line) {
       editorRef.current?.revealLineInCenter(config.line);
@@ -234,6 +238,8 @@ export default function EditorPanel({
       });
     return () => {
       active = false;
+      if (editorFocusers.get(id) === focusRef.current)
+        editorFocusers.delete(id);
       // Detach first: the React Monaco wrapper disposes models before its widget.
       // Newer Monaco diff widgets require the model to be reset before disposal.
       diffRef.current?.setModel(null);
@@ -387,6 +393,10 @@ export default function EditorPanel({
         <DiffEditor
           onMount={(editor) => {
             diffRef.current = editor;
+            const focus = () => editor.focus();
+            focusRef.current = focus;
+            editorFocusers.set(id, focus);
+            if (onReady?.(id)) focus();
           }}
           original={compare ? external?.content || "" : original}
           modified={value}
@@ -421,6 +431,10 @@ export default function EditorPanel({
           }}
           onMount={(editor) => {
             editorRef.current = editor;
+            const focus = () => editor.focus();
+            focusRef.current = focus;
+            editorFocusers.set(id, focus);
+            if (onReady?.(id)) focus();
             if (config.line) {
               editor.revealLineInCenter(config.line);
               editor.setPosition({ lineNumber: config.line, column: 1 });

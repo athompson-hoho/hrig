@@ -3,6 +3,7 @@
 import type { PanelConfig } from "./types";
 import { draftKey, draftOperation } from "./drafts";
 export const bufferConfigs = new Map<string, PanelConfig>();
+export const editorFocusers = new Map<string, () => void>();
 export function persistBuffer(id: string) {
   const b = buffers.get(id),
     c = bufferConfigs.get(id);

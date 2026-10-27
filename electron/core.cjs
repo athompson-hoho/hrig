@@ -322,6 +322,7 @@ elif op=='search':
 `;
 async function fileOperation(connection, request) {
   validateConnection(connection);
+  if (request.op === "quickOpen") return require("./navigation.cjs").quickOpen(connection, request, {remote, quote, parseJson, localPath});
   if (
     !["list", "read", "write", "git", "diff", "original", "search"].includes(
       request.op,

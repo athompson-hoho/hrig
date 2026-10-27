@@ -69,6 +69,7 @@ export interface WorkspaceState {
   activeRig: string;
   layouts: Record<string, IJsonModel>;
   savedLayouts: SavedLayout[];
+  projectHistory?: import("./project-history").RecentProject[];
   sidebarWidth?: number;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;

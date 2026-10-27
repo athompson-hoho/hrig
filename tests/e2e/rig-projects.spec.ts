@@ -38,9 +38,20 @@ test("opens a live rig folder without typing a path", async () => {
     await dialog.locator(".attached-project").click();
     await expect(dialog).toHaveCount(0);
     await expect(page.locator(".sidebar")).toContainText("hello.py");
+    await page.keyboard.press("Control+p");
+    await page.getByLabel("Quick Open file search").fill("hpy");
+    await expect(
+      page.getByRole("listbox", { name: "Matching project files" }),
+    ).toContainText("hello.py");
+    await page.getByLabel("Quick Open file search").press("Enter");
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "Hello from WSL",
+    );
     await page.keyboard.press("Control+o");
     await expect(
-      page.getByRole("dialog", { name: "Open a project" }).getByRole("textbox"),
+      page
+        .getByRole("dialog", { name: "Open a project" })
+        .getByLabel("Project directory", { exact: true }),
     ).toHaveValue(fixture.root);
   } finally {
     await app.close();

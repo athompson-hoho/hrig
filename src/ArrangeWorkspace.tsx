@@ -33,6 +33,7 @@ export default function ArrangeWorkspace({
   groups,
   onPreset,
   onMove,
+  onRenameGroup,
   onEqual,
   onUndo,
   onRedo,
@@ -48,6 +49,7 @@ export default function ArrangeWorkspace({
   groups: { id: string; name: string }[];
   onPreset: (name: string) => void;
   onMove: (id: string, target: string, direction: string) => void;
+  onRenameGroup: (id: string, name: string) => void;
   onEqual: () => void;
   onUndo: () => void;
   onRedo: () => void;
@@ -61,6 +63,7 @@ export default function ArrangeWorkspace({
   const [tab, setTab] = useState(tabs[0]?.id || "");
   const [target, setTarget] = useState(groups[0]?.id || "");
   const [name, setName] = useState("");
+  const [groupName, setGroupName] = useState(groups[0]?.name || "");
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -130,7 +133,15 @@ export default function ArrangeWorkspace({
         </label>
         <label className="field-label">
           DESTINATION GROUP
-          <select value={target} onChange={(e) => setTarget(e.target.value)}>
+          <select
+            value={target}
+            onChange={(e) => {
+              setTarget(e.target.value);
+              setGroupName(
+                groups.find((g) => g.id === e.target.value)?.name || "",
+              );
+            }}
+          >
             {groups.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.name}
@@ -138,6 +149,22 @@ export default function ArrangeWorkspace({
             ))}
           </select>
         </label>
+      </div>
+      <div className="input-with-button">
+        <input
+          aria-label="Destination group name"
+          maxLength={80}
+          value={groupName}
+          onChange={(e) => setGroupName(e.target.value)}
+          placeholder="Name this group"
+        />
+        <button
+          className="secondary-button"
+          disabled={!target || !groupName.trim()}
+          onClick={() => onRenameGroup(target, groupName.trim())}
+        >
+          Rename group
+        </button>
       </div>
       <div className="arrange-controls">
         {[

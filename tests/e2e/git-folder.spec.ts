@@ -51,7 +51,7 @@ test("non-repository source control offers a project picker and recovers when a 
       .getByRole("button", { name: "Choose project folder", exact: true })
       .click();
     const dialog = page.getByRole("dialog", { name: "Open a project" });
-    await dialog.getByRole("textbox").fill(repo);
+    await dialog.getByLabel("Project directory", {exact:true}).fill(repo);
     await dialog
       .getByRole("button", { name: "Open project", exact: true })
       .click();

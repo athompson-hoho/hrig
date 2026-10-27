@@ -33,7 +33,7 @@ export default function Welcome({
           <span className="live-pip" /> OPENRIG, AT YOUR FINGERTIPS
         </span>
         <span className="version-pill">
-          DESKTOP PREVIEW <b>0.7</b>
+          OPENRIG WORKSPACE
         </span>
       </div>
       <div className="welcome-hero">
