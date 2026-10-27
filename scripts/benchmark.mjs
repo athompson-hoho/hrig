@@ -2,6 +2,10 @@ import { _electron as electron } from "@playwright/test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+const { cpuSample } = createRequire(import.meta.url)(
+  "../electron/performance-model.cjs",
+);
 const latest = JSON.parse(await fs.readFile("release/latest.json", "utf8"));
 const results = [];
 for (const terminals of [0, 12, 24]) {
@@ -91,16 +95,30 @@ for (const terminals of [0, 12, 24]) {
         { timeout: 90000 },
       );
     const terminalsReadyMs = Math.round(performance.now() - started);
-    await app.evaluate(({ app }) => app.getAppMetrics());
-    await new Promise((r) => setTimeout(r, 2000));
-    const metrics = await app.evaluate(({ app }) =>
+    const before = await app.evaluate(({ app }) =>
       app
         .getAppMetrics()
         .map((m) => ({
-          type: m.type,
-          workingSetKiB: m.memory.workingSetSize,
+          pid: m.pid,
+          cumulativeCPUSeconds: m.cpu.cumulativeCPUUsage,
           cpuPercent: m.cpu.percentCPUUsage,
         })),
+    );
+    const sampleStarted = performance.now();
+    await new Promise((r) => setTimeout(r, 2000));
+    const metrics = await app.evaluate(({ app }) =>
+      app.getAppMetrics().map((m) => ({
+        pid: m.pid,
+        cumulativeCPUSeconds: m.cpu.cumulativeCPUUsage,
+        type: m.type,
+        workingSetKiB: m.memory.workingSetSize,
+        cpuPercent: m.cpu.percentCPUUsage,
+      })),
+    );
+    const cpu = cpuSample(
+      before,
+      metrics,
+      (performance.now() - sampleStarted) / 1000,
     );
     const open = performance.now();
     await page.getByRole("button", { name: "Explorer", exact: true }).click();
@@ -127,8 +145,8 @@ for (const terminals of [0, 12, 24]) {
       electronWorkingSetMiB: Math.round(
         metrics.reduce((n, m) => n + m.workingSetKiB, 0) / 1024,
       ),
-      idleCpuPercent:
-        Math.round(metrics.reduce((n, m) => n + m.cpuPercent, 0) * 100) / 100,
+      idleCpuPercent: cpu.percent,
+      idleCpuMethod: cpu.method,
       processes: metrics.length,
     });
   } finally {

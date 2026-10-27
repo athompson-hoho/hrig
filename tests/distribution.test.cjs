@@ -1,6 +1,22 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
+const { cpuSample } = require("../electron/performance-model.cjs");
+test("CPU baselines use cumulative deltas and never report negative counters as usage", () => {
+  assert.deepEqual(
+    cpuSample(
+      [{ pid: 1, cumulativeCPUSeconds: 1 }],
+      [{ pid: 1, cumulativeCPUSeconds: 1.25 }],
+      2,
+    ),
+    { percent: 12.5, method: "cumulative CPU seconds delta" },
+  );
+  assert.equal(
+    cpuSample([{ pid: 1 }], [{ pid: 1, cpuPercent: -1 }], 2).percent,
+    null,
+  );
+  assert.equal(cpuSample([], [{ pid: 1, cpuPercent: 2 }], 2).percent, 2);
+});
 const {
   createUpdateService,
   newer,

@@ -132,5 +132,6 @@
   "overrides": {
     "dompurify": "3.4.17"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "homepage": "https://github.com/athompson-hoho/hrig"
 }
