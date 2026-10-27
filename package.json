@@ -1,0 +1,15 @@
+{
+  "name": "hrig",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A graphical Windows workspace for OpenRig",
+  "main": "electron/main.cjs",
+  "author": "HRig",
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.17"
+  },
+  "license": "UNLICENSED"
+}
