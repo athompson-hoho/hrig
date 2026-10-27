@@ -152,7 +152,7 @@ Companion versions below are independent of desktop versions. These are proposed
 
 ### Pairing proposal for mobile release 0.2
 
-The app's display name is **hRig** on Android, iOS and the mobile web UI. Installed application IDs stay stable so a name change does not create a second app. The core pairing flow below is now implemented locally: desktop TLS controls and approval, QR invitations and manual fallback, per-device credentials, native secure storage, reconnect and revocation. The old shared-key form remains a legacy option. This is not yet a published or fully device-validated 0.2 release.
+The app's display name is **hRig** on Android, iOS and the mobile web UI. Installed application IDs stay stable so a name change does not create a second app. The core pairing flow is delivered in the [0.2.0 prerelease](https://github.com/athompson-hoho/hrig/releases/tag/mobile-v0.2.0-preview.1), with an Android debug APK and matching Windows portable host: desktop TLS controls and approval, QR invitations and manual fallback, per-device credentials, native secure storage, reconnect and revocation. The old shared-key form remains a legacy option. Real-device validation is still required before a stable release.
 
 1. **Start from the desktop:** Settings > Mobile devices > Pair a phone. hRig starts or checks the gateway, displays the computer name, and offers LAN and Tailscale addresses with a reachability explanation. No terminal command or manually copied long key should be needed for the standard flow.
 2. **Scan from the phone:** the first screen offers Scan QR code, Enter pairing details, and saved computers. QR is the primary path; manual pairing stays available when camera access is declined or scanning fails. The QR contains a protocol version, gateway identity, candidate addresses, and a short-lived, single-use invitation, never the host's persistent shared credential. Show the countdown and allow Cancel or Generate new code.
@@ -171,7 +171,7 @@ Implementation evidence: [pairing store](electron/mobile-pairing.cjs), [desktop 
 
 ### Feature priority list
 
-- **Next:** publish the tested Android preview, make gateway setup discoverable in the desktop app, and validate real LAN/Tailscale connections. A polished connection flow is more valuable than adding controls to an unreliable connection.
+- **Next:** validate pairing on physical Android/iPhone devices over LAN and Tailscale, including real-camera QR capture and network switching. The prerelease now includes the desktop gateway controls and matching Windows host. A polished connection flow is more valuable than adding controls to an unreliable connection.
 - **After connection reliability:** interactive terminals and review/diff workflows offer the largest practical improvement over the current monitor-and-message client.
 - **Useful smaller improvements:** rig/seat search, task filters, copyable connection diagnostics with secrets removed, accessible labels and larger text, clear loading/empty/error states, and a host/version compatibility check during pairing.
 - **Later experiments:** voice-to-message drafts, user-editable prompt shortcuts, notification quiet hours, and a desktop-to-phone “continue reviewing” link. Voice transcripts and shortcuts must remain editable drafts until the user sends them.

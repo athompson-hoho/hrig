@@ -135,7 +135,7 @@ The roadmap and implementation evidence are tracked in [ROADMAP.md](ROADMAP.md).
 
 ### iOS and Android companion (initial implementation)
 
-The mobile app is now named **hRig**. The new pairing flow is implemented locally and requires a desktop build and phone build from the same source revision; the older published preview still uses the legacy shared-key connection.
+The mobile app is now named **hRig**. Download the [hRig 0.2.0 pairing prerelease](https://github.com/athompson-hoho/hrig/releases/tag/mobile-v0.2.0-preview.1), including the Android APK and matching Windows host preview. Install both to use the new pairing controls; older stable desktop builds do not include them. The source tag includes matching native projects and host code.
 
 1. On the desktop, open **Settings > Mobile devices**, then **Start mobile access** and **Pair a phone**.
 2. In the native hRig phone app, choose **Scan QR code**. If camera access is unavailable, choose **Enter pairing details** and paste the desktop invitation.
@@ -150,7 +150,7 @@ To repeat the new native checks with a debug APK installed and running on an aut
 
 **Legacy shared-key setup:** the following instructions remain available under **Legacy shared-key connection** on the phone. They start a separate HTTP gateway on port 5180 and do not provide per-device approval or revocation.
 
-Download the [Android companion prerelease](https://github.com/athompson-hoho/hrig/releases/tag/companion-android-preview.1) for the debug APK, checksum, matching source and host setup instructions. See the [proposed mobile releases](ROADMAP.md#mobile-companion-release-proposals) for planned improvements.
+The [pairing prerelease](https://github.com/athompson-hoho/hrig/releases/tag/mobile-v0.2.0-preview.1) includes checksums and setup instructions. The [first Android preview](https://github.com/athompson-hoho/hrig/releases/tag/companion-android-preview.1) remains available for the legacy shared-key gateway. See the [proposed mobile releases](ROADMAP.md#mobile-companion-release-proposals) for planned improvements.
 
 The companion lists rigs and seats, reads the latest 200 lines of a seat's terminal, shows active tasks, and sends messages to a selected seat. It uses the same OpenRig boundary as the desktop app. Terminal screens are read-only and refresh every four seconds; this version does not provide an interactive terminal, file editing, notifications, or rig lifecycle controls. It does not create or relaunch agents.
 
