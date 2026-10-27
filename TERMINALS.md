@@ -9,3 +9,5 @@ Copy output and export use rendered plain text, join soft-wrapped rows and omit 
 HTTP/HTTPS links require native confirmation before opening the system browser. Links with embedded credentials and non-browser protocols are rejected. Conventional unwrapped file paths with extensions, optionally followed by `:line:column`, open in HRig after the existing backend confirms that they resolve inside the terminal's attached project. Relative links use that project root rather than inferring the shell's current directory. Whitespace-containing and wrapped file paths are not detected in this version. Remote file access uses the terminal's original connection even if the selected host/project has changed. Existing backend traversal, symlink and file-size protections apply.
 
 These controls do not recreate the PTY or change OpenRig sessions. Reconnect remains a separate explicit control.
+
+Search and output notices appear as overlays so opening/closing tools does not resize the PTY or trigger a full-screen program repaint.

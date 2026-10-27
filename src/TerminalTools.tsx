@@ -168,73 +168,75 @@ export default function TerminalTools({
         </IconButton>
         <span>Retained output only</span>
       </div>
-      {open && (
-        <div
-          className="terminal-find"
-          role="search"
-          aria-label="Terminal search"
-        >
-          <input
-            ref={field}
-            aria-label="Find in terminal"
-            placeholder="Find in terminal"
-            value={query}
-            maxLength={500}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                find(e.shiftKey);
-              }
-            }}
-          />
-          <button
-            aria-label="Match case"
-            aria-pressed={caseSensitive}
-            onClick={() => setCase(!caseSensitive)}
+      <div className="terminal-tool-overlays">
+        {open && (
+          <div
+            className="terminal-find"
+            role="search"
+            aria-label="Terminal search"
           >
-            Aa
-          </button>
-          <button
-            aria-label="Use regular expression"
-            aria-pressed={regex}
-            onClick={() => setRegex(!regex)}
-          >
-            .*
-          </button>
-          <span role="status">
-            {invalid ||
-              (!query
-                ? "Type to search"
-                : result.resultCount >= 1000
-                  ? "1,000+ matches"
-                  : `${result.resultIndex + 1} of ${result.resultCount}`)}
-          </span>
-          <IconButton
-            title="Previous terminal match"
-            onClick={() => find(true)}
-          >
-            <ArrowUp size={13} />
-          </IconButton>
-          <IconButton title="Next terminal match" onClick={() => find()}>
-            <ArrowDown size={13} />
-          </IconButton>
-          <IconButton title="Close terminal search" onClick={close}>
-            <X size={13} />
-          </IconButton>
-        </div>
-      )}
-      {notice && (
-        <div className="terminal-tool-notice" role="status">
-          {notice}
-          <IconButton
-            title="Dismiss terminal notice"
-            onClick={() => setNotice("")}
-          >
-            <X size={12} />
-          </IconButton>
-        </div>
-      )}
+            <input
+              ref={field}
+              aria-label="Find in terminal"
+              placeholder="Find in terminal"
+              value={query}
+              maxLength={500}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  find(e.shiftKey);
+                }
+              }}
+            />
+            <button
+              aria-label="Match case"
+              aria-pressed={caseSensitive}
+              onClick={() => setCase(!caseSensitive)}
+            >
+              Aa
+            </button>
+            <button
+              aria-label="Use regular expression"
+              aria-pressed={regex}
+              onClick={() => setRegex(!regex)}
+            >
+              .*
+            </button>
+            <span role="status">
+              {invalid ||
+                (!query
+                  ? "Type to search"
+                  : result.resultCount >= 1000
+                    ? "1,000+ matches"
+                    : `${result.resultIndex + 1} of ${result.resultCount}`)}
+            </span>
+            <IconButton
+              title="Previous terminal match"
+              onClick={() => find(true)}
+            >
+              <ArrowUp size={13} />
+            </IconButton>
+            <IconButton title="Next terminal match" onClick={() => find()}>
+              <ArrowDown size={13} />
+            </IconButton>
+            <IconButton title="Close terminal search" onClick={close}>
+              <X size={13} />
+            </IconButton>
+          </div>
+        )}
+        {notice && (
+          <div className="terminal-tool-notice" role="status">
+            {notice}
+            <IconButton
+              title="Dismiss terminal notice"
+              onClick={() => setNotice("")}
+            >
+              <X size={12} />
+            </IconButton>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

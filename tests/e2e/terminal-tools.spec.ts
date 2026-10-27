@@ -41,6 +41,10 @@ test("terminal tools search, copy and export without sending search text or repl
     await input.press("Enter");
     await app.evaluate(({ BrowserWindow, ipcMain }) => {
       (globalThis as any).terminalWrites = [];
+      (globalThis as any).terminalResizes = [];
+      ipcMain.on("terminal:resize", (_e, ...size) =>
+        (globalThis as any).terminalResizes.push(size),
+      );
       ipcMain.on("terminal:write", (_e, id, data) => {
         (globalThis as any).terminalWrites.push({ id, data });
       });
@@ -60,6 +64,9 @@ test("terminal tools search, copy and export without sending search text or repl
     );
     const before = await app.evaluate(() => (globalThis as any).terminalWrites);
     expect(before.length).toBeGreaterThan(0);
+    const dimensionsBefore = await app.evaluate(
+      () => (globalThis as any).terminalResizes,
+    );
     await input.press("Control+f");
     const search = page.getByRole("search", { name: "Terminal search" });
     await page
@@ -96,6 +103,9 @@ test("terminal tools search, copy and export without sending search text or repl
     await page.getByLabel("Find in terminal", { exact: true }).press("Escape");
     await expect(search).toHaveCount(0);
     await expect(input).toBeFocused();
+    expect(
+      await app.evaluate(() => (globalThis as any).terminalResizes),
+    ).toEqual(dimensionsBefore);
     await page
       .getByRole("button", { name: "Copy output", exact: true })
       .click();
