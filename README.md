@@ -1,0 +1,107 @@
+# HRig
+
+A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig). Arrange existing agent sessions with graphical tabs, splits, floating panels, and separate windows. Open project files and Git diffs alongside your agents.
+
+## Run the desktop app
+
+Open **`release/HRig 0.5.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+
+1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
+2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
+3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group.
+4. Use **Arrange** for Team, Focus, and Review presets, or save your own named layout.
+
+The **Explorer** opens editable project files. **Source control** shows changed files with side-by-side diffs against HEAD. **New panel** adds shells, task queues, messages, and an activity view.
+
+## Connections
+
+- **Local Windows:** PowerShell, project files, and Git. OpenRig itself runs on Linux / WSL, so local mode does not discover rigs.
+- **WSL:** uses `wsl.exe -d <distribution> --exec bash -lc ...`. OpenRig and its Node.js runtime must be installed **inside Linux**, rather than resolving to a Windows npm shim. Existing NVM installations are initialized inside HRig's command environment when necessary; HRig does not edit shell profiles or install dependencies. tmux is required for agent attachment; Python 3 is required for remote project files.
+- **SSH:** uses Windows OpenSSH, including your SSH config, keys, agent, jump hosts, and optional port. Background discovery and file operations require non-interactive key / agent authentication. For first-time host-key acceptance or an interactive login, open a shell on that connection, then refresh rigs. HRig does not automatically accept host keys or store passwords.
+
+Git must be installed on the machine hosting the project for source control. Distributions and explicit non-wildcard aliases in `~/.ssh/config` are detected; other SSH targets can be added manually.
+
+## Arrange sessions
+
+- Drag a panel tab onto another tab strip to group panels.
+- Drop at a panel edge to create a split. Resize with the dividers.
+- Use the **Float selected tab** or **Popout selected tab** buttons for floating panels or separate Windows windows.
+- Double-click a tab-group background to maximize or restore it. Tab labels can be renamed.
+- Connection, project, and rig each define a workspace. Each workspace remembers its layout automatically.
+- Named layouts are available under **Arrange**. Saving the same name replaces that workspace's previous named arrangement.
+
+Closing an agent panel only detaches its tmux client. It does not stop or relaunch the agent. Reopening attaches to the existing session. Ordinary PowerShell / Bash shells are app-owned processes and do not survive closing the app.
+
+## Keyboard shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl K | Command center; search sessions, commands, and project filenames |
+| Ctrl O | Open project directory |
+| Ctrl B | Show / hide sidebar |
+| Ctrl Shift T | New shell |
+| Ctrl S | Save the focused editor file |
+| Escape | Dismiss the current dialog or menu |
+
+File search checks at most 20,000 files and returns up to 100 matches. Generated directories, dependencies, and symlinks are excluded. Text files up to 2 MB can be edited. File access is confined to the chosen project directory, including resolved symlink paths.
+
+## Workspace tools in 0.5
+
+Open **Tools** in the top toolbar, or use **Ctrl K** to find a tool.
+
+| Tool | Workflow |
+|---|---|
+| Arrange workspace | See a layout thumbnail, choose a panel and destination group, split or group without dragging, equalize sizes, undo/redo arrangement changes, and save role-based templates. |
+| Connection doctor | Check the real Node, OpenRig, tmux, Python and daemon environment. Connection/authentication failures include their cause. |
+| Attention center | See served attention/startup problems and blocked tasks; click a seat to focus it. Windows notifications are off by default and deduplicated when enabled. |
+| Task board | Filter by owner, text and state; inspect full task details; create work assigned to a seat. Handoffs are requested from the owning seat rather than impersonating it. |
+| Review workspace | Select a feedback recipient, open a changed file beside sessions, collect file/line notes, and explicitly send feedback through OpenRig. Git changes belong to the project; HRig does not infer which agent authored them. |
+| Project tools | Search text, create new text files and rename entries within the project. Save and close editors for a path before renaming it. |
+| Problems | Inspect Monaco diagnostics from opened files and jump to their lines. |
+| Ports and previews | Discover listening ports or enter one manually. SSH targets get a loopback-only managed tunnel. Preview tabs restore their remote port binding, rather than assuming an old local tunnel still exists. |
+| Rig manager | Inspect rig/seat topology, browse rig specs, preview launch or restore, and confirm by typing the rig name. Stopping always requests a snapshot first and requires the same explicit confirmation. |
+
+Role templates bind terminal slots by seat role/name in the selected rig. Missing roles stay visible as unfilled panels; no agent is created to fill one. Templates can be reused across projects and rigs. Arrangement undo is separate from editor undo; adding or closing panels resets arrangement history so closed sessions are not unexpectedly resurrected.
+
+Seats retry failed attachments up to six times with bounded backoff, refresh the current session name using stable seat identity, and refresh after Windows resumes. These operations never launch agents. Saved main/popout window positions are brought back within connected monitor bounds.
+
+Clean editor buffers reload detected disk changes. Dirty buffers preserve local text and offer a comparison or explicitly confirmed reload. Saves compare the last-read SHA-256 revision with disk and reject a stale write. This is a pre-write conflict check, not a filesystem transaction with other programs: another process writing concurrently during the final write remains outside HRig's control.
+
+The roadmap and implementation evidence are tracked in [ROADMAP.md](ROADMAP.md).
+
+## Develop
+
+Requires Windows x64 and Node.js 22 or newer.
+
+```powershell
+npm install
+npm run dev
+```
+
+If package install scripts are disabled by your npm configuration and Electron has not been downloaded, run `node node_modules/electron/install.js` once. The Windows node-pty package includes native prebuilds.
+
+```powershell
+npm run build        # TypeScript check and production renderer
+npm start            # Run the production build
+npm test             # Transport, inventory, filesystem, and WSL integration
+npm run test:e2e     # Real Electron desktop tests
+npm run test:dev     # Development server / desktop integration
+npm run test:package # Smoke-test the packaged app (after packaging)
+npm run package      # Build portable Windows executable
+npm run icons        # Regenerate the application icon from public/icon.svg
+```
+
+The WSL tests create and clean up uniquely named `/tmp/hrig-test-*` directories and tmux sessions. A test-only CLI fixture supplies OpenRig's JSON/action boundary; lifecycle and message tests write receipts only inside that fixture. They do not launch, stop or message live agents, or change your OpenRig installation. Desktop tests cover Windows PTYs, WSL/tmux attachment, six-session arrangement, history, role templates, attention, task assignment, confirmed lifecycle actions, session replacement, file conflicts, diagnostics, review feedback, previews, off-screen window recovery, and application restart. A live SSH server and OS notification delivery are not part of the automated environment.
+
+## Architecture
+
+- **Electron main process:** connection discovery, constrained IPC endpoints, Windows ConPTY sessions via node-pty, persistent workspace state, project filesystem access, and Git operations.
+- **React renderer:** FlexLayout docking, xterm terminal views, and a locally bundled Monaco editor. The editor loads when a file is opened; there is no CDN dependency.
+- **OpenRig boundary:** discovery, queue, messaging, specs and lifecycle commands are wrapped by constrained backend actions. Mutations verify advertised CLI flags and lifecycle actions require an explicit rig-name confirmation. Existing seats attach through `tmux attach-session -t '=SESSION'`.
+- **Ownership:** OpenRig owns rigs, agents, coordination, and session persistence. HRig owns presentation and terminal attachments. HRig never calls `rig up` when restoring a panel.
+
+Workspace metadata is stored in `%APPDATA%/hrig/workspace.json`, or the directory specified by `HRIG_DATA_DIR`. It contains connection definitions, project paths, panel layouts, and seat metadata, not passwords or terminal transcripts. Unsaved edit buffers stay in memory and are protected by close prompts.
+
+## Current scope
+
+The ten scoped improvements are integrated into the 0.5 preview. SSH password-based background operations, VS Code extensions, debugging, full remote language servers and editing rig specifications graphically remain outside this release. Task queries read the latest 1,000 active items across the host before applying rig/owner filters. External-file checks run every 2.5 seconds locally or 8 seconds remotely, plus on window focus. Notifications depend on Windows settings. Some servers intentionally disallow embedded previews; their frame policy remains authoritative. OpenRig policy can refuse mutations even when the CLI supports their flags; HRig surfaces that refusal without overriding ownership or permissions.
