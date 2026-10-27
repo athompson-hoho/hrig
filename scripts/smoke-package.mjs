@@ -63,10 +63,37 @@ try {
   )
     throw new Error("Packaged Git status returned an incompatible response");
   if (errors.length) throw new Error(errors.join("\n"));
+  const secure=await app.evaluate(({safeStorage})=>{
+    if(!safeStorage.isEncryptionAvailable()) return false;
+    return safeStorage.decryptString(safeStorage.encryptString('hrig-package-fixture'))==='hrig-package-fixture';
+  });
+  if(!secure)throw new Error('Packaged Windows secure storage roundtrip failed.');
+  await page.evaluate(()=>{
+    const put=window.hrig.drafts({op:'put',key:'package-fixture',value:{kind:'message',data:{message:'package fixture'}}});
+    if(put.error)throw new Error(put.error);
+    const list=window.hrig.drafts({op:'list'});
+    if(list.result?.['package-fixture']?.data?.message!=='package fixture')throw new Error('Packaged draft roundtrip failed.');
+    window.hrig.drafts({op:'delete',key:'package-fixture'});
+  });
+  await page.getByRole('button',{name:'Tools',exact:true}).click();
+  await page.getByRole('dialog',{name:'Workspace tools'}).getByRole('button',{name:'Project boards and integrations',exact:false}).click();
+  for(const title of ['Review agent changes','Verify issue imports','Plan the next milestone']){
+    await page.getByRole('button',{name:'New task',exact:true}).click();
+    await page.getByLabel('Issue title').fill(title);
+    await page.getByLabel('Issue description').fill('Example project work. Assign deliberately to a selected OpenRig seat when ready.');
+    await page.getByRole('button',{name:'Confirm create'}).click();
+  }
+  await page.getByRole('button',{name:/Review agent changes/}).click();
+  await page.getByLabel('Work item status').selectOption('Doing');
+  await page.getByRole('button',{name:'Review status change'}).click();
+  await page.getByRole('button',{name:'Confirm status update'}).click();
+  await page.getByRole('button',{name:/Review agent changes/}).waitFor();
+  await fs.mkdir('release/previews',{recursive:true});
+  await page.screenshot({path:'release/previews/packaged-task-boards.png'});
   await fs.mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/packaged.png" });
   console.log(
-    "Packaged Windows app: renderer, preload, native PTY, bundled editor, connection doctor, and Git status passed.",
+    "Packaged Windows app: renderer, preload, native PTY, bundled editor, doctor, Git, local boards, draft persistence and Windows secure storage passed.",
   );
 } finally {
   await app.close();
