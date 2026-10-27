@@ -401,7 +401,35 @@ print(json.dumps([{'port':p} for p in sorted(ports)]))`,
     {},
   );
 }
+// Only folders belonging to currently managed seats are exposed.
+async function projects(connection) {
+  if (connection.kind === "local") return [];
+  const inventory = await core.inventory(connection);
+  return python(
+    connection,
+    `import json,sys,subprocess,os
+request=json.load(sys.stdin)
+r=subprocess.run(['tmux','list-panes','-a','-F','#{session_name}\\t#{pane_current_path}'],capture_output=True,text=True)
+if r.returncode:
+ if 'no server running' in r.stderr or 'no sessions' in r.stderr or 'error connecting' in r.stderr:
+  print('[]'); sys.exit(0)
+ raise RuntimeError(r.stderr.strip() or 'Cannot read session folders')
+seats={s['session']:s for s in request['seats'] if s.get('session')}
+folders={}
+for line in r.stdout.splitlines():
+ session,sep,folder=line.partition('\\t')
+ seat=seats.get(session)
+ if not sep or not seat or not os.path.isdir(folder): continue
+ folder=os.path.realpath(folder)
+ row=folders.setdefault(folder,{'path':folder,'name':os.path.basename(folder) or folder,'rigs':[]})
+ rig={'id':seat.get('rigId') or seat.get('rigName'),'name':seat.get('rigName') or seat.get('rigId')}
+ if rig not in row['rigs']: row['rigs'].append(rig)
+print(json.dumps(sorted(folders.values(),key=lambda row:row['path'])))`,
+    inventory,
+  );
+}
 module.exports = {
+  projects,
   python,
   rigCommand,
   runRig,

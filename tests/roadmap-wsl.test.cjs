@@ -14,6 +14,14 @@ test(
     }
     const { connection, root } = fixture;
     try {
+      const projects = await features.projects(connection);
+      assert.deepEqual(projects, [
+        {
+          path: root,
+          name: root.split("/").pop(),
+          rigs: [{ id: "test-rig", name: "fixture" }],
+        },
+      ]);
       const literal = "$HOME $(printf unwanted)";
       assert.equal(
         await core.remote(connection, "printf %s " + core.quote(literal)),

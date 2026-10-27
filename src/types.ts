@@ -142,6 +142,11 @@ export interface HrigAPI {
     },
   ): Promise<any>;
   git(connection: Connection, root: string): Promise<GitStatus>;
+  projects(
+    connection: Connection,
+  ): Promise<
+    { path: string; name: string; rigs: { id: string; name: string }[] }[]
+  >;
   pickFolder(): Promise<string | null>;
   createTerminal(options: {
     id: string;

@@ -4,7 +4,7 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Run the desktop app
 
-Open **`release/HRig 0.5.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.5.2.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -107,3 +107,7 @@ Workspace metadata is stored in `%APPDATA%/hrig/workspace.json`, or the director
 ## Current scope
 
 The ten scoped improvements are integrated into the 0.5 preview. SSH password-based background operations, VS Code extensions, debugging, full remote language servers and editing rig specifications graphically remain outside this release. Task queries read the latest 1,000 active items across the host before applying rig/owner filters. External-file checks run every 2.5 seconds locally or 8 seconds remotely, plus on window focus. Notifications depend on Windows settings. Some servers intentionally disallow embedded previews; their frame policy remains authoritative. OpenRig policy can refuse mutations even when the CLI supports their flags; HRig surfaces that refusal without overriding ownership or permissions.
+
+### Rig project folders (0.5.2)
+
+Press Ctrl+O or click the project card to choose a working folder discovered from your live rig sessions. The selected rig's folders appear first; shared folders appear once with all associated rig names. Click a folder to open it without typing its path. Discovery uses the active connection (WSL or SSH) and only includes managed OpenRig sessions. Stopped sessions have no live folder to discover; manual paths and Windows Browse remain available.

@@ -176,6 +176,11 @@ export default function App() {
     root: "~",
   });
   const [formError, setFormError] = useState("");
+  const [projectFolders, setProjectFolders] = useState<
+    Awaited<ReturnType<typeof window.hrig.projects>>
+  >([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState("");
   const [projectPath, setProjectPath] = useState("");
   const [detected, setDetected] = useState<Connection[]>([]);
   const connection =
@@ -431,6 +436,39 @@ export default function App() {
     );
     setFormError("");
     setModal("connect");
+  };
+  useEffect(() => {
+    if (modal !== "project") return;
+    let cancelled = false;
+    setProjectFolders([]);
+    setProjectsError("");
+    setProjectsLoading(true);
+    window.hrig
+      .projects(connection)
+      .then((rows) => {
+        if (!cancelled) setProjectFolders(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setProjectsError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modal, connection]);
+  const applyProject = async (path: string) => {
+    try {
+      await window.hrig.file(connection, { op: "list", root: path, path: "" });
+      setState((s) => ({ ...s, roots: { ...s.roots, [connection.id]: path } }));
+      setSection("files");
+      setSidebar(true);
+      setModal(null);
+      notify("Project opened");
+    } catch (e) {
+      setFormError((e as Error).message);
+    }
   };
   const openProject = () => {
     setProjectPath(root);
@@ -1767,6 +1805,41 @@ export default function App() {
           subtitle={`Project files will open on ${connection.name}.`}
           onClose={() => setModal(null)}
         >
+          {connection.kind !== "local" && (
+            <div className="attached-projects">
+              <div className="field-label">RIG SESSION FOLDERS</div>
+              {projectsLoading && <p>Finding attached folders...</p>}
+              {projectsError && <ErrorBox error={projectsError} />}
+              {!projectsLoading && !projectsError && !projectFolders.length && (
+                <p>
+                  No live rig folders found. You can enter a directory below.
+                </p>
+              )}
+              {[...projectFolders]
+                .sort(
+                  (a, b) =>
+                    Number(b.rigs.some((r) => r.id === state.activeRig)) -
+                    Number(a.rigs.some((r) => r.id === state.activeRig)),
+                )
+                .map((project) => (
+                  <button
+                    key={project.path}
+                    className="attached-project"
+                    onClick={() => void applyProject(project.path)}
+                  >
+                    <FolderOpen size={18} />
+                    <span>
+                      <strong>{project.name}</strong>
+                      <small>{project.path}</small>
+                      <small>
+                        {project.rigs.map((r) => r.name).join(", ")}
+                      </small>
+                    </span>
+                    <ArrowUpRight size={16} />
+                  </button>
+                ))}
+            </div>
+          )}
           <label className="field-label">
             PROJECT DIRECTORY
             <div className="input-with-button">
@@ -1801,25 +1874,7 @@ export default function App() {
             <button
               className="primary-button"
               disabled={!projectPath.trim()}
-              onClick={async () => {
-                try {
-                  await window.hrig.file(connection, {
-                    op: "list",
-                    root: projectPath,
-                    path: "",
-                  });
-                  setState((s) => ({
-                    ...s,
-                    roots: { ...s.roots, [connection.id]: projectPath },
-                  }));
-                  setSection("files");
-                  setSidebar(true);
-                  setModal(null);
-                  notify("Project opened");
-                } catch (e) {
-                  setFormError((e as Error).message);
-                }
-              }}
+              onClick={() => void applyProject(projectPath.trim())}
             >
               <FolderOpen size={14} />
               Open project

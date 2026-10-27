@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("hrig", {
   sendMessage: invoke("rig:send"),
   queue: invoke("rig:queue"),
   file: invoke("files:operation"),
+  projects: invoke("rig:projects"),
   pickFolder: invoke("files:pick"),
   git: invoke("files:git"),
   createTerminal: invoke("terminal:create"),

@@ -64,3 +64,9 @@ Tests: [core](tests/core.test.cjs), [file/lifecycle guards](tests/features.test.
 - Added local/WSL regression tests for non-repositories and corrupt Git metadata, plus a desktop journey selecting a valid project after opening a non-repository folder.
 
 Patch validation: 11 core/WSL checks and 14 desktop journeys passed, as did the production build and packaged native-terminal/editor/doctor/Git smoke test. Verified the active home-directory query returns a normal non-repository result. Executable: `release/HRig 0.5.1.exe`.
+
+### 0.5.2 - Rig project picker
+
+Implemented one-click project opening from live managed tmux session folders over WSL/SSH. Deduplicates shared paths, labels rig ownership, prioritizes the selected rig, and validates folders before switching. Manual entry and local Browse remain available. Covered by the isolated WSL backend fixture and a desktop journey that opens a discovered folder without entering a path.
+
+Validation: production build, 11 core/WSL checks, 15 desktop journeys, and packaged Windows native-terminal/editor/doctor/Git smoke test passed. Portable executable: `release/HRig 0.5.2.exe`.

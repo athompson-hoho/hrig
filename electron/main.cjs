@@ -354,6 +354,7 @@ handle("preview:close", (_event, connection, port) => {
 handle("rig:queue", async (_event, connection, rigName) => {
   return core.queue(connection, rigName);
 });
+handle("rig:projects", (_event, connection) => features.projects(connection));
 handle("files:pick", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
