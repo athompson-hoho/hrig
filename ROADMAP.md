@@ -103,3 +103,5 @@ Validation: 14 core/WSL checks and all 18 desktop journeys passed after the retr
 ### 0.7.1 - Community theme adaptations
 
 Added all four Catppuccin flavours, Nord, Dracula, Tokyo Night and Gruvbox Dark, with pinned upstream palettes and bundled licenses. Community previews, native/default accent selection, coordinated syntax and complete ANSI palettes, independent terminal selection, scoped persistence and popout updates are implemented. Core palette anchors and secondary UI contrast are tested.
+
+Validation: production build, 15 core/WSL/palette checks, all 19 Electron journeys, visual review of community previews, and packaged native-terminal/editor/doctor/Git smoke tests passed. Verified all five upstream license texts, source provenance and theme credits are present in the application archive. Community tests cover exact palette anchors, syntax colors, full ANSI tables, native accents, independent terminal selection, session continuity, project reset, restart persistence and popouts.
