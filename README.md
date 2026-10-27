@@ -4,6 +4,23 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Screenshots
 
+**Settings and coordinated themes**
+
+![HRig settings page with searchable categories, user and project scopes, and theme previews](docs/screenshots/settings-dark.png)
+
+<details>
+<summary>Daylight, Midnight, and narrow settings layouts</summary>
+
+![HRig settings using the Daylight theme](docs/screenshots/settings-light.png)
+
+![HRig settings using the Midnight theme](docs/screenshots/settings-midnight.png)
+
+![Settings adapting to a narrow docked panel](docs/screenshots/settings-narrow.png)
+
+</details>
+
+**Guided rig design**
+
 The rig designer guides you from a goal to an editable team and a launch review. These screenshots use an isolated demonstration rig.
 
 **Review the team before launching**

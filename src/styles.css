@@ -4133,3 +4133,18 @@ button:hover {
     padding: 12px;
   }
 }
+
+:root[data-theme="high-contrast"] {
+  --line: #9cacbf;
+  --muted: #c6d1e0;
+}
+:root[data-theme="high-contrast"] input,
+:root[data-theme="high-contrast"] select,
+:root[data-theme="high-contrast"] textarea,
+:root[data-theme="high-contrast"] .theme-picker > button {
+  border-color: var(--line);
+}
+:root[data-theme="high-contrast"] :focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}

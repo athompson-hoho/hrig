@@ -54,6 +54,11 @@ test("settings apply live themes, scoped values and validated imports, persist, 
       "data-theme",
       "hrig-dark",
     );
+    await page.getByRole("button", { name: "Use High Contrast theme" }).click();
+    await expect(page.getByLabel("Color theme", { exact: true })).toHaveCSS(
+      "border-top-color",
+      "rgb(156, 172, 191)",
+    );
     await page.getByRole("button", { name: "Use Midnight theme" }).click();
     await page.screenshot({
       path: "release/previews/settings-midnight.png",
