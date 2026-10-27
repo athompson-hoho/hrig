@@ -709,8 +709,10 @@ export default function App() {
       id,
     );
   };
-  const openFile = (path: string, diff = false, line?: number) => {
-    const id = `${diff ? "diff" : "file"}:${connection.id}:${root}:${path}`;
+  const openFile = (path: string, diff = false, line?: number, source?: PanelConfig) => {
+    const fileConnection = source?.connection || connection;
+    const fileRoot = source?.root || root;
+    const id = `${diff ? "diff" : "file"}:${fileConnection.id}:${fileRoot}:${path}`;
     const existing = model.getNodeById(id) as TabNode | undefined;
     if (existing && line)
       model.doAction(
@@ -721,7 +723,7 @@ export default function App() {
     addPanel(
       diff ? "diff" : "editor",
       path.split("/").pop()!,
-      { path, line },
+      { path, line, connection: fileConnection, root: fileRoot },
       id,
     );
   };
@@ -925,6 +927,7 @@ export default function App() {
       case "terminal":
         return (
           <TerminalPanel
+            onFile={(path, line) => openFile(path, false, line, config)}
             config={{
               ...config,
               seat:

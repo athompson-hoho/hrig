@@ -4172,3 +4172,14 @@ button:hover {
 .work-card { display: flex; flex-direction: column; text-align: left; gap: 8px; padding: 12px; margin-bottom: 8px; width: 100%; border: 1px solid var(--line); background: var(--panel); color: inherit; border-radius: 4px; }
 .work-card small { color: var(--muted); }
 .work-description { white-space: pre-wrap; max-height: 300px; overflow: auto; overflow-wrap: anywhere; }
+
+.terminal-tools { flex-shrink: 0; border-bottom: 1px solid var(--color-252b35); }
+.terminal-tools-actions, .terminal-find, .terminal-tool-notice { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; padding: 4px 10px; }
+.terminal-tools-actions > span { color: var(--color-6e7e95); font-size: 10px; margin-left: auto; }
+.terminal-tools button { font-size: 10px; }
+.terminal-tools .icon-button { width: 25px; height: 25px; }
+.terminal-find input { flex: 1; min-width: 90px; width: 120px; }
+.terminal-find > span { font-size: 10px; color: var(--color-91b4ec); }
+.terminal-find button[aria-pressed="true"] { background: var(--color-27392f); color: var(--color-98e2c2); }
+.terminal-tool-notice { font-size: 11px; color: var(--color-91b4ec); }
+.terminal-tool-notice .icon-button { margin-left: auto; }

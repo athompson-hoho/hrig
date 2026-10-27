@@ -99,6 +99,8 @@ export interface HrigAPI {
   platform: string;
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;
+  exportTerminal(text: string): Promise<{saved: boolean}>;
+  openTerminalLink(url: string): Promise<void>;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};
   designRig(
     connection: Connection,

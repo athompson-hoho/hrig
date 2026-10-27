@@ -60,5 +60,11 @@
     "title": "Installed desktop foundation and safe update controls",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.10.0",
+    "title": "Terminal search and output tools",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

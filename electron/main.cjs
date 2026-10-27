@@ -36,6 +36,7 @@ function handle(channel, fn) {
     return fn(event, ...args);
   });
 }
+require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs});
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
