@@ -240,3 +240,5 @@ Appearance includes Catppuccin (Mocha, Macchiato, Frappe, Latte), Nord, Dracula,
 HRig 0.8.0 adds unsaved-file recovery, Save All and persistent message/review drafts. Doctor failures stop loading, and stale connection snapshots are clearly labeled. See [Recovery](RECOVERY.md) for storage and conflict handling.
 
 Open **Tools → Project boards and integrations** for local tasks, GitHub Issues/Projects and Linear. External mutations and linked OpenRig task assignments require explicit confirmation. GitHub uses the Windows CLI login; Linear personal keys use Windows encrypted storage. [Setup and supported actions](INTEGRATIONS.md).
+
+![Packaged HRig project board with local tasks in Todo, Doing and Done columns](docs/screenshots/task-boards.png)
