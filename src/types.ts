@@ -107,7 +107,7 @@ export interface DesignSeat {
 }
 export interface HrigAPI {
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
-  updates(request:{op:string;confirmed?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
+  updates(request:{op:string;confirmed?:boolean;allowUnsigned?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
   onPrepareUpdate(callback:()=>{ready:boolean;error?:string}):()=>void;
   mobile(request: { op: string; id?: string }): Promise<any>;

@@ -327,3 +327,9 @@ The status bar and wizard show runtime authentication and Orca-managed account s
 ![Accounts panel showing runtime authentication and a managed account from another host scope using demonstration data](docs/screenshots/accounts.png)
 
 Team assessment compares lean, balanced and throughput proposals, preserves manual edits and supports explicit first handoffs. Tools > OpenRig control center provides installed-help forms and reviewed command execution. See [CLI interface coverage](docs/CLI-GUI-COVERAGE.md).
+
+## Update from HRig (0.12.0)
+
+Packaged HRig checks for new stable versions after startup and every six hours. The prompt offers download or a reminder tomorrow. On Windows, download and verify the update, then explicitly confirm restart and installation; unsaved edits block restart. Unsigned updates require acknowledgment. Portable copies upgrade through Windows setup. Unsigned macOS and Linux use release downloads/package managers. Install 0.12.0 once to enable this flow in older versions. [Update behavior](DISTRIBUTION.md).
+
+![New-version prompt with explicit unsigned-update restart confirmation, using demonstration versions](docs/screenshots/update-prompt.png)

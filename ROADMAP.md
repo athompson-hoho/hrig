@@ -223,3 +223,7 @@ Local validation: production and mobile web builds, 36 applicable backend checks
 ### 0.11.0 - Account-aware rig design and command coverage
 
 Optional project goals with editable suggestions; automatic runtimes selected from host-scoped authenticated providers; status-bar and wizard account discovery with read-only Orca profiles. Team assessment compares proposals and retains manual seat edits and first-handoff plans. The OpenRig control center adds installed-help command forms and single-use action reviews. Account switching, account-to-seat binding and context/quota telemetry remain future work. [Account limits](docs/ACCOUNTS.md), [CLI interface coverage](docs/CLI-GUI-COVERAGE.md).
+
+### 0.12.0 - In-app Windows updates and new-version prompts
+
+Packaged startup/six-hour update checks, per-version 24-hour reminders, explicit download and restart/install actions, unsigned consent and preserved dirty-buffer guards. Portable Windows upgrades through per-user setup; signed Windows/macOS retain signature verification. Unsigned macOS and Linux retain native download/package-manager paths. Read-only live Windows installer download verified against the published feed without execution.

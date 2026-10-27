@@ -72,5 +72,11 @@
     "title": "Account-aware teams and faster navigation",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.12.0",
+    "title": "In-app Windows updates and new-version prompts",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

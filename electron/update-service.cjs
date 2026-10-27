@@ -28,10 +28,9 @@ function createUpdateService({
     busy = false;
   const supported =
     packaged &&
-    !portable &&
-    ["win32", "darwin"].includes(platform) &&
-    policy.signed === true &&
-    (platform !== "win32" || !!policy.publisherName);
+    ((platform === "win32" &&
+      (policy.signed !== true || !!policy.publisherName)) ||
+      (platform === "darwin" && policy.signed === true));
   let state = {
     phase: "idle",
     currentVersion: version,
@@ -40,17 +39,20 @@ function createUpdateService({
     notes: "",
     progress: 0,
     canInstall: supported,
+    requiresUnsignedConsent: supported && policy.signed !== true,
     error: "",
     mode: supported ? "in-app" : "manual",
     reason: !packaged
       ? "Development build: use a packaged release."
-      : portable
-        ? "Portable build: use the installer for in-app updates."
+      : portable && platform === "win32"
+        ? "Updating this portable copy opens Windows setup. The original portable file remains; use the installed app afterward."
         : platform === "linux"
           ? "Use your Linux package manager or download the current package."
           : !supported
             ? "This build is unsigned. In-app installation stays disabled until signed releases are configured."
-            : "",
+            : policy.signed !== true
+              ? "Updates are checksum-verified but unsigned. Windows may show a security prompt."
+              : "",
   };
   const set = (change) => {
     state = { ...state, ...change };
@@ -149,6 +151,10 @@ function createUpdateService({
         }
         if (a.confirmed !== true)
           throw new Error("Confirm restart and installation.");
+        if (state.requiresUnsignedConsent && a.allowUnsigned !== true)
+          throw new Error(
+            "Acknowledge that this update is unsigned before installing.",
+          );
         if (state.phase !== "downloaded")
           throw new Error("Download and verify the update before installing.");
         // electron-updater can spawn the installer BEFORE app.quit. A normal

@@ -27,7 +27,7 @@ const {
   downloads,
 } = require("../electron/release-model.cjs");
 const { createBackend } = require("../electron/backend.cjs");
-test("unsigned and incomplete signing policies cannot enable installation; channels isolate every architecture", () => {
+test("signing policies distinguish unsigned builds, reject partial credentials and isolate every architecture", () => {
   for (const platform of ["win32", "darwin", "linux"])
     for (const arch of ["x64", "arm64"]) {
       assert.equal(makePolicy(platform, arch, {}).signed, false);

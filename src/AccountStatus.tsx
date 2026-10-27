@@ -18,7 +18,7 @@ export interface AccountAvailability {
   orcaStatus: string;
   contextStatus: string;
 }
-export function useAccounts(connection: Connection) {
+export function useAccounts(connection: Connection, enabled = true) {
   const [revision, refresh] = useState(0);
   const [state, setState] = useState<{
     key: string;
@@ -33,6 +33,7 @@ export function useAccounts(connection: Connection) {
     connection.distro,
   ]);
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     setState({ key });
     window.hrig
@@ -47,7 +48,7 @@ export function useAccounts(connection: Connection) {
     return () => {
       active = false;
     };
-  }, [key, revision]);
+  }, [key, revision, enabled]);
   return {
     data: state.key === key ? state.data : undefined,
     error: state.key === key ? state.error : undefined,
@@ -102,8 +103,8 @@ export default function AccountStatus({
 }: {
   connection: Connection;
 }) {
-  const { data, error, refresh } = useAccounts(connection);
   const [open, setOpen] = useState(false);
+  const { data, error, refresh } = useAccounts(connection, open);
   const ready =
     data?.providers.filter((p) => p.status === "authenticated").length || 0;
   return (
@@ -114,7 +115,7 @@ export default function AccountStatus({
           ? `${ready} runtime${ready === 1 ? "" : "s"} ready`
           : error
             ? "unavailable"
-            : "checking"}
+            : open ? "checking" : "view accounts"}
       </button>
       {open && (
         <div

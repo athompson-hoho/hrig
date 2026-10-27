@@ -9,6 +9,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import AccountStatus from "./AccountStatus";
+import UpdateNotice from "./UpdateNotice";
 import {
   Actions,
   DockLocation,
@@ -2311,6 +2312,7 @@ export default function App() {
             </div>
           </footer>
         )}
+        <UpdateNotice />
         {toast && (
           <div className="toast" role="status">
             <Check size={15} />

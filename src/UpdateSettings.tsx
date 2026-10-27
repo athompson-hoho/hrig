@@ -8,6 +8,7 @@ export type UpdateState = {
   notes: string;
   progress: number;
   canInstall: boolean;
+  requiresUnsignedConsent?: boolean;
   error: string;
   mode: string;
   reason: string;
@@ -37,7 +38,13 @@ export default function UpdateSettings() {
   const run = async (op: string, confirmed = false) => {
     setError("");
     try {
-      setState(await window.hrig.updates({ op, confirmed }));
+      setState(
+        await window.hrig.updates({
+          op,
+          confirmed,
+          allowUnsigned: confirmed && state?.requiresUnsignedConsent === true,
+        }),
+      );
     } catch (e) {
       setError((e as Error).message);
     }
@@ -48,9 +55,9 @@ export default function UpdateSettings() {
     <section className="settings-about">
       <h3>Updates</h3>
       <p>
-        Updates are checked and downloaded only when requested. Installation
-        always requires a separate restart confirmation. Unsaved files must be
-        saved or discarded first.
+        HRig checks for updates after startup and every six hours. Downloads
+        require your approval. Installation always requires a separate restart
+        confirmation. Unsaved files must be saved or discarded first.
       </p>
       {(error || state?.error) && <ErrorBox error={error || state!.error} />}
       {state && (
@@ -130,6 +137,14 @@ export default function UpdateSettings() {
           subtitle="HRig will verify that no unsaved editor buffers remain and flush your workspace before restarting. Existing OpenRig agents keep running."
           onClose={() => setConfirm(false)}
         >
+          {state?.requiresUnsignedConsent && (
+            <p>
+              This update is unsigned. Its download checksum is verified, but
+              publisher identity is not verified. Windows may show a security
+              prompt. By confirming, you agree to install this unsigned update.
+            </p>
+          )}
+          {state?.reason && <p>{state.reason}</p>}
           <div className="modal-actions">
             <button
               className="secondary-button"

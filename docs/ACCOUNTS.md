@@ -1,6 +1,6 @@
 ﻿# Account-aware team recommendations
 
-The status bar's Accounts control and Rig designer show authentication availability for the selected connection. Refresh explicitly after signing in or changing accounts. Checks do not run model prompts or consume assessment tokens.
+The status bar's Accounts control and Rig designer show authentication availability for the selected connection. From 0.12.0, status-bar checks run when the panel is opened, avoiding unnecessary authentication probes during workspace startup. Refresh explicitly after signing in or changing accounts. Checks do not run model prompts or consume assessment tokens.
 
 Automatic runtime selection uses runtimes whose documented CLI authentication check succeeds on that host. A team uses both Codex and Claude Code when both are authenticated, or the one confirmed runtime when only one is available. Specific runtime choices remain manual overrides. Existing manually protected seats are retained. Authentication does not establish available quota, model access, concurrent-seat capacity or session context remaining.
 

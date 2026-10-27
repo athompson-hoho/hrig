@@ -94,5 +94,5 @@ await fs.writeFile(
   ) + "\n",
 );
 console.log(
-  `Verified package metadata and SHA-512 update feed; signing ${signatureVerified ? "verified" : "not configured (in-app installation disabled)"}.`,
+  `Verified package metadata and SHA-512 update feed; signing ${signatureVerified ? "verified" : "not configured (Windows installation requires explicit unsigned-update consent)"}.`,
 );
