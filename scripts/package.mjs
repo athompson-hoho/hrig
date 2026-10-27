@@ -51,10 +51,16 @@ if (platform === "win32" && policy.signed)
     `--config.win.publisherName=${policy.publisherName}`,
     "--config.win.verifyUpdateCodeSignature=true",
   );
+const packagingEnv = { ...process.env };
+// Actions represents missing secrets as empty variables. electron-builder
+// interprets an empty CSC_LINK as a path, so omit absent credentials entirely.
+for (const key of Object.keys(packagingEnv))
+  if (/^(CSC_|WIN_CSC_|APPLE_)/.test(key) && !packagingEnv[key])
+    delete packagingEnv[key];
 const child = spawn(process.execPath, args, {
   stdio: "inherit",
   env: {
-    ...process.env,
+    ...packagingEnv,
     CSC_IDENTITY_AUTO_DISCOVERY: policy.signed ? "true" : "false",
     ELECTRON_BUILDER_COMPRESSION_LEVEL:
       process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL || "5",
