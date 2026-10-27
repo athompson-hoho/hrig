@@ -45,6 +45,11 @@ test("guided designer saves, revises and previews before launch; deletion requir
     await wizard
       .getByRole("textbox", { name: "Rig goal", exact: true })
       .fill("Build a reliable project");
+    await expect(
+      wizard.getByRole("radio", { name: /Build or change software/ }),
+    ).toBeChecked();
+    await expect(wizard.getByRole("radio", { name: /Pair/ })).toBeChecked();
+    await page.screenshot({ path: "release/previews/rig-designer-needs.png" });
     await wizard
       .getByRole("button", { name: "Recommend a team", exact: true })
       .click();
@@ -54,6 +59,7 @@ test("guided designer saves, revises and previews before launch; deletion requir
     await expect(
       wizard.getByLabel("Seat 2 agent", { exact: true }),
     ).toHaveValue("reviewer");
+    await page.screenshot({ path: "release/previews/rig-designer-team.png" });
     await wizard
       .getByRole("button", { name: "Review design", exact: true })
       .click();
@@ -66,7 +72,13 @@ test("guided designer saves, revises and previews before launch; deletion requir
     await expect(
       wizard.getByRole("button", { name: "Launch designed rig", exact: true }),
     ).toBeDisabled({ timeout: 20000 });
-    await page.screenshot({ path: "test-results/rig-designer.png" });
+    await page.screenshot({ path: "release/previews/rig-designer-review.png" });
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect
+      .poll(() => wizard.evaluate((el) => el.scrollWidth <= el.clientWidth))
+      .toBe(true);
+    await page.screenshot({ path: "release/previews/rig-designer-narrow.png" });
+    await page.setViewportSize({ width: 1510, height: 980 });
     await wizard
       .getByRole("button", { name: "Back to team", exact: true })
       .click();

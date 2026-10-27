@@ -1,0 +1,32 @@
+[
+  {
+    "version": "0.1.0",
+    "title": "First Windows desktop preview",
+    "sourceRef": "1b2364bfed448466b9b24c5028a910f0d8009492"
+  },
+  {
+    "version": "0.5.0",
+    "title": "Complete graphical workspace roadmap",
+    "sourceRef": "70418725f0d0bf4af8b01cd504b6b8cfdf258238"
+  },
+  {
+    "version": "0.5.1",
+    "title": "Git folder error handling",
+    "sourceRef": "63a1bc5"
+  },
+  {
+    "version": "0.5.2",
+    "title": "One-click rig project folders",
+    "sourceRef": "4c2d41c"
+  },
+  {
+    "version": "0.6.0",
+    "title": "Guided rig design and deletion",
+    "sourceRef": "6da9b69"
+  },
+  {
+    "version": "0.6.1",
+    "title": "A polished rig design experience",
+    "sourceRef": "HEAD"
+  }
+]

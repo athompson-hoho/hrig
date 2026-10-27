@@ -4,7 +4,7 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Run the desktop app
 
-Open **`release/HRig 0.6.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.6.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -117,3 +117,13 @@ Press Ctrl+O or click the project card to choose a working folder discovered fro
 Click **Manage rigs** in the session sidebar, or **Tools > Rig manager**. **Design a new rig** walks through the goal, work type, team size, runtime and project folder; recommends roles from the installed agent library; and lets you change every seat's agent and runtime. Recommendations use role-name matching, with explicit choices required for unmatched roles. Save and preview writes `hrig-<name>.yaml` (JSON syntax accepted by YAML) in the chosen project, then asks OpenRig to validate and plan it. Review the resulting warnings before typing the new rig name to launch. Changed designs require another preview. Existing rigs cannot be replaced through the wizard, and unrelated files are preserved. Agent paths refer to the current host's installed library; rerun the wizard if those agents move. The goal is saved as the summary; assign work through messages or tasks after launch.
 
 Each rig has a **Delete** action showing its ID and affected seats. Type its name to confirm. HRig calls OpenRig's `down <id> --delete --snapshot --json`, which stops managed seats, attempts a snapshot and removes the rig record. The project folder and library spec are retained; restoring the deleted record by name is unavailable. OpenRig can refuse deletion; HRig displays that failure.
+
+### Releases
+
+Private repository: https://github.com/athompson-hoho/hrig. Download portable Windows executables from its Releases page. Version-specific notes and source targets are tracked in `releases/`; each published executable has a SHA-256 checksum asset. The historical v0.1.0 tag preserves packaged application files because its original TypeScript source was not committed. Full editable source begins at v0.5.0.
+
+To publish a prepared release, build and smoke-test the executable, add detailed notes and an entry to `releases/manifest.json`, commit the changes, then run `npm run release:publish -- <version>`. Use `--check` to validate without publishing. The publisher requires a private repository, verifies package/tag versions and remote asset hashes, and publishes only after uploads finish. It marks only the final manifest version as latest. Existing assets with different hashes are refused.
+
+### Rig Studio visual update (0.6.1)
+
+The designer uses a three-step progress indicator, visual work and team choices, agent seat cards, and a compact roster review. It adapts to narrow docked panels. Preview details are expandable while launch warnings remain visible.

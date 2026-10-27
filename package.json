@@ -1,6 +1,6 @@
 {
   "name": "hrig",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "A graphical Windows workspace for OpenRig",
   "main": "electron/main.cjs",
@@ -15,7 +15,8 @@
     "icons": "node scripts/icons.mjs",
     "format": "prettier --write src electron tests scripts *.ts *.json index.html",
     "test:package": "node scripts/smoke-package.mjs",
-    "test:dev": "node scripts/smoke-dev.mjs"
+    "test:dev": "node scripts/smoke-dev.mjs",
+    "release:publish": "node scripts/publish-release.mjs"
   },
   "dependencies": {
     "node-pty": "^1.1.0"

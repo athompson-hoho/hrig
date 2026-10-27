@@ -1,4 +1,21 @@
 import { useEffect, useState } from "react";
+import {
+  Sparkles,
+  Code2,
+  Search,
+  ScanSearch,
+  Palette,
+  UserRound,
+  Users,
+  Network,
+  Check,
+  ArrowLeft,
+  ArrowRight,
+  FolderOpen,
+  Cpu,
+  Rocket,
+  CheckCircle2,
+} from "lucide-react";
 import type { Connection, Rig, Seat as RigSeat } from "./types";
 import { ErrorBox, Loading } from "./components";
 
@@ -200,13 +217,38 @@ export default function RigDesigner({
   if (loading) return <Loading text="Loading installed agents..." />;
   return (
     <section className="rig-designer" aria-label="Rig designer">
-      <h3>Design your rig</h3>
-      <p>
-        Step {step + 1} of 3:{" "}
-        {["Your needs", "Your team", "Review and launch"][step]}
-      </p>
+      <header className="designer-header">
+        <div className="designer-mark">
+          <Sparkles size={22} />
+        </div>
+        <div>
+          <span className="designer-eyebrow">RIG STUDIO</span>
+          <h3>Build the right team.</h3>
+          <p>A few choices. A team shaped around your work.</p>
+        </div>
+        <span className="designer-host">{connection.name}</span>
+      </header>
+      <ol className="designer-steps" aria-label="Design progress">
+        {["Your needs", "Your team", "Review & launch"].map((label, i) => (
+          <li
+            key={label}
+            className={step === i ? "current" : step > i ? "complete" : ""}
+            aria-current={step === i ? "step" : undefined}
+          >
+            <span>{step > i ? <Check size={14} /> : i + 1}</span>
+            <div>
+              <small>STEP 0{i + 1}</small>
+              <strong>{label}</strong>
+            </div>
+          </li>
+        ))}
+      </ol>
       {step === 0 && (
-        <>
+        <div className="designer-body designer-needs">
+          <div className="designer-section-heading">
+            <h4>What are we working on?</h4>
+            <p>Give your rig a purpose, then choose how you want to work.</p>
+          </div>
           <label className="field-label">
             RIG NAME
             <input
@@ -232,32 +274,97 @@ export default function RigDesigner({
               placeholder="Describe the outcome and constraints."
             />
           </label>
-          <label className="field-label">
-            TYPE OF WORK
-            <select
-              aria-label="Type of work"
-              value={kind}
-              onChange={(e) => setKind(e.target.value as keyof typeof goals)}
-            >
-              {Object.entries(goals).map(([id, g]) => (
-                <option key={id} value={id}>
-                  {g.label}
-                </option>
+          <fieldset className="designer-choice-group">
+            <legend>Type of work</legend>
+            <div className="designer-work-options">
+              {Object.entries(goals).map(([id, g], i) => {
+                const Icon = [Code2, Search, ScanSearch, Palette][i];
+                return (
+                  <label
+                    key={id}
+                    className={
+                      kind === id
+                        ? "designer-option selected"
+                        : "designer-option"
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name={designId + "-work"}
+                      checked={kind === id}
+                      onChange={() => setKind(id as keyof typeof goals)}
+                      value={id}
+                    />
+                    <Icon size={21} />
+                    <strong>{g.label}</strong>
+                    <span>
+                      {
+                        [
+                          "Implement features and ship changes",
+                          "Gather evidence and explore options",
+                          "Find issues and verify the fixes",
+                          "Shape the experience and interface",
+                        ][i]
+                      }
+                    </span>
+                    {kind === id && (
+                      <Check className="option-check" size={14} />
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <fieldset className="designer-choice-group">
+            <legend>How big should the team be?</legend>
+            <div className="designer-team-options">
+              {[
+                {
+                  value: 1,
+                  title: "Solo",
+                  text: "One focused owner. Lowest usage.",
+                  icon: UserRound,
+                },
+                {
+                  value: 2,
+                  title: "Pair",
+                  text: "An owner and an independent check.",
+                  icon: Users,
+                },
+                {
+                  value: 4,
+                  title: "Team",
+                  text: "Specialists working together.",
+                  icon: Network,
+                },
+              ].map((choice) => (
+                <label
+                  key={choice.value}
+                  className={
+                    size === choice.value
+                      ? "designer-option selected"
+                      : "designer-option"
+                  }
+                >
+                  <input
+                    type="radio"
+                    name={designId + "-size"}
+                    checked={size === choice.value}
+                    onChange={() => setSize(choice.value)}
+                  />
+                  <choice.icon size={20} />
+                  <strong>
+                    {choice.title}
+                    {choice.value === 2 && <em>Recommended</em>}
+                  </strong>
+                  <span>{choice.text}</span>
+                  <small>
+                    {choice.value} {choice.value === 1 ? "seat" : "seats"}
+                  </small>
+                </label>
               ))}
-            </select>
-          </label>
-          <label className="field-label">
-            TEAM SIZE
-            <select
-              aria-label="Team size"
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-            >
-              <option value={1}>Solo: lowest usage, one owner</option>
-              <option value={2}>Pair: owner and independent check</option>
-              <option value={4}>Team: specialist roles and coordination</option>
-            </select>
-          </label>
+            </div>
+          </fieldset>
           <p className="field-note">
             More seats increase model usage and coordination. A pair is a good
             starting point for work that benefits from independent review.
@@ -316,78 +423,92 @@ export default function RigDesigner({
             }
             onClick={recommend}
           >
-            Recommend a team
+            Recommend a team <ArrowRight size={15} />
           </button>
-        </>
+        </div>
       )}
       {step === 1 && (
-        <>
-          <p>{goals[kind].why}</p>
+        <div className="designer-body">
+          <div className="designer-section-heading">
+            <h4>A seat for every part of the work.</h4>
+            <p>{goals[kind].why}</p>
+          </div>
           <p className="field-note">
             Recommendations match installed agent names. Choose a suitable agent
             wherever there is no match. Runtime authentication and permissions
             are checked by OpenRig before launch.
           </p>
-          {seats.map((s, i) => (
-            <div className="designer-seat" key={i}>
-              <label className="field-label">
-                SEAT {i + 1} NAME
-                <input
-                  aria-label={`Seat ${i + 1} name`}
-                  value={s.id}
-                  onChange={(e) =>
-                    setSeats((rows) =>
-                      rows.map((row, j) =>
-                        j === i ? { ...row, id: e.target.value } : row,
-                      ),
-                    )
-                  }
-                />
-              </label>
-              <label className="field-label">
-                AGENT
-                <select
-                  aria-label={`Seat ${i + 1} agent`}
-                  value={s.agentId}
-                  onChange={(e) =>
-                    setSeats((rows) =>
-                      rows.map((row, j) =>
-                        j === i ? { ...row, agentId: e.target.value } : row,
-                      ),
-                    )
-                  }
-                >
-                  <option value="">Choose an installed agent</option>
-                  {agents.map((a) => (
-                    <option value={a.id} key={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p>{agents.find((a) => a.id === s.agentId)?.summary}</p>
-              <label className="field-label">
-                RUNTIME
-                <select
-                  aria-label={`Seat ${i + 1} runtime`}
-                  value={s.runtime}
-                  onChange={(e) =>
-                    setSeats((rows) =>
-                      rows.map((row, j) =>
-                        j === i ? { ...row, runtime: e.target.value } : row,
-                      ),
-                    )
-                  }
-                >
-                  <option value="codex">Codex</option>
-                  <option value="claude-code">Claude Code</option>
-                </select>
-              </label>
-            </div>
-          ))}
-          <div className="arrange-controls">
+          <div className="designer-seats-grid">
+            {seats.map((s, i) => (
+              <div className="designer-seat" key={i}>
+                <div className="designer-seat-heading">
+                  <span>
+                    <Users size={17} />
+                  </span>
+                  <strong>Seat {String(i + 1).padStart(2, "0")}</strong>
+                  <small>
+                    {s.runtime === "codex" ? "Codex" : "Claude Code"}
+                  </small>
+                </div>
+                <label className="field-label">
+                  SEAT {i + 1} NAME
+                  <input
+                    aria-label={`Seat ${i + 1} name`}
+                    value={s.id}
+                    onChange={(e) =>
+                      setSeats((rows) =>
+                        rows.map((row, j) =>
+                          j === i ? { ...row, id: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label className="field-label">
+                  AGENT
+                  <select
+                    aria-label={`Seat ${i + 1} agent`}
+                    value={s.agentId}
+                    onChange={(e) =>
+                      setSeats((rows) =>
+                        rows.map((row, j) =>
+                          j === i ? { ...row, agentId: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="">Choose an installed agent</option>
+                    {agents.map((a) => (
+                      <option value={a.id} key={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p>{agents.find((a) => a.id === s.agentId)?.summary}</p>
+                <label className="field-label">
+                  RUNTIME
+                  <select
+                    aria-label={`Seat ${i + 1} runtime`}
+                    value={s.runtime}
+                    onChange={(e) =>
+                      setSeats((rows) =>
+                        rows.map((row, j) =>
+                          j === i ? { ...row, runtime: e.target.value } : row,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="codex">Codex</option>
+                    <option value="claude-code">Claude Code</option>
+                  </select>
+                </label>
+              </div>
+            ))}
+          </div>
+          <div className="arrange-controls designer-footer">
             <button className="secondary-button" onClick={() => setStep(0)}>
-              Back to needs
+              <ArrowLeft size={14} /> Back to needs
             </button>
             <button
               className="primary-button"
@@ -402,28 +523,59 @@ export default function RigDesigner({
                 setError("");
               }}
             >
-              Review design
+              Review design <ArrowRight size={15} />
             </button>
           </div>
-        </>
+        </div>
       )}
       {step === 2 && (
-        <>
-          <h4>
-            {name}: {seats.length} seats
-          </h4>
-          <p>{goal}</p>
-          <p>
-            Project: <code>{folder}</code>
-          </p>
-          <ul>
-            {seats.map((s) => (
-              <li key={s.id}>
-                {s.id}: {agents.find((a) => a.id === s.agentId)?.name} /{" "}
-                {s.runtime}
-              </li>
-            ))}
-          </ul>
+        <div className="designer-body">
+          <div className="designer-section-heading">
+            <h4>
+              {launched ? "Your team is ready." : "Ready for a final look?"}
+            </h4>
+            <p>
+              Review your team and preview the launch before starting any seats.
+            </p>
+          </div>
+          <div className="designer-review-card">
+            <div className="designer-review-title">
+              <span className="designer-mark">
+                <Network size={24} />
+              </span>
+              <div>
+                <h4>{name}</h4>
+                <span>{goals[kind].label}</span>
+              </div>
+              <span className="designer-count">
+                {seats.length} {seats.length === 1 ? "seat" : "seats"}
+              </span>
+            </div>
+            <p>{goal}</p>
+            <div className="designer-project-path">
+              <FolderOpen size={16} />
+              <code>{folder}</code>
+            </div>
+            <div className="designer-roster">
+              {seats.map((s) => (
+                <div key={s.id}>
+                  <span className="designer-avatar">
+                    {s.id.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div>
+                    <strong>{s.id}</strong>
+                    <small>
+                      {agents.find((a) => a.id === s.agentId)?.name}
+                    </small>
+                  </div>
+                  <span>
+                    <Cpu size={12} />
+                    {s.runtime === "codex" ? "Codex" : "Claude Code"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
           <p>
             The team shares this project folder and has collaboration links from
             the first seat to the others. The goal becomes the rig summary; send
@@ -446,7 +598,7 @@ export default function RigDesigner({
                   setConfirmation("");
                 }}
               >
-                Back to team
+                <ArrowLeft size={14} /> Back to team
               </button>
               <button
                 className="primary-button"
@@ -459,18 +611,39 @@ export default function RigDesigner({
           )}
           {preview && (
             <>
-              <p>
-                Saved to <code>{preview.path}</code>
-              </p>
+              <div className="designer-preview-ready">
+                <CheckCircle2 size={18} />
+                <div>
+                  <strong>
+                    {launched ? "Launch complete" : "Preview ready"}
+                  </strong>
+                  <small>Saved to {preview.path}</small>
+                </div>
+              </div>
               <details>
                 <summary>Rig specification</summary>
                 <pre className="json-result">
                   {JSON.stringify(preview.spec, null, 2)}
                 </pre>
               </details>
-              <pre className="json-result">
-                {JSON.stringify(preview.result, null, 2)}
-              </pre>
+              <details className="designer-plan-details">
+                <summary>OpenRig preview details</summary>
+                <pre className="json-result">
+                  {JSON.stringify(preview.result, null, 2)}
+                </pre>
+              </details>
+              {!!preview.result?.warnings?.length && (
+                <div className="designer-warnings">
+                  <strong>Before you launch</strong>
+                  <ul>
+                    {preview.result.warnings.map((w: unknown, i: number) => (
+                      <li key={i}>
+                        {typeof w === "string" ? w : JSON.stringify(w)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {!launched && (
                 <div className="operation-confirm">
                   <label className="field-label">
@@ -487,7 +660,7 @@ export default function RigDesigner({
                     disabled={busy || confirmation !== name}
                     onClick={() => run("launch")}
                   >
-                    Launch designed rig
+                    <Rocket size={15} /> Launch designed rig
                   </button>
                 </div>
               )}
@@ -499,9 +672,13 @@ export default function RigDesigner({
               list.
             </p>
           )}
-        </>
+        </div>
       )}
-      {error && <ErrorBox error={error} />}
+      {error && (
+        <div className="designer-error">
+          <ErrorBox error={error} />
+        </div>
+      )}
     </section>
   );
 }
