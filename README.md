@@ -156,3 +156,7 @@ To publish a prepared release, build and smoke-test the executable, add detailed
 ### Rig Studio visual update (0.6.1)
 
 The designer uses a three-step progress indicator, visual work and team choices, agent seat cards, and a compact roster review. It adapts to narrow docked panels. Preview details are expandable while launch warnings remain visible.
+
+### Wizard appearance (0.6.2)
+
+The rig designer now follows the workspace tool panels: compact headings and steps, shared control styling, flat surfaces, restrained mint selections, and denser forms and seat layouts. The screenshots above show the updated interface.
