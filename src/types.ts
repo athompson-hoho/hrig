@@ -91,6 +91,10 @@ export interface TerminalEvent {
   exitCode?: number;
 }
 export interface HrigAPI {
+  updates(request:{op:string;confirmed?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
+  onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
+  onPrepareUpdate(callback:()=>{ready:boolean;error?:string}):()=>void;
+
   platform: string;
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;

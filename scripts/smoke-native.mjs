@@ -33,7 +33,7 @@ const env = { ...process.env, HRIG_DATA_DIR: dir };
 delete env.ELECTRON_RUN_AS_NODE;
 const args = process.platform === "linux" ? ["--no-sandbox"] : [];
 let app = await electron.launch({
-  executablePath: latest.executable,
+  executablePath: process.argv[2] || latest.executable,
   args,
   env,
 });
@@ -117,6 +117,9 @@ try {
     const doctor = await window.hrig.doctor(c);
     if (!Array.isArray(doctor.checks)) throw new Error("Doctor check failed.");
     const credentials = await window.hrig.integrate({ op: "credentials" });
+    const updates = await window.hrig.updates({ op: "status" });
+    if (updates.mode === "manual" && updates.canInstall)
+      throw new Error("Unsigned/manual build enabled installation.");
     if (window.hrig.platform !== "win32") {
       const inventory = await window.hrig.inventory(c);
       if (inventory.rigs.length !== 1)
@@ -124,6 +127,7 @@ try {
     }
     return {
       conflictProtected: conflict,
+      updatePolicy: true,
       secureStorageAvailable: credentials.secureStorage,
       doctor: true,
       nativeInventory: window.hrig.platform !== "win32",
@@ -144,7 +148,11 @@ try {
     page.getByRole("button", { name: /Native board fixture/ }),
   ).toBeVisible();
   await app.close();
-  app = await electron.launch({ executablePath: latest.executable, args, env });
+  app = await electron.launch({
+    executablePath: process.argv[2] || latest.executable,
+    args,
+    env,
+  });
   page = await app.firstWindow();
   await page.getByRole("button", { name: "New panel", exact: true }).waitFor();
   await expect(

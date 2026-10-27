@@ -7,6 +7,7 @@ import {
   lazy,
   Suspense,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   Actions,
   DockLocation,
@@ -166,6 +167,7 @@ function panelIcon(component: string | undefined, size = 14) {
 export default function App() {
   const [state, setState] = useState<WorkspaceState>(defaultState);
   const [loaded, setLoaded] = useState(false);
+  const [updateRestarting, setUpdateRestarting] = useState(false);
   const [recoveryCount, setRecoveryCount] = useState(() => {
     try {
       return Object.values(draftOperation("list")).filter(
@@ -326,6 +328,35 @@ export default function App() {
   }, [modal, search, connection.id, root]);
   const stateRef = useRef(state);
   stateRef.current = state;
+  useEffect(() => {
+    if (!window.hrig?.onPrepareUpdate) return;
+    const prepare = window.hrig.onPrepareUpdate(() => {
+      if (getDirtyBuffers().length)
+        return {
+          ready: false,
+          error:
+            "Save All or discard unsaved editor changes before restarting.",
+        };
+      const result = window.hrig.flushState(stateRef.current);
+      if (!result.saved)
+        return {
+          ready: false,
+          error:
+            result.error ||
+            "Workspace could not be saved. Restart was cancelled.",
+        };
+      flushSync(() => setUpdateRestarting(true));
+      return { ready: true };
+    });
+    const updates = window.hrig.onUpdates((s) => {
+      if (s.phase === "error" || (s.phase === "downloaded" && s.error))
+        setUpdateRestarting(false);
+    });
+    return () => {
+      prepare();
+      updates();
+    };
+  }, []);
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const modelRef = useRef(model);
@@ -1425,7 +1456,7 @@ export default function App() {
   void revision;
   return (
     <SettingsContext.Provider value={settingsContext}>
-      <div className="app">
+      <div className="app" inert={updateRestarting || undefined}>
         <header className="titlebar">
           <div className="brand">
             <span className="brand-mark">
@@ -2516,6 +2547,21 @@ export default function App() {
           </Modal>
         )}
       </div>
+      {updateRestarting && (
+        <div
+          className="modal-backdrop"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Installing update"
+        >
+          <div className="modal">
+            <h2>Restarting HRig</h2>
+            <p>
+              Your workspace is saved. Existing OpenRig agents keep running.
+            </p>
+          </div>
+        </div>
+      )}
     </SettingsContext.Provider>
   );
 }

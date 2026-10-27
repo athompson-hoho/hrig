@@ -46,19 +46,39 @@ jobs:
         run: node -e "if(process.platform!=='${{ matrix.platform }}'||process.arch!=='${{ matrix.arch }}')process.exit(1)"
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64 libxss1 libxtst6
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libnss3 libgbm1 libasound2t64 libxss1 libxtst6 rpm
       - run: npm ci
       - name: Unit and transport checks
         run: npm test
       - run: npm run build
       - name: Native packaging
+        env:
+          CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_TEAM_ID || '' }}
+          WIN_CSC_LINK: ${{ matrix.platform == 'win32' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.platform == 'win32' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          WIN_PUBLISHER_NAME: ${{ matrix.platform == 'win32' && secrets.WIN_PUBLISHER_NAME || '' }}
         run: node scripts/package.mjs
+      - name: Verify feed, package metadata and configured signatures
+        run: node scripts/verify-native.mjs
       - name: Native Linux packaged smoke
         if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/smoke-native.mjs
       - name: Native macOS and Windows packaged smoke
         if: runner.os != 'Linux'
         run: node scripts/smoke-native.mjs
+      - name: Windows installer lifecycle
+        if: runner.os == 'Windows'
+        run: node scripts/smoke-install.mjs
+      - name: Linux performance baseline
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/benchmark.mjs
+      - name: macOS and Windows performance baseline
+        if: runner.os != 'Linux'
+        run: node scripts/benchmark.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.platform }}-${{ matrix.arch }}
@@ -70,8 +90,15 @@ jobs:
             release/*.zip
             release/*.AppImage
             release/*.tar.gz
+            release/*.deb
+            release/*.rpm
+            release/*.blockmap
+            release/stable-*.yml
             release/artifacts-*.json
             release/native-smoke-*.json
+            release/distribution-qa-*.json
+            release/installer-qa-*.json
+            release/performance-*.json
   publish:
     needs: build
     if: inputs.publish

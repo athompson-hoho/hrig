@@ -1,6 +1,6 @@
 {
   "name": "hrig",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "private": true,
   "description": "A graphical desktop workspace for OpenRig",
   "main": "electron/main.cjs",
@@ -22,9 +22,12 @@
     "mobile:android": "cap open android",
     "mobile:ios": "cap open ios",
     "test:mobile": "npm run mobile:build && playwright test --config playwright.mobile.config.ts",
-    "release:publish": "node scripts/publish-release.mjs"
+    "release:publish": "node scripts/publish-release.mjs",
+    "test:install": "node scripts/smoke-install.mjs",
+    "benchmark": "node scripts/benchmark.mjs"
   },
   "dependencies": {
+    "electron-updater": "6.8.11",
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
@@ -70,7 +73,10 @@
       "node_modules/node-pty/**/*"
     ],
     "win": {
-      "target": "portable",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "icon": "assets/icon.ico",
       "signExecutable": false
     },
@@ -81,19 +87,47 @@
         "zip"
       ],
       "icon": "assets/icon-mac.png",
-      "identity": null,
       "category": "public.app-category.developer-tools",
       "artifactName": "HRig-${version}-macos-${arch}.${ext}"
     },
     "linux": {
       "target": [
         "AppImage",
-        "tar.gz"
+        "tar.gz",
+        "deb",
+        "rpm"
       ],
       "icon": "assets/icon.png",
       "category": "Development",
-      "artifactName": "HRig-${version}-linux-${arch}.${ext}"
-    }
+      "artifactName": "HRig-${version}-linux-${arch}.${ext}",
+      "maintainer": "HRig contributors <athompson-hoho@users.noreply.github.com>"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HRig",
+      "uninstallDisplayName": "HRig",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": false,
+      "artifactName": "HRig-${version}-windows-${arch}-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "HRig-${version}-windows-${arch}-portable.${ext}"
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://github.com/athompson-hoho/hrig/releases/latest/download"
+    },
+    "extraResources": [
+      {
+        "from": "release/policy.json",
+        "to": "release-policy.json"
+      }
+    ]
   },
   "overrides": {
     "dompurify": "3.4.17"

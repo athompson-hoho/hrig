@@ -54,5 +54,11 @@
     "title": "Native macOS, Linux and Windows",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.9.0",
+    "title": "Installed desktop foundation and safe update controls",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

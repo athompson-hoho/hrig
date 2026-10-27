@@ -27,6 +27,7 @@ import {
 import { themes } from "./themes";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
+import UpdateSettings from "./UpdateSettings";
 const categories = [
   ["Appearance", Palette],
   ["Editor", Code2],
@@ -35,6 +36,7 @@ const categories = [
   ["Connections & rigs", Network],
   ["Notifications", Bell],
   ["Keyboard shortcuts", Keyboard],
+  ["Updates", Download],
   ["About", Info],
 ] as const;
 function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
@@ -299,7 +301,7 @@ export default function SettingsPage({ project }: { project: string }) {
               {notice}
             </p>
           )}
-          {query || schema.some((r) => r.category === category) ? (
+          {category === "Updates" && !query ? <UpdateSettings /> : query || schema.some((r) => r.category === category) ? (
             <>
               <div className="settings-section-title">
                 <h3>{query ? "Search results" : category}</h3>
@@ -514,7 +516,7 @@ export default function SettingsPage({ project }: { project: string }) {
           ) : (
             <section className="settings-about">
               <h3>HRig {version}</h3>
-              <p>A graphical Windows workspace for OpenRig over WSL and SSH.</p>
+              <p>A graphical desktop workspace for local, WSL and SSH OpenRig hosts.</p>
               <p>
                 Settings and locally stored project overrides live in the HRig
                 application-data directory alongside workspace.json.

@@ -3,6 +3,9 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 const repo = "athompson-hoho/hrig";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const { downloads, feedName } = require("../electron/release-model.cjs");
 const run = (file, args, input) =>
   execFileSync(file, args, {
     input,
@@ -61,23 +64,46 @@ for (const [platform, arch] of targets) {
     !evidence.passed
   )
     throw new Error("Artifact or native QA source mismatch.");
-  const expected =
-    platform === "win32"
-      ? [`HRig ${version}.exe`]
-      : platform === "darwin"
-        ? [
-            `HRig-${version}-macos-${arch}.dmg`,
-            `HRig-${version}-macos-${arch}.zip`,
-          ]
-        : [
-            `HRig-${version}-linux-${arch}.AppImage`,
-            `HRig-${version}-linux-${arch}.tar.gz`,
-          ];
+  const expected = downloads(version, platform, arch);
   if (
-    manifest.files.length !== expected.length ||
-    expected.some((name) => !manifest.files.some((f) => f.name === name))
+    expected.some((name) => !manifest.files.some((f) => f.name === name)) ||
+    !manifest.files.some((f) => f.name === feedName(platform, arch))
   )
-    throw new Error("Missing distribution for " + platform + "/" + arch);
+    throw new Error(
+      "Missing distribution or feed for " + platform + "/" + arch,
+    );
+  const distribution = JSON.parse(
+    await fs.readFile(
+      `release/distribution-qa-${platform}-${arch}.json`,
+      "utf8",
+    ),
+  );
+  if (
+    distribution.version !== version ||
+    !distribution.feedVerified ||
+    !distribution.packagesVerified ||
+    distribution.signingConfigured !== manifest.policy.signed ||
+    (manifest.policy.signed && !distribution.signatureVerified)
+  )
+    throw new Error("Distribution validation is incomplete.");
+  const performance = JSON.parse(
+    await fs.readFile(`release/performance-${platform}-${arch}.json`, "utf8"),
+  );
+  if (performance.version !== version || performance.results.length !== 3)
+    throw new Error("Missing performance baseline.");
+  if (platform === "win32") {
+    const installer = JSON.parse(
+      await fs.readFile("release/installer-qa-win32-x64.json", "utf8"),
+    );
+    if (
+      installer.version !== version ||
+      !installer.installed ||
+      !installer.launched ||
+      !installer.uninstalled ||
+      !installer.userDataPreserved
+    )
+      throw new Error("Installer lifecycle validation failed.");
+  }
   for (const f of manifest.files) {
     if (path.basename(f.name) !== f.name)
       throw new Error("Invalid artifact filename.");
@@ -117,6 +143,20 @@ await fs.writeFile(
         targets.map(async ([p, a]) =>
           JSON.parse(
             await fs.readFile(`release/native-smoke-${p}-${a}.json`, "utf8"),
+          ),
+        ),
+      ),
+      distribution: await Promise.all(
+        targets.map(async ([p, a]) =>
+          JSON.parse(
+            await fs.readFile(`release/distribution-qa-${p}-${a}.json`, "utf8"),
+          ),
+        ),
+      ),
+      performance: await Promise.all(
+        targets.map(async ([p, a]) =>
+          JSON.parse(
+            await fs.readFile(`release/performance-${p}-${a}.json`, "utf8"),
           ),
         ),
       ),

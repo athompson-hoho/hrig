@@ -16,6 +16,7 @@ const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const core = require("./core.cjs");
 const features = require("./features.cjs");
+const backend=require("./backend.cjs").createBackend();
 const { spawn } = require("node:child_process");
 const net = require("node:net");
 const tunnels = new Map();
@@ -35,6 +36,7 @@ function handle(channel, fn) {
     return fn(event, ...args);
   });
 }
+require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
 handle('integrations:operation',(_event,request)=>integrations(request));
@@ -240,34 +242,19 @@ ipcMain.on("state:flush", (event, state) => {
   }
 });
 handle("connections:detect", () => core.detectConnections());
-handle("rig:inventory", (_event, connection) => core.inventory(connection));
-handle("rig:send", async (_event, connection, seat, message) => {
-  core.validateConnection(connection);
-  if (connection.kind === "local" && process.platform==='win32')
-    throw new Error("Select a WSL or SSH connection.");
-  if (
-    typeof seat !== "string" ||
-    !seat ||
-    typeof message !== "string" ||
-    !message.trim() ||
-    message.length > 50000
-  )
-    throw new Error(
-      "Choose a seat and enter a message under 50,000 characters.",
-    );
-  return features.runRig(connection, ["send", seat, message]);
-});
+handle("rig:inventory", (_event, connection) => backend.inventory(connection));
+handle("rig:send",(_event,c,seat,message)=>backend.sendMessage(c,seat,message));
 handle("connection:doctor", (_event, connection) =>
-  features.diagnose(connection),
+  backend.doctor(connection),
 );
 handle("rig:action", (_event, connection, request) =>
-  features.rigAction(connection, request),
+  backend.rigAction(connection, request),
 );
 handle("rig:design", (_event, connection, request) =>
-  features.designRig(connection, request),
+  backend.designRig(connection, request),
 );
 handle("editor:operation", (_event, connection, request) =>
-  features.edit(connection, request),
+  backend.edit(connection, request),
 );
 handle("ports:list", (_event, connection) => features.ports(connection));
 handle("attention:notify", (_event, title, body) => {
@@ -370,9 +357,9 @@ handle("preview:close", (_event, connection, port) => {
   tunnels.delete(key);
 });
 handle("rig:queue", async (_event, connection, rigName) => {
-  return core.queue(connection, rigName);
+  return backend.queue(connection, rigName);
 });
-handle("rig:projects", (_event, connection) => features.projects(connection));
+handle("rig:projects", (_event, connection) => backend.projects(connection));
 handle("files:pick", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ["openDirectory"],
@@ -380,10 +367,10 @@ handle("files:pick", async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 handle("files:operation", (_event, connection, request) =>
-  core.fileOperation(connection, request),
+  backend.file(connection, request),
 );
 handle("files:git", (_event, connection, root) =>
-  core.gitStatus(connection, root),
+  backend.git(connection, root),
 );
 handle("terminal:create", async (event, options) => {
   const { id, connection, root } = options;
@@ -394,7 +381,7 @@ handle("terminal:create", async (event, options) => {
   const existing = terminals.get(id);
   if (existing) return { id, buffer: existing.buffer, reused: true };
   if (options.seatId && (connection.kind !== "local" || process.platform!=='win32')) {
-    const latest = await core.inventory(connection);
+    const latest = await backend.inventory(connection);
     const seat = latest.seats.find((s) => s.id === options.seatId);
     if (!seat?.session)
       throw new Error(
