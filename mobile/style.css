@@ -4,6 +4,8 @@
   background: #10151b;
   color-scheme: dark;
   font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-bottom: calc(120px + env(safe-area-inset-bottom));
 }
 * {
   box-sizing: border-box;
@@ -11,11 +13,23 @@
 body {
   margin: 0;
 }
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+html,
+body {
+  overflow-x: hidden;
+}
 main {
+  width: 100%;
   max-width: 760px;
   margin: auto;
   padding: env(safe-area-inset-top) 22px
-    calc(100px + env(safe-area-inset-bottom));
+    calc(120px + env(safe-area-inset-bottom));
 }
 header {
   display: flex;
@@ -45,14 +59,132 @@ button {
   color: #dce6ed;
   border-radius: 10px;
   padding: 12px 16px;
-  min-height: 46px;
+  min-height: 48px;
+  touch-action: manipulation;
+  overflow-wrap: anywhere;
 }
 button:disabled {
   opacity: 0.5;
   cursor: wait;
 }
 .pair {
-  padding-top: 50px;
+  padding-top: 28px;
+  display: grid;
+  gap: 20px;
+}
+.pair article {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+}
+.pair > button,
+.pair article > button {
+  width: 100%;
+}
+.pair h1,
+.pair h2,
+.pair p {
+  margin: 0;
+}
+.pair form {
+  margin: 0;
+}
+.content-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding-top: 8px;
+}
+.content-stack > *,
+.pair > *,
+article > * {
+  min-width: 0;
+}
+details {
+  min-width: 0;
+  max-width: 100%;
+}
+.content-stack h1,
+.content-stack h2,
+.content-stack p {
+  margin: 0;
+}
+.back {
+  justify-self: start;
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  margin: 0;
+  padding: 16px;
+  background: #17212a;
+  border-radius: 12px;
+}
+.fields > div {
+  min-width: 0;
+}
+.fields dt {
+  font-size: 11px;
+  color: #92a6b5;
+  margin-bottom: 6px;
+}
+.fields dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.task-card {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  padding: 18px;
+}
+.task-card strong {
+  font-size: 17px;
+  line-height: 1.5;
+}
+.task-card > span:not(.eyebrow) {
+  font-size: 13px;
+  color: #a4b6c3;
+}
+.task-card .task-open {
+  color: #8cdbbc;
+}
+.task-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rig-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 12px;
+}
+.rig-heading h2 {
+  overflow-wrap: anywhere;
+}
+.rig-heading > span {
+  flex-shrink: 0;
+  max-width: 45%;
+  font-size: 11px;
+  color: #92a6b5;
+  text-align: right;
+}
+.search {
+  font-size: 12px;
+}
+.activity {
+  overflow-wrap: anywhere;
+}
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #8cdbbc;
+  outline-offset: 3px;
 }
 .eyebrow {
   font-size: 11px;
@@ -124,6 +256,7 @@ textarea {
 }
 .host label {
   flex: 1;
+  min-width: 0;
   font-size: 10px;
   letter-spacing: 1.5px;
 }
@@ -132,16 +265,29 @@ textarea {
   letter-spacing: 0;
 }
 .badge {
+  max-width: 130px;
   font-size: 10px;
   color: #8cdbbc;
   padding: 8px;
   border: 1px solid #334f45;
   border-radius: 30px;
 }
+.connection-caption {
+  margin: -10px 0 20px;
+  font-size: 12px;
+  color: #92a6b5;
+  overflow-wrap: anywhere;
+}
 .section-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
+}
+.section-title > button {
+  flex-shrink: 0;
+  max-width: 40%;
+  font-size: 12px;
 }
 .section-title span {
   color: #8cdbbc;
@@ -175,17 +321,25 @@ h2 small {
 }
 .seat div span {
   display: block;
-  max-width: 45vw;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-size: 12px;
   color: #8ea3b2;
   margin-top: 7px;
 }
+.seat > div {
+  flex: 1;
+  min-width: 0;
+}
+.seat {
+  gap: 16px;
+}
 .status {
   font-size: 11px;
   color: #8cdbbc;
+  flex-shrink: 0;
+  max-width: 100px;
+  overflow-wrap: anywhere;
 }
 article {
   padding: 18px;
@@ -198,6 +352,9 @@ article h2 {
   overflow-wrap: anywhere;
 }
 pre {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   background: #090e13;
   border: 1px solid #2d3b46;
   border-radius: 12px;
@@ -241,6 +398,24 @@ nav button.active {
   padding: 14px;
   border-radius: 10px;
   overflow-wrap: anywhere;
+}
+.content-stack .error {
+  margin-top: 0;
+}
+.error p {
+  margin: 10px 0;
+  color: inherit;
+}
+.error button {
+  margin-top: 8px;
+}
+.hint {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 360px) {
+  .fields {
+    grid-template-columns: 1fr;
+  }
 }
 .error {
   background: #472730;

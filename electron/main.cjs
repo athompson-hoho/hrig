@@ -44,6 +44,7 @@ const mobile = require('./mobile-service.cjs').mobileService({
   directory: app.getPath('userData'),
   assets: path.join(__dirname, '../dist-mobile'),
   connections: async () => JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'workspace.json'), 'utf8')).connections || [],
+  activeConnection: async () => JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'workspace.json'), 'utf8')).activeConnection,
 });
 handle('mobile:operation', (_event, request) => mobile.operation(request));
 app.on('before-quit', () => mobile.stop());

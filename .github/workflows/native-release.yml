@@ -12,7 +12,13 @@ concurrency:
   group: native-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/release-notes.cjs
   build:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:

@@ -30,14 +30,7 @@ if (
   throw new Error("Release repository visibility changed.");
 const notesFile = `releases/${tag}.md`,
   notes = await fs.readFile(notesFile, "utf8");
-for (const heading of [
-  "## Validation",
-  "## Known limitations",
-  "## Install or upgrade",
-  "## Integrity and source",
-])
-  if (!notes.includes(heading))
-    throw new Error("Missing release notes: " + heading);
+require("./release-notes.cjs").validateReleaseNotes(notes);
 const targets = [
   ["win32", "x64"],
   ["darwin", "arm64"],

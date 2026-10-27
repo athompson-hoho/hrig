@@ -109,6 +109,9 @@ async function admin(op, fields = {}) {
       "Encrypted device storage and wrong-certificate rejection passed.",
     );
     await page.getByRole("button", { name: "Tasks", exact: false }).click();
+    await page
+      .getByRole("button", { name: /Verify native pinned TLS pairing/ })
+      .click();
     await expect(
       page.getByRole("heading", { name: "Verify native pinned TLS pairing" }),
     ).toBeVisible();

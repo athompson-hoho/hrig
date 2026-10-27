@@ -3,47 +3,21 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { mobileService } = require("../../electron/mobile-service.cjs");
+const scenario = require("./scenarios.cjs").mobileScenario();
 const directory = path.resolve(".hrig-test/native-pairing");
 const service = mobileService({
   directory,
-  connections: async () => [
-    { id: "fixture", name: "Secure pairing fixture", kind: "wsl" },
-  ],
-  backend: {
-    validateConnection: () => {},
-    inventory: async () => ({
-      rigs: [{ id: "rig", name: "Secure test rig", status: "running" }],
-      seats: [
-        {
-          id: "seat",
-          rigId: "rig",
-          rigName: "Secure test rig",
-          name: "builder",
-          runtime: "codex",
-          status: "working",
-          session: "fixture",
-        },
-      ],
-      sampledAt: new Date().toISOString(),
-    }),
-    queue: async () => [
-      {
-        id: "task",
-        title: "Verify native pinned TLS pairing",
-        status: "active",
-        destination: "builder",
-      },
-    ],
-    quote: (value) => value,
-    sessionCommand: () => {},
-    remote: async () => "Pinned TLS verified. Fixture terminal, no live agent.",
-  },
+  connections: scenario.connections,
+  activeConnection: scenario.activeConnection,
+  backend: scenario.backend,
+  readTask: scenario.readTask,
   runRig: async (_c, args) => {
+    const result = await scenario.runRig(_c, args);
     fs.appendFileSync(
       path.join(directory, "receipts.jsonl"),
       JSON.stringify(args) + "\n",
     );
-    return "sent";
+    return result;
   },
 });
 const admin = http.createServer(async (req, res) => {
@@ -55,6 +29,20 @@ const admin = http.createServer(async (req, res) => {
       if (text.length > 4096) throw new Error("Too large");
     }
     const request = JSON.parse(text);
+    if (request.op === "scenario") {
+      for (const [key, value] of Object.entries(request.values || {}))
+        if (Object.hasOwn(scenario.state, key)) scenario.state[key] = value;
+      res
+        .writeHead(200, { "Content-Type": "application/json" })
+        .end(JSON.stringify(scenario.state));
+      return;
+    }
+    if (request.op === "receipts") {
+      res
+        .writeHead(200, { "Content-Type": "application/json" })
+        .end(JSON.stringify(scenario.receipts));
+      return;
+    }
     const result = await service.operation(request);
     if (request.op === "invite") {
       // Standard Android emulator alias; real service invitations use host interfaces.
