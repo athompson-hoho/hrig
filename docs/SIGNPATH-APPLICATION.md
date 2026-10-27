@@ -1,6 +1,6 @@
 # SignPath Foundation application preparation
 
-Status (2026-10-27): MIT licensing, package metadata, privacy/signing policies, CI license checks and portable signature verification are published. The Foundation application is filled with maintainer-approved contact details and required consents; submission is awaiting human CAPTCHA completion. No successful submission receipt or approval has been observed. No SignPath organization/project has been assigned, and no trusted signed Windows release has been produced.
+Status (2026-10-27): MIT licensing, package metadata, privacy/signing policies, CI license checks and portable signature verification are published. The Foundation application was submitted after human CAPTCHA completion. The maintainer explicitly confirmed that SignPath displayed a submission confirmation. This is maintainer-confirmed submission, not independently verified email receipt or Foundation approval. No SignPath organization/project has been assigned, and no trusted signed Windows release has been produced.
 
 ## Project details
 
@@ -24,7 +24,7 @@ Status (2026-10-27): MIT licensing, package metadata, privacy/signing policies, 
 2. Confirm repository ownership, GitHub MFA and the signing approver identity. Enable SignPath MFA when onboarding. Confirm who may review code and approve releases; this checklist cannot verify account settings.
 3. Review the licenses and notices of bundled dependencies, native modules, Electron and theme assets against the Foundation's conditions. The local open-source check verifies HRig's own license metadata and notices; it is not a full dependency-license audit or an eligibility decision.
 4. Ensure a released Windows build and its public description are available. Provide build provenance/release history when requested. Acceptance is discretionary and may require additional project reputation or review.
-5. Application prepared at [SignPath Foundation](https://signpath.org/apply) using maintainer-provided contact information. Required Code of Conduct and data-processing consents were explicitly approved; optional marketing stays unchecked. A CAPTCHA currently prevents verified submission. Complete it in the prepared visible browser, then verify a success receipt before marking the application submitted. Do not publish credentials, tokens or private application contact details in a GitHub issue.
+5. Application prepared at [SignPath Foundation](https://signpath.org/apply) using maintainer-provided contact information. Required Code of Conduct and data-processing consents were explicitly approved; optional marketing stays unchecked. Completed: the maintainer completed the CAPTCHA and explicitly confirmed the submission confirmation. Foundation review/approval remains pending. Do not publish credentials, tokens or private application contact details in a GitHub issue.
 
 ## After approval
 
@@ -36,3 +36,12 @@ Status (2026-10-27): MIT licensing, package metadata, privacy/signing policies, 
 6. Enable signed-build/updater policy only after that complete chain passes. Publish a signed release deliberately with the attribution specified in the code signing policy. Existing unsigned releases remain labeled unsigned.
 
 Sources: [Foundation conditions](https://signpath.org/terms), [GitHub trusted builds](https://docs.signpath.io/trusted-build-systems/github), [artifact configuration reference](https://docs.signpath.io/artifact-configuration/reference). SignPath approval, MFA, credentials and actual Windows signature verification remain external/onboarding requirements.
+
+## Submission record
+
+- Date: 2026-10-27.
+- Evidence: maintainer explicitly confirmed the submission success screen after completing CAPTCHA.
+- Required Code of Conduct and personal-data processing consents were authorized by the maintainer; optional marketing was not selected.
+- Independent mailbox verification was unavailable because the connected email account requires reauthentication. No receipt ID was captured.
+- Next external event: Foundation review and onboarding instructions. Do not submit a duplicate application merely because no email receipt has been independently fetched.
+- After approval: obtain approved project/policy/artifact identifiers, configure restricted signing credentials and MFA, complete Electron/NSIS signing integration, and verify app/setup/portable signatures before publishing a signed release. Existing release artifacts remain unchanged and unsigned.
