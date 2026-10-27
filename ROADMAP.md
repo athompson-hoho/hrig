@@ -95,3 +95,5 @@ Validation: isolated production build, Electron designer workflow (including nar
 ### 0.7.0 - Full settings and coordinated theming
 
 Delivered 33 searchable, working preferences with user/project overrides, modified filters, defaults/reset, JSON import/export, shortcut reference and About. Implemented five themes plus OS following across app surfaces, Monaco, xterm, and popouts; accent, font, density and reduced-motion options; editor/diff controls; live terminal preferences and local shell selection; refresh frequency, connection/rig defaults and notifications. Settings do not bypass agent policy or unsaved-file protection. See SETTINGS.md for the design rationale and catalog.
+
+Regression investigation: the retry journey exposed repeated identical failures being batched into an unchanged error state. Retry scheduling now tracks failure events independently and keeps the existing six-attempt cap.
