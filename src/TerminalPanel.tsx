@@ -20,6 +20,10 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
   const retries = useRef(0);
   const previousSession = useRef<string | null | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
+  const [failure, setFailure] = useState(0);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   useEffect(
     () =>
       window.hrig.onResume(() => {
@@ -39,19 +43,23 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
     const delay = Math.min(15000, 1000 * 2 ** retries.current++);
     setRetrying(true);
     const timer = setTimeout(() => {
+      retryTimer.current = undefined;
       setRetrying(false);
       setAttempt((n) => n + 1);
     }, delay);
+    retryTimer.current = timer;
     return () => {
       clearTimeout(timer);
       setRetrying(false);
     };
-  }, [error, ended, config.seat?.id, preferences["terminal.autoReconnect"]]);
+  }, [failure, config.seat?.id, preferences["terminal.autoReconnect"]]);
   useEffect(() => {
     if (!host.current) return;
     let disposed = false,
       connected = false;
     let stableTimer: ReturnType<typeof setTimeout> | undefined;
+    clearTimeout(retryTimer.current);
+    setRetrying(false);
     setError("");
     setEnded(null);
     setReady(false);
@@ -110,6 +118,7 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
       }
       if (event.exitCode !== undefined) {
         setEnded(event.exitCode);
+        setFailure((n) => n + 1);
         connected = false;
       }
     });
@@ -149,7 +158,10 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
         resize();
       })
       .catch((e) => {
-        if (!disposed) setError(e.message);
+        if (!disposed) {
+          setError(e.message);
+          setFailure((n) => n + 1);
+        }
       });
     const focus = () => term.focus();
     host.current.addEventListener("mousedown", focus);
