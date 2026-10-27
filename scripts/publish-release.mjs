@@ -82,7 +82,7 @@ for (const release of releases) {
   );
 }
 if (checkOnly) process.exit(0);
-git("push", "--set-upstream", "origin", "HEAD");
+git("push", "origin", "HEAD:refs/heads/master");
 for (const release of prepared) {
   const { version, tag, title, commit, notesFile, notes, assets } = release;
   if (!git("tag", "--list", tag))
