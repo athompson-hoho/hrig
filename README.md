@@ -1,6 +1,17 @@
-# HRig
+# HRig — OpenRig GUI for AI Coding Agents
 
-A desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig). Arrange existing agent sessions with graphical tabs, splits, floating panels, and separate windows. Open project files and Git diffs alongside your agents.
+HRig is a cross-platform **OpenRig GUI and agentic development workspace** for AI coding agents. Connect over **WSL or SSH**, arrange multi-agent sessions with draggable tabs, split panes, floating panels and separate windows, and edit code with Monaco alongside terminals, Git diffs, reviews and project boards. Available for **Windows, macOS and Linux**.
+
+[Download the latest desktop release](https://github.com/athompson-hoho/hrig/releases/latest) · [OpenRig agent harness](https://github.com/mvschwarz/openrig) · [Features and roadmap](ROADMAP.md)
+
+## AI agent workspace and remote development features
+
+- **Multi-agent workspace management:** organize existing coding-agent sessions with graphical layouts, role templates and a searchable workspace.
+- **WSL and SSH remote development:** connect to Linux environments and remote projects while using a desktop GUI.
+- **IDE-style code editing:** open project files in Monaco, search code, inspect Git diffs and review agent changes.
+- **OpenRig agent coordination:** design rigs, inspect task queues and deliberately send tasks or review feedback through the OpenRig harness.
+- **Developer productivity tools:** terminal search and output export, local task boards, GitHub Issues/Projects and Linear integrations.
+- **Personalized desktop workspace:** configurable settings and community themes including Catppuccin, Nord and Dracula.
 
 ## Screenshots
 
@@ -64,7 +75,7 @@ The rig designer guides you from a goal to an editable team and a launch review.
 
 ## Run the desktop app
 
-Open **`release/HRig 0.8.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Download the matching build from the [latest HRig release](https://github.com/athompson-hoho/hrig/releases/latest): Windows setup or portable EXE, macOS DMG/ZIP, or Linux AppImage, archive, DEB or RPM. Close an older HRig instance before upgrading. Desktop downloads are currently unsigned; see the [distribution and signing policy](DISTRIBUTION.md). Windows builds do not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -77,9 +88,10 @@ Source control and Review require a Git working tree. If the selected folder is 
 
 ## Connections
 
-- **Local Windows:** PowerShell, project files, and Git. OpenRig itself runs on Linux / WSL, so local mode does not discover rigs.
+- **Local Windows:** PowerShell, project files and Git. Access OpenRig seats through WSL or SSH.
+- **Local macOS/Linux:** native login shells, local project files, Git and an installed local OpenRig CLI.
 - **WSL:** uses `wsl.exe -d <distribution> --exec bash -lc ...`. OpenRig and its Node.js runtime must be installed **inside Linux**, rather than resolving to a Windows npm shim. Existing NVM installations are initialized inside HRig's command environment when necessary; HRig does not edit shell profiles or install dependencies. tmux is required for agent attachment; Python 3 is required for remote project files.
-- **SSH:** uses Windows OpenSSH, including your SSH config, keys, agent, jump hosts, and optional port. Background discovery and file operations require non-interactive key / agent authentication. For first-time host-key acceptance or an interactive login, open a shell on that connection, then refresh rigs. HRig does not automatically accept host keys or store passwords.
+- **SSH:** uses system OpenSSH (`ssh.exe` on Windows), including your SSH config, keys, agent, jump hosts, and optional port. Background discovery and file operations require non-interactive key / agent authentication. For first-time host-key acceptance or an interactive login, open a shell on that connection, then refresh rigs. HRig does not automatically accept host keys or store passwords.
 
 Git must be installed on the machine hosting the project for source control. Distributions and explicit non-wildcard aliases in `~/.ssh/config` are detected; other SSH targets can be added manually.
 
@@ -289,3 +301,9 @@ Electron remains the desktop runtime. Windows gains an assisted per-user install
 Find text inside each terminal with Ctrl+F/Cmd+F, case/regex matching and next/previous navigation. Copy a selection or retained output, export plain text through a native save dialog, and open confirmed browser links or project files. Shells and agent sessions stay attached. [Behavior and limits](TERMINALS.md).
 
 ![Terminal search and output tools in a narrow HRig workspace](docs/screenshots/terminal-tools.png)
+
+## Agentic IDE and ADE workflows
+
+HRig provides an **agent development environment (ADE)** around OpenRig: a graphical agent workspace with code editing, terminal session management, human-in-the-loop review and project/task boards. OpenRig remains responsible for agent execution, coordination and permissions.
+
+Developers comparing AI coding workspaces such as [Cursor](https://cursor.com/docs), [Orca](https://www.onorca.dev/docs), [Visual Studio Code (VS Code)](https://code.visualstudio.com/docs) and [Zed](https://zed.dev/docs) can evaluate HRig for workflows centered on OpenRig rigs, WSL/SSH hosts and multiple visible agent sessions. The [release notes](https://github.com/athompson-hoho/hrig/releases) describe shipped capabilities; the [roadmap](ROADMAP.md) distinguishes proposed features from implemented ones.
