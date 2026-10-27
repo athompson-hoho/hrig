@@ -16,6 +16,7 @@ import {
 import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { editorTheme, themeId } from "./themes";
+import { editorModelPath } from "./editor-uri";
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === "json") return new JsonWorker();
@@ -401,7 +402,10 @@ export default function EditorPanel({
         />
       ) : (
         <Editor
-          path={`${config.connection.id}/${config.root}/${config.path}`}
+          path={monaco.Uri.from({
+            scheme: "file",
+            path: editorModelPath(config),
+          }).toString()}
           value={value}
           language={language(config.path)}
           theme="hrig-settings"

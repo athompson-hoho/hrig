@@ -124,3 +124,28 @@ test("theme palettes resolve system appearance and preserve default colors witho
   const p = { ...settings.defaults, "terminal.theme": "light" };
   assert.equal(theme.terminalTheme(p, "midnight").background, "#ffffff");
 });
+
+test("editor model paths keep Unix and Windows project roots opaque to worker path normalization", () => {
+  const { editorModelPath } = bundled("src/editor-uri.ts");
+  for (const root of [
+    "/tmp/project",
+    "C:\\Users\\example",
+    "/tmp/project with spaces",
+  ]) {
+    const result = editorModelPath({
+      connection: { id: "native", kind: "local" },
+      root,
+      path: "src/main.ts",
+    });
+    assert.ok(!result.includes("//"));
+    assert.ok(result.endsWith("/src/main.ts"));
+    assert.notEqual(
+      result,
+      editorModelPath({
+        connection: { id: "other", kind: "local" },
+        root,
+        path: "src/main.ts",
+      }),
+    );
+  }
+});
