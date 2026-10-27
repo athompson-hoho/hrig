@@ -4065,3 +4065,71 @@ button:hover {
 .setting-validation {
   color: var(--color-ed929d, #d05d70);
 }
+
+.settings-page {
+  container-type: inline-size;
+}
+@container (max-width:720px) {
+  .settings-layout {
+    grid-template-columns: 145px minmax(0, 1fr);
+  }
+  .setting-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .settings-content {
+    padding: 16px;
+  }
+  .settings-heading,
+  .settings-toolbar {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .settings-scopes > span {
+    display: none;
+  }
+  .settings-reset-scope {
+    margin-left: auto;
+  }
+}
+@container (max-width:450px) {
+  .settings-layout {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .settings-layout > nav {
+    padding: 10px 3px;
+  }
+  .settings-layout > nav button {
+    justify-content: center;
+    padding: 10px 4px;
+  }
+  .settings-layout > nav button > span {
+    display: none;
+  }
+  .settings-heading > .secondary-button {
+    font-size: 0;
+    padding: 8px;
+  }
+  .settings-heading {
+    padding: 14px 12px;
+  }
+  .settings-heading p {
+    line-height: 1.5;
+  }
+  .settings-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 12px 12px;
+  }
+  .settings-search {
+    flex-basis: 100%;
+  }
+  .settings-scopes {
+    gap: 12px;
+    padding: 0 12px;
+    flex-wrap: wrap;
+  }
+  .settings-content {
+    padding: 12px;
+  }
+}

@@ -59,6 +59,19 @@ test("settings apply live themes, scoped values and validated imports, persist, 
       path: "release/previews/settings-midnight.png",
       animations: "disabled",
     });
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect
+      .poll(() =>
+        page
+          .locator(".settings-page")
+          .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: "release/previews/settings-narrow.png",
+      animations: "disabled",
+    });
+    await page.setViewportSize({ width: 1510, height: 980 });
     const search = page.getByRole("textbox", { name: "Search settings" });
     await search.fill("editor font size");
     let font = page.getByLabel("Editor font size", { exact: true });

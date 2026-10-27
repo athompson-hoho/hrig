@@ -272,6 +272,8 @@ export default function SettingsPage({ project }: { project: string }) {
           {categories.map(([name, Icon]) => (
             <button
               key={name}
+              aria-label={name}
+              title={name}
               className={category === name && !query ? "selected" : ""}
               aria-current={category === name && !query ? "page" : undefined}
               onClick={() => {
