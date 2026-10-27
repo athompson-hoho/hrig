@@ -30,6 +30,16 @@ const gh = (...args) =>
     maxBuffer: 16 * 1024 * 1024,
   }).trim();
 const api = (endpoint) => JSON.parse(gh("api", endpoint));
+async function eventually(read, accept) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const value = read();
+    if (accept(value)) return value;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    "GitHub did not confirm the release state. Re-run to resume safely.",
+  );
+}
 async function hash(file) {
   const digest = crypto.createHash("sha256");
   for await (const chunk of createReadStream(file)) digest.update(chunk);
@@ -105,17 +115,30 @@ for (const release of prepared) {
       "--notes-file",
       notesFile,
     );
-  let remote = api(`repos/${repo}/releases?per_page=100`).find(
-    (r) => r.tag_name === tag,
+  let remote = await eventually(
+    () =>
+      api(`repos/${repo}/releases?per_page=100`).find(
+        (r) => r.tag_name === tag,
+      ),
+    Boolean,
   );
-  if (!remote) throw new Error("Release creation was not confirmed: " + tag);
   for (const asset of assets) {
     if (!remote.assets.some((a) => a.name === path.basename(asset.file))) {
       console.log(`Uploading ${tag}: ${path.basename(asset.file)}`);
       gh("release", "upload", tag, asset.file, "--repo", repo);
     }
   }
-  remote = api(`repos/${repo}/releases/${remote.id}`);
+  remote = await eventually(
+    () => api(`repos/${repo}/releases/${remote.id}`),
+    (r) =>
+      assets.every((a) =>
+        r.assets.some(
+          (uploaded) =>
+            uploaded.name === path.basename(a.file) &&
+            uploaded.state === "uploaded",
+        ),
+      ),
+  );
   for (const asset of assets) {
     const uploaded = remote.assets.find(
       (a) => a.name === path.basename(asset.file),
@@ -163,7 +186,10 @@ for (const release of prepared) {
     "--draft=false",
     `--latest=${version === manifest.at(-1).version}`,
   );
-  remote = api(`repos/${repo}/releases/${remote.id}`);
+  remote = await eventually(
+    () => api(`repos/${repo}/releases/${remote.id}`),
+    (r) => !r.draft && r.body.trim() === notes.trim(),
+  );
   if (remote.draft || remote.body.trim() !== notes.trim())
     throw new Error("Release publication verification failed: " + tag);
   console.log(`Published and verified: ${remote.html_url}`);
