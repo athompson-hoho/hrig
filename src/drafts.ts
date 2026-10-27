@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useRef, useState, type SetStateAction } from "react";
 import type { Connection } from "./types";
 export function draftKey(
   kind: string,
@@ -32,21 +32,31 @@ export function useDraft<T>(
   initial: T,
   metadata: object = {},
 ) {
-  const [error, setError] = useState("");
-  const [value, setValue] = useState<T>(() => {
+  const [loaded] = useState(() => {
     try {
-      return readDraft(key)?.data ?? initial;
-    } catch {
-      return initial;
+      return { value: readDraft(key)?.data ?? initial, error: "" };
+    } catch (e) {
+      return { value: initial, error: (e as Error).message };
     }
   });
-  useEffect(() => {
+  const [error, setError] = useState(loaded.error);
+  const [value, setValue] = useState<T>(loaded.value);
+  const current = useRef(value);
+  // Callers mount with a key for the endpoint/project/recipient. Persist before
+  // returning from each event so closing a panel cannot outrun an effect.
+  const update = (action: SetStateAction<T>) => {
+    const next =
+      typeof action === "function"
+        ? (action as (value: T) => T)(current.current)
+        : action;
     try {
-      draftOperation("put", key, { kind, ...metadata, data: value });
+      draftOperation("put", key, { kind, ...metadata, data: next });
       setError("");
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [key, value]);
-  return [value, setValue, error] as const;
+    current.current = next;
+    setValue(next);
+  };
+  return [value, update, error] as const;
 }

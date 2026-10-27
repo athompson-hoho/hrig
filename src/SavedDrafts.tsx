@@ -21,7 +21,7 @@ export default function SavedDrafts({
   const remove = (key?: string) => {
     try {
       draftOperation(key ? "delete" : "clear", key);
-      window.dispatchEvent(new Event('hrig:drafts-cleared'));
+      window.dispatchEvent(new Event("hrig:drafts-cleared"));
       refresh(revision + 1);
       setConfirm(false);
     } catch (e) {
@@ -52,6 +52,29 @@ export default function SavedDrafts({
             {draft.config?.connection?.name || draft.connection?.name} ·{" "}
             {draft.updatedAt}
           </p>
+          <details>
+            <summary>Preview saved text</summary>
+            <textarea
+              aria-label="Saved draft text"
+              readOnly
+              rows={6}
+              value={
+                draft.kind === "editor"
+                  ? draft.data?.content || ""
+                  : draft.kind === "message"
+                    ? draft.data?.message || ""
+                    : [
+                        draft.data?.text,
+                        ...(draft.data?.notes || []).map(
+                          (n: any) =>
+                            `${n.path}${n.line ? ":" + n.line : ""}\n${n.text}`,
+                        ),
+                      ]
+                        .filter(Boolean)
+                        .join("\n\n")
+              }
+            />
+          </details>
           {draft.kind === "editor" && (
             <button
               className="small-button"

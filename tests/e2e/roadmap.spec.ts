@@ -407,7 +407,7 @@ test("WSL attention, role templates, task assignment, lifecycle confirmations an
       .getByRole("button", { name: "Send notes to selected seat", exact: true })
       .click();
     await expect(
-      page.getByText("Feedback sent through OpenRig.", { exact: true }),
+      page.getByText(/Feedback accepted by OpenRig/),
     ).toBeVisible();
     const sent = (
       await core.fileOperation(connection, {

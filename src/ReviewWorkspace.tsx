@@ -351,7 +351,7 @@ export function ReviewWorkspace({
       </button>
       {draft.status === "accepted" && (
         <p className="success-note">
-          Feedback sent through OpenRig. Accepted does not confirm the agent
+          Feedback accepted by OpenRig. Accepted does not confirm the agent
           read it.
         </p>
       )}
