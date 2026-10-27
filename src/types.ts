@@ -91,6 +91,7 @@ export interface TerminalEvent {
   exitCode?: number;
 }
 export interface HrigAPI {
+  platform: string;
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};

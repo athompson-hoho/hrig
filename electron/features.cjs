@@ -27,7 +27,7 @@ function rigCommand(connection, args) {
 }
 async function runRig(connection, args, timeout = 25000) {
   core.validateConnection(connection);
-  if (connection.kind === "local")
+  if (connection.kind === "local" && process.platform==='win32')
     throw new Error("Choose a WSL or SSH connection for OpenRig.");
   const t = core.transport(
     connection,
@@ -45,7 +45,7 @@ async function runRig(connection, args, timeout = 25000) {
 }
 async function diagnose(connection) {
   core.validateConnection(connection);
-  if (connection.kind === "local")
+  if (connection.kind === "local" && process.platform==='win32')
     return {
       checks: [
         {
@@ -555,7 +555,7 @@ print(json.dumps(os.path.join(os.path.realpath(os.path.expanduser(a['root'])),a[
   return { path: resolved, spec, result, previewToken };
 }
 async function ports(connection) {
-  if (connection.kind === "local") {
+  if (connection.kind === "local" && process.platform==='win32') {
     const output = await core.execute("netstat.exe", ["-ano", "-p", "tcp"]);
     return [
       ...new Set(
@@ -568,6 +568,10 @@ async function ports(connection) {
     ]
       .sort((a, b) => a - b)
       .map((port) => ({ port }));
+  }
+  if(connection.kind==='local' && process.platform==='darwin') {
+    const output=await core.execute('/usr/sbin/lsof',['-nP','-iTCP','-sTCP:LISTEN','-Fn'],{acceptExitCodes:[1]});
+    return [...new Set(output.split('\n').filter(l=>l.startsWith('n')).map(l=>Number(l.match(/:(\d+)$/)?.[1])).filter(p=>p>0))].sort((a,b)=>a-b).map(port=>({port}));
   }
   return python(
     connection,
@@ -585,7 +589,7 @@ print(json.dumps([{'port':p} for p in sorted(ports)]))`,
 }
 // Only folders belonging to currently managed seats are exposed.
 async function projects(connection) {
-  if (connection.kind === "local") return [];
+  if (connection.kind === "local" && process.platform==='win32') return [];
   const inventory = await core.inventory(connection);
   return python(
     connection,

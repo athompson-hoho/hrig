@@ -4,6 +4,7 @@ const invoke =
   (...args) =>
     ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld("hrig", {
+  platform: process.platform,
   integrate: invoke('integrations:operation'),
   openWorkLink: invoke('integrations:open'),
   drafts: (request) => ipcRenderer.sendSync('drafts:operation', request),

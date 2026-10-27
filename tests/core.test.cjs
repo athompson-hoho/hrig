@@ -23,7 +23,7 @@ test("SSH command arguments cannot become local shell options or remote shell sy
     "exec tmux attach-session -t '=build@rig'\\''; touch /tmp/nope; '\\'''",
   );
   const t = transport(c, command, true);
-  assert.equal(t.file, "ssh.exe");
+  assert.equal(t.file, process.platform==='win32'?'ssh.exe':'ssh');
   assert.ok(t.args.includes("-tt"));
   assert.equal(t.args.at(-2), "dev@example.test");
   assert.throws(() =>

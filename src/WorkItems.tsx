@@ -372,7 +372,7 @@ export default function WorkItems({
       )}
       {(provider === "github" || provider === "projects") && (
         <p className="field-note">
-          Uses your Windows GitHub CLI login (gh auth login). HRig does not copy
+          Uses your system GitHub CLI login (gh auth login). HRig does not copy
           its token into project settings. Run gh auth refresh -s read:project
           if Projects access is missing.
         </p>
@@ -383,7 +383,7 @@ export default function WorkItems({
             Linear connection {credential ? "(connected)" : "(not connected)"}
           </summary>
           <p className="field-note">
-            Personal API key stored with Windows encryption, outside project
+            Personal API key stored with system encryption, outside project
             preferences and draft exports. Secure storage:{" "}
             {secure ? "available" : "unavailable"}. Only the fixed Linear API
             receives the key.

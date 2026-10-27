@@ -40,8 +40,11 @@ function validateConnection(value) {
 }
 function transport(connection, command, interactive = false) {
   validateConnection(connection);
-  if (connection.kind === "local")
-    return { file: process.env.ComSpec || "powershell.exe", args: [] };
+  if (connection.kind === "local") {
+    if (process.platform === "win32")
+      return { file: process.env.ComSpec || "powershell.exe", args: [] };
+    return { file: "/bin/bash", args: ["-lc", command] };
+  }
   if (connection.kind === "wsl")
     return {
       file: "wsl.exe",
@@ -59,10 +62,10 @@ function transport(connection, command, interactive = false) {
   if (connection.port) args.push("-p", String(connection.port));
   if (interactive) args.push("-tt");
   args.push(connection.host, `bash -lc ${quote(command)}`);
-  return { file: "ssh.exe", args };
+  return { file: process.platform === "win32" ? "ssh.exe" : "ssh", args };
 }
 function execute(file, args, options = {}) {
-  const { input, ...executionOptions } = options;
+  const { input, acceptExitCodes = [], ...executionOptions } = options;
   return new Promise((resolve, reject) => {
     const child = execFile(
       file,
@@ -88,7 +91,8 @@ function execute(file, args, options = {}) {
               .slice(-10)
               .join("\n")
           : raw;
-        if (error) reject(new Error(message.slice(-2500)));
+        if (error && (!acceptExitCodes.includes(error.code) || stderr.trim()))
+          reject(new Error(message.slice(-2500)));
         else resolve(stdout);
       },
     );
@@ -162,7 +166,7 @@ function normalizeInventory(rigData, nodeData) {
 }
 async function inventory(connection) {
   validateConnection(connection);
-  if (connection.kind === "local")
+  if (connection.kind === "local" && process.platform === "win32")
     throw new Error(
       "OpenRig runs in WSL or on an SSH host. Add a connection to discover rigs. Local mode supports files, Git, and PowerShell.",
     );
@@ -222,7 +226,7 @@ function normalizeQueue(data, rigName) {
 }
 async function queue(connection, rigName) {
   validateConnection(connection);
-  if (connection.kind === "local") return [];
+  if (connection.kind === "local" && process.platform === "win32") return [];
   // queue list has no --rig flag. Read a bounded cross-rig window and filter
   // its canonical seat addresses without assuming the desktop is an agent.
   const data = parseJson(
@@ -509,26 +513,32 @@ async function gitStatus(connection, root) {
 }
 async function detectConnections() {
   const found = [
-    { id: "local", name: "This computer", kind: "local", root: process.cwd() },
+    {
+      id: "local",
+      name: "This computer",
+      kind: "local",
+      root: process.platform === "win32" ? process.cwd() : os.homedir(),
+    },
   ];
-  try {
-    const data = await execute("wsl.exe", ["--list", "--quiet"], {
-      encoding: "utf16le",
-      timeout: 8000,
-    });
-    for (const distro of data
-      .replace(/\0/g, "")
-      .split(/[\r\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s && !s.startsWith("docker-")))
-      found.push({
-        id: `wsl-${distro}`,
-        name: distro,
-        kind: "wsl",
-        distro,
-        root: "~",
+  if (process.platform === "win32")
+    try {
+      const data = await execute("wsl.exe", ["--list", "--quiet"], {
+        encoding: "utf16le",
+        timeout: 8000,
       });
-  } catch {}
+      for (const distro of data
+        .replace(/\0/g, "")
+        .split(/[\r\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s && !s.startsWith("docker-")))
+        found.push({
+          id: `wsl-${distro}`,
+          name: distro,
+          kind: "wsl",
+          distro,
+          root: "~",
+        });
+    } catch {}
   try {
     const data = await fs.readFile(
       path.join(os.homedir(), ".ssh", "config"),

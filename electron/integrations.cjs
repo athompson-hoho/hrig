@@ -54,6 +54,10 @@ function integrationService({
   runGh = gh,
   request = fetch,
 }) {
+  const secureStorageAvailable = () =>
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== "linux" ||
+      safeStorage.getSelectedStorageBackend?.() !== "basic_text");
   const credentialFile = path.join(directory, "linear-key.bin");
   const id = (v) => {
     if (typeof v !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,159}$/.test(v))
@@ -101,7 +105,7 @@ function integrationService({
     if (a.op === "credentials")
       return {
         linear: fs.existsSync(credentialFile),
-        secureStorage: safeStorage.isEncryptionAvailable(),
+        secureStorage: secureStorageAvailable(),
       };
     if (a.op === "disconnectLinear") {
       if (a.confirmed !== true) throw new Error("Confirm disconnect.");
@@ -109,9 +113,9 @@ function integrationService({
       return { disconnected: true };
     }
     if (a.op === "connectLinear") {
-      if (!safeStorage.isEncryptionAvailable())
+      if (!secureStorageAvailable())
         throw new Error(
-          "Windows secure storage is unavailable; the API key will not be stored as plaintext.",
+          "System secure storage is unavailable; the API key will not be stored as plaintext. Enable the desktop keyring and restart HRig.",
         );
       if (
         typeof a.key !== "string" ||

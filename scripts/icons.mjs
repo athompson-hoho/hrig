@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 await fs.mkdir("assets", { recursive: true });
 const png = await sharp("public/icon.svg").resize(256, 256).png().toBuffer();
 await fs.writeFile("assets/icon.png", png);
+await fs.writeFile('assets/icon-mac.png',await sharp('public/icon.svg').resize(1024,1024).png().toBuffer());
 const header = Buffer.alloc(22);
 header.writeUInt16LE(1, 2);
 header.writeUInt16LE(1, 4);

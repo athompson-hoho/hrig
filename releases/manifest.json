@@ -48,5 +48,11 @@
     "version": "0.8.0",
     "title": "Recovery, durable drafts and project boards",
     "sourceRef": "HEAD"
+  },
+  {
+    "version": "0.8.1",
+    "title": "Native macOS, Linux and Windows",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

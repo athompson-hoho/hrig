@@ -1,4 +1,5 @@
 import { themes } from "./theme-catalog";
+import { isWindows } from "./platform";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -26,10 +27,10 @@ export const defaults = {
   "terminal.cursorBlink": true,
   "terminal.scrollback": 10000,
   "terminal.theme": "inherit",
-  "terminal.localShell": "powershell",
+  "terminal.localShell": "system",
   "terminal.autoReconnect": true,
   "workspace.refreshInterval": 15,
-  "connections.defaultKind": "wsl",
+  "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
   "rig.defaultTeamSize": 2,
@@ -264,10 +265,13 @@ export const schema: Setting[] = [
     category: "Terminal",
     label: "New local shell",
     description:
-      "Shell for new Windows terminals. Existing terminals and remote agent sessions are unaffected.",
+      "Shell for new local terminals. System uses PowerShell on Windows and your login shell on macOS/Linux. Windows-only choices fall back to the login shell on Unix.",
     options: [
+      { value: "system", label: "System default" },
       { value: "powershell", label: "Windows PowerShell" },
       { value: "cmd", label: "Command Prompt" },
+      { value: "bash", label: "Bash (macOS/Linux)" },
+      { value: "zsh", label: "Zsh (macOS/Linux)" },
     ],
   },
   {

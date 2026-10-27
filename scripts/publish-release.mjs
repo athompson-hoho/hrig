@@ -55,6 +55,7 @@ if (metadata.visibility !== "PUBLIC")
 const prepared = [];
 for (const release of releases) {
   const { version, sourceRef } = release;
+  if(release.native)throw new Error("Use the Native desktop release workflow for "+version+"; the historical Windows-only publisher cannot replace a combined checksum.");
   if (!/^\d+\.\d+\.\d+$/.test(version))
     throw new Error("Invalid version in manifest.");
   const tag = "v" + version;

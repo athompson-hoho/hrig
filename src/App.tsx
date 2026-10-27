@@ -98,6 +98,7 @@ import {
 } from "./editor-buffers";
 import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
+import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
@@ -198,7 +199,7 @@ export default function App() {
   const [connectionForm, setConnectionForm] = useState<Connection>({
     id: "",
     name: "",
-    kind: "wsl",
+    kind: isWindows ? "wsl" : "ssh",
     distro: "Ubuntu",
     root: "~",
   });
@@ -455,7 +456,7 @@ export default function App() {
         ? "Checking the last successful snapshot…"
         : "",
     );
-    if (connection.kind === "local") {
+    if (connection.kind === "local" && isWindows) {
       setBusy(false);
       return;
     }
@@ -668,9 +669,10 @@ export default function App() {
     addPanel(
       "terminal",
       connection.kind === "local"
-        ? preferences["terminal.localShell"] === "cmd"
-          ? "Command Prompt"
-          : "PowerShell"
+        ? localShellLabel(preferences["terminal.localShell"]).replace(
+            "Windows PowerShell",
+            "PowerShell",
+          )
         : "Shell",
       { terminalId: id },
       id,
@@ -1889,6 +1891,7 @@ export default function App() {
           >
             <div className="segmented">
               <button
+                disabled={!isWindows}
                 className={connectionForm.kind === "wsl" ? "selected" : ""}
                 onClick={() =>
                   setConnectionForm((c) => ({ ...c, kind: "wsl", id: "" }))
@@ -1983,7 +1986,7 @@ export default function App() {
                   />
                 </label>
                 <p className="field-note">
-                  Uses Windows OpenSSH and your SSH config. For a new host or
+                  Uses system OpenSSH and your SSH config. For a new host or
                   password login, open a shell to accept its host key or
                   authenticate, then refresh rigs. Key / agent authentication is
                   used for background discovery.

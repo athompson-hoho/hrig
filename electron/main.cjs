@@ -11,6 +11,7 @@ const {
   shell,
 } = require("electron");
 const path = require("node:path");
+if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').homedir(),'.local','bin'),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH || '/usr/bin:/bin'].join(path.delimiter);
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const core = require("./core.cjs");
@@ -130,7 +131,7 @@ async function createWindow() {
       spellcheck: false,
     },
   });
-  Menu.setApplicationMenu(null);
+  Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]):null);
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
   mainWindow.webContents.on("will-prevent-unload", (event) => {
     const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -242,7 +243,7 @@ handle("connections:detect", () => core.detectConnections());
 handle("rig:inventory", (_event, connection) => core.inventory(connection));
 handle("rig:send", async (_event, connection, seat, message) => {
   core.validateConnection(connection);
-  if (connection.kind === "local")
+  if (connection.kind === "local" && process.platform==='win32')
     throw new Error("Select a WSL or SSH connection.");
   if (
     typeof seat !== "string" ||
@@ -316,7 +317,7 @@ handle("preview:open", async (_event, connection, port) => {
   ];
   if (connection.port) args.push("-p", String(connection.port));
   args.push(connection.host);
-  const process = spawn("ssh.exe", args, {
+  const process = spawn(require('node:process').platform==='win32' ? 'ssh.exe':'ssh', args, {
     windowsHide: true,
     stdio: ["ignore", "ignore", "pipe"],
   });
@@ -392,7 +393,7 @@ handle("terminal:create", async (event, options) => {
   core.validateConnection(connection);
   const existing = terminals.get(id);
   if (existing) return { id, buffer: existing.buffer, reused: true };
-  if (options.seatId && connection.kind !== "local") {
+  if (options.seatId && (connection.kind !== "local" || process.platform!=='win32')) {
     const latest = await core.inventory(connection);
     const seat = latest.seats.find((s) => s.id === options.seatId);
     if (!seat?.session)
@@ -403,13 +404,8 @@ handle("terminal:create", async (event, options) => {
   }
   let file, args;
   if (connection.kind === "local") {
-    if (
-      options.localShell &&
-      !["powershell", "cmd"].includes(options.localShell)
-    )
-      throw new Error("Unsupported local shell");
-    file = options.localShell === "cmd" ? "cmd.exe" : "powershell.exe";
-    args = options.localShell === "cmd" ? ["/Q"] : ["-NoLogo", "-NoProfile"];
+    if(session) ({file,args}=core.transport(connection,core.sessionCommand(session),true));
+    else ({file,args}=require('./platform.cjs').localShell(process.platform,options.localShell));
   } else {
     const directory =
       !root || root === "~"
@@ -426,7 +422,7 @@ handle("terminal:create", async (event, options) => {
     pty = require("node-pty");
   } catch {
     throw new Error(
-      "The Windows terminal module could not load. Reinstall dependencies for this computer.",
+      "The native terminal module could not load. Reinstall the build for this operating system and architecture.",
     );
   }
   const env = {

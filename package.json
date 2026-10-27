@@ -1,8 +1,8 @@
 {
   "name": "hrig",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
-  "description": "A graphical Windows workspace for OpenRig",
+  "description": "A graphical desktop workspace for OpenRig",
   "main": "electron/main.cjs",
   "author": "HRig",
   "scripts": {
@@ -74,7 +74,26 @@
       "icon": "assets/icon.ico",
       "signExecutable": false
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon-mac.png",
+      "identity": null,
+      "category": "public.app-category.developer-tools",
+      "artifactName": "HRig-${version}-macos-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "icon": "assets/icon.png",
+      "category": "Development",
+      "artifactName": "HRig-${version}-linux-${arch}.${ext}"
+    }
   },
   "overrides": {
     "dompurify": "3.4.17"

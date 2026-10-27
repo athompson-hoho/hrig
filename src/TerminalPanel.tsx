@@ -6,6 +6,7 @@ import { ErrorBox, IconButton, StatusDot } from "./components";
 import type { PanelConfig } from "./types";
 import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
+import { localShellLabel } from "./platform";
 export default function TerminalPanel({ config }: { config: PanelConfig }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
@@ -208,9 +209,7 @@ export default function TerminalPanel({ config }: { config: PanelConfig }) {
             {config.seat
               ? `${config.seat.runtime}${config.seat.model ? " · " + config.seat.model : ""}`
               : config.connection.kind === "local"
-                ? localShell === "cmd"
-                  ? "Command Prompt"
-                  : "Windows PowerShell"
+                ? localShellLabel(localShell)
                 : "Bash"}
           </span>
         </div>

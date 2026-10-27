@@ -1,6 +1,6 @@
 # HRig
 
-A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig). Arrange existing agent sessions with graphical tabs, splits, floating panels, and separate windows. Open project files and Git diffs alongside your agents.
+A desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig). Arrange existing agent sessions with graphical tabs, splits, floating panels, and separate windows. Open project files and Git diffs alongside your agents.
 
 ## Screenshots
 
@@ -242,3 +242,7 @@ HRig 0.8.0 adds unsaved-file recovery, Save All and persistent message/review dr
 Open **Tools → Project boards and integrations** for local tasks, GitHub Issues/Projects and Linear. External mutations and linked OpenRig task assignments require explicit confirmation. GitHub uses the Windows CLI login; Linear personal keys use Windows encrypted storage. [Setup and supported actions](INTEGRATIONS.md).
 
 ![Packaged HRig project board with local tasks in Todo, Doing and Done columns](docs/screenshots/task-boards.png)
+
+## macOS and Linux
+
+HRig 0.8.1 adds native macOS downloads for Apple Silicon and Intel, and Linux downloads for x64 and ARM64. All five desktop targets pass native packaged checks before publication. macOS builds are unsigned/unnotarized. See [native release setup and limitations](NATIVE_RELEASES.md) and [0.8.1 release notes](releases/v0.8.1.md).
