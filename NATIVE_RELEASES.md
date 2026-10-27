@@ -9,3 +9,5 @@ The **Native desktop release** GitHub Actions workflow runs the five supported n
 macOS signing/notarization is not configured. These are unsigned desktop downloads; no claim of Gatekeeper/App Store approval is made. Linux without a functioning encrypted desktop keyring cannot store a Linear key; `basic_text` is deliberately rejected. Native CI establishes packaged runtime behavior on its listed runner OS, not every desktop distribution, permissions flow or display server.
 
 Build references: [electron-builder native multi-platform constraints](https://www.electron.build/docs/features/multi-platform-build/), [GitHub native runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+
+Verified release: [0.8.1](https://github.com/athompson-hoho/hrig/releases/tag/v0.8.1), source `bce6937fe45a805efcea7e4a5ec066c6bef60bbf`. All five native targets passed; all nine application download hashes and the checksum/QA metadata digests were verified. [Native runner evidence](https://github.com/athompson-hoho/hrig/actions/runs/40464745845). The source tag is unchanged by later publisher/documentation maintenance.

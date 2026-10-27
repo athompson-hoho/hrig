@@ -246,3 +246,15 @@ Open **Tools → Project boards and integrations** for local tasks, GitHub Issue
 ## macOS and Linux
 
 HRig 0.8.1 adds native macOS downloads for Apple Silicon and Intel, and Linux downloads for x64 and ARM64. All five desktop targets pass native packaged checks before publication. macOS builds are unsigned/unnotarized. See [native release setup and limitations](NATIVE_RELEASES.md) and [0.8.1 release notes](releases/v0.8.1.md).
+
+### Native downloads (0.8.1)
+
+| Platform | Downloads |
+|---|---|
+| macOS Apple Silicon | [DMG](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-macos-arm64.dmg) / [ZIP](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-macos-arm64.zip) |
+| macOS Intel | [DMG](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-macos-x64.dmg) / [ZIP](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-macos-x64.zip) |
+| Linux x64 | [AppImage](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-linux-x64.AppImage) / [tar.gz](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-linux-x64.tar.gz) |
+| Linux ARM64 | [AppImage](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-linux-arm64.AppImage) / [tar.gz](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig-0.8.1-linux-arm64.tar.gz) |
+| Windows x64 | [Portable EXE](https://github.com/athompson-hoho/hrig/releases/download/v0.8.1/HRig.0.8.1.exe) |
+
+[Full notes, checksums and native QA evidence](https://github.com/athompson-hoho/hrig/releases/tag/v0.8.1). macOS builds are unsigned and not notarized.

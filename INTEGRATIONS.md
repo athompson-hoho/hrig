@@ -8,7 +8,7 @@ Create, edit and explicitly delete tasks, and move them between Todo, Doing and 
 
 ## GitHub Issues
 
-Install GitHub CLI on Windows and run `gh auth login`. HRig uses that login through fixed `gh` arguments and stdin JSON; it does not copy the GitHub token into preferences. Enter `owner/repository`, then **Load / refresh board**. View descriptions, source links and open/closed columns. Creating an issue or changing its state requires a confirmation in the item dialog. GitHub.com is supported; Enterprise hosts are outside this release.
+Install GitHub CLI on the machine running HRig and run `gh auth login`. HRig uses that login through fixed `gh` arguments and stdin JSON; it does not copy the GitHub token into preferences. Enter `owner/repository`, then **Load / refresh board**. View descriptions, source links and open/closed columns. Creating an issue or changing its state requires a confirmation in the item dialog. GitHub.com is supported; Enterprise hosts are outside this release.
 
 ## GitHub Projects
 
@@ -16,7 +16,7 @@ Enter the owner login/organization and project number from the project URL. Proj
 
 ## Linear
 
-Select Linear and expand **Linear connection**. Enter a personal API key and choose **Verify and connect Linear**. The key is checked against the viewer endpoint and stored using Electron `safeStorage` (Windows encryption) in `linear-key.bin` in user data. HRig refuses plaintext fallback. Keys are not returned to the renderer, written into workspace JSON, or included in draft/preferences exports. Use a key with only the workspace/team permissions you need. This release uses personal keys; OAuth sign-in is a follow-up.
+Select Linear and expand **Linear connection**. Enter a personal API key and choose **Verify and connect Linear**. The key is checked against the viewer endpoint and stored using Electron `safeStorage` (Windows DPAPI, macOS Keychain or an encrypted Linux desktop keyring) in `linear-key.bin` in user data. HRig refuses plaintext fallback, including Linux basic_text; enable the desktop keyring before connecting. Keys are not returned to the renderer, written into workspace JSON, or included in draft/preferences exports. Use a key with only the workspace/team permissions you need. This release uses personal keys; OAuth sign-in is a follow-up.
 
 Load the board to discover teams/projects. Choose filters and refresh. Select a team before creating an issue; optionally choose a project. Workflow status choices come from the selected issue's team. Issue creation and status updates require confirmation. Disconnect explicitly removes the locally stored key. Only `https://api.linear.app/graphql` receives the credential.
 
