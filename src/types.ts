@@ -43,6 +43,11 @@ export interface GitEntry {
   path: string;
   status: string;
 }
+export interface GitStatus {
+  isRepository: boolean;
+  root: string;
+  entries: GitEntry[];
+}
 export interface SavedLayout {
   id: string;
   name: string;
@@ -136,7 +141,7 @@ export interface HrigAPI {
       query?: string;
     },
   ): Promise<any>;
-  git(connection: Connection, root: string): Promise<GitEntry[]>;
+  git(connection: Connection, root: string): Promise<GitStatus>;
   pickFolder(): Promise<string | null>;
   createTerminal(options: {
     id: string;

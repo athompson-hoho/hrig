@@ -146,20 +146,29 @@ export default function Sidebar({
   const [query, setQuery] = useState("");
   const [changes, setChanges] = useState<GitEntry[]>([]);
   const [gitError, setGitError] = useState("");
+  const [isRepository, setIsRepository] = useState(true);
+  const [gitLoading, setGitLoading] = useState(false);
   const [gitRevision, setGitRevision] = useState(0);
   useEffect(() => {
     if (section !== "changes") return;
     let active = true;
+    setGitLoading(true);
+    setGitError("");
+    setChanges([]);
     window.hrig
       .git(connection, root)
       .then((data) => {
         if (active) {
-          setChanges(data);
+          setChanges(data.entries);
+          setIsRepository(data.isRepository);
           setGitError("");
         }
       })
       .catch((e) => {
         if (active) setGitError(e.message);
+      })
+      .finally(() => {
+        if (active) setGitLoading(false);
       });
     return () => {
       active = false;
@@ -244,8 +253,22 @@ export default function Sidebar({
             <span className="count">{changes.length}</span>
           </div>
           <div className="sidebar-scroll">
-            {gitError ? (
+            {gitLoading ? (
+              <div className="sidebar-empty">Checking repository…</div>
+            ) : gitError ? (
               <ErrorBox error={gitError} />
+            ) : !isRepository ? (
+              <div className="sidebar-empty">
+                <GitBranch size={25} />
+                <strong>Open a Git project</strong>
+                <p>
+                  This folder is not a Git repository. Choose your repository
+                  folder to see changes.
+                </p>
+                <button className="small-button" onClick={onProject}>
+                  Choose project folder
+                </button>
+              </div>
             ) : changes.length ? (
               changes.map((c) => (
                 <button

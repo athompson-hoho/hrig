@@ -19,14 +19,17 @@ export function ReviewWorkspace({
   seats,
   onDiff,
   onSeat,
+  onProject,
 }: {
   connection: Connection;
   root: string;
   seats: Seat[];
   onDiff: (path: string) => void;
   onSeat: (seat: Seat) => void;
+  onProject: () => void;
 }) {
   const [changes, setChanges] = useState<GitEntry[] | null>(null);
+  const [isRepository, setIsRepository] = useState(true);
   const draftKey = connection.id + "::" + root;
   const [target, setTarget] = useState(
     reviewDrafts.get(draftKey)?.target || "",
@@ -46,10 +49,17 @@ export function ReviewWorkspace({
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
+    setChanges(null);
+    setIsRepository(true);
+    setError("");
     window.hrig
       .git(connection, root)
       .then((r) => {
-        if (active) setChanges(r);
+        if (active) {
+          setChanges(r.entries);
+          setIsRepository(r.isRepository);
+          setError("");
+        }
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -103,7 +113,19 @@ export function ReviewWorkspace({
         Open recipient session
       </button>
       <div className="review-changes">
-        {changes === null ? (
+        {!isRepository ? (
+          <div className="sidebar-empty">
+            <GitBranch size={25} />
+            <strong>Open a Git project</strong>
+            <p>
+              This folder is not a Git repository. Choose your repository folder
+              to review changes.
+            </p>
+            <button className="secondary-button" onClick={onProject}>
+              Choose project folder
+            </button>
+          </div>
+        ) : changes === null ? (
           <Loading />
         ) : changes.length ? (
           changes.map((c) => (

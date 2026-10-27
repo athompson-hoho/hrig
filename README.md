@@ -4,7 +4,7 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 ## Run the desktop app
 
-Open **`release/HRig 0.5.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.5.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -12,6 +12,8 @@ Open **`release/HRig 0.5.0.exe`**. Close an older HRig instance first so the new
 4. Use **Arrange** for Team, Focus, and Review presets, or save your own named layout.
 
 The **Explorer** opens editable project files. **Source control** shows changed files with side-by-side diffs against HEAD. **New panel** adds shells, task queues, messages, and an activity view.
+
+Source control and Review require a Git working tree. If the selected folder is your home directory or another non-repository folder, HRig shows **Open a Git project** with a **Choose project folder** button. It does not initialize a repository automatically. Other Git failures retain Git's actual error message instead of a Python traceback.
 
 ## Connections
 

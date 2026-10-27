@@ -55,3 +55,12 @@ Tests: [core](tests/core.test.cjs), [file/lifecycle guards](tests/features.test.
 - Dependency audit reported zero vulnerabilities.
 - Executable: `release/HRig 0.5.0.exe`. Existing 0.1.0 executable and live rigs were left intact.
 - Deployment checks still required for a real SSH tunnel and Windows notification delivery; those implementations are present but the automated environment does not provide their live endpoints.
+
+## Patch 0.5.1 — Git project selection
+
+- Reproduced the reported failure against the active WSL folder: `/home/athompson` is not a Git repository.
+- Added a structured non-repository state to the Git backend and a project-picker empty state in Source control and Review.
+- Preserved actual Git stderr for genuine failures instead of hiding it behind `CalledProcessError` tracebacks. No Git repository, trust configuration or home-directory files are created by this fix.
+- Added local/WSL regression tests for non-repositories and corrupt Git metadata, plus a desktop journey selecting a valid project after opening a non-repository folder.
+
+Patch validation: 11 core/WSL checks and 14 desktop journeys passed, as did the production build and packaged native-terminal/editor/doctor/Git smoke test. Verified the active home-directory query returns a normal non-repository result. Executable: `release/HRig 0.5.1.exe`.

@@ -805,6 +805,7 @@ export default function App() {
       case "review":
         return (
           <ReviewWorkspace
+            onProject={openProject}
             connection={config.connection}
             root={config.root}
             seats={seats}

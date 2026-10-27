@@ -263,6 +263,13 @@ root=os.path.realpath(os.path.expanduser(a['root']))
 target=os.path.realpath(os.path.join(root,a.get('path','')))
 if os.path.commonpath([root,target])!=root: raise Exception('The file is outside the project folder')
 op=a['op']
+def git_run(args):
+ try: return subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C'))
+ except FileNotFoundError:
+  print('Git is not installed on this machine. Install Git on the project host.',file=sys.stderr);sys.exit(1)
+def git_fail(result):
+ detail=result.stderr.decode('utf-8',errors='replace').strip() or 'Git command failed'
+ print('Git: '+detail,file=sys.stderr);sys.exit(1)
 if op=='list':
  out=[]
  for e in os.scandir(target):
@@ -279,10 +286,17 @@ elif op=='write':
  with open(target,'w',encoding='utf-8') as f: f.write(a['content'])
  print(json.dumps({'saved':True}))
 elif op=='git':
- r=subprocess.run(['git','-C',root,'status','--porcelain=v1','-z','--untracked-files=normal'],capture_output=True,check=True)
- print(json.dumps({'raw':r.stdout.decode('utf-8')}))
+ r=git_run(['rev-parse','--is-inside-work-tree'])
+ if r.returncode!=0:
+  if b'not a git repository' in r.stderr.lower(): print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
+  git_fail(r)
+ if r.stdout.strip()!=b'true': print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
+ r=git_run(['status','--porcelain=v1','-z','--untracked-files=normal'])
+ if r.returncode!=0: git_fail(r)
+ print(json.dumps({'raw':r.stdout.decode('utf-8'),'isRepository':True,'root':root}))
 elif op=='diff':
- r=subprocess.run(['git','-C',root,'diff','--no-ext-diff','HEAD','--',a['path']],capture_output=True,check=True)
+ r=git_run(['diff','--no-ext-diff','HEAD','--',a['path']])
+ if r.returncode!=0: git_fail(r)
  print(json.dumps({'diff':r.stdout.decode('utf-8')}))
 elif op=='original':
  r=subprocess.run(['git','-C',root,'show','HEAD:'+a['path']],capture_output=True)
@@ -412,17 +426,39 @@ async function fileOperation(connection, request) {
     await fs.writeFile(target, request.content, "utf8");
     return { saved: true };
   }
-  if (request.op === "git")
+  if (request.op === "git") {
+    const env = { ...process.env, LC_ALL: "C" };
+    let inside;
+    try {
+      inside = await execute(
+        "git",
+        ["-C", target, "rev-parse", "--is-inside-work-tree"],
+        { env },
+      );
+    } catch (error) {
+      if (/not a git repository/i.test(error.message))
+        return { raw: "", isRepository: false, root: target };
+      throw error;
+    }
+    if (inside.trim() !== "true")
+      return { raw: "", isRepository: false, root: target };
     return {
-      raw: await execute("git", [
-        "-C",
-        request.root,
-        "status",
-        "--porcelain=v1",
-        "-z",
-        "--untracked-files=normal",
-      ]),
+      isRepository: true,
+      root: target,
+      raw: await execute(
+        "git",
+        [
+          "-C",
+          request.root,
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=normal",
+        ],
+        { env },
+      ),
     };
+  }
   if (request.op === "diff")
     return {
       diff: await execute("git", [
@@ -462,6 +498,14 @@ function parseGitStatus(raw) {
     if (/[RC]/.test(status)) i++;
   }
   return result;
+}
+async function gitStatus(connection, root) {
+  const result = await fileOperation(connection, { op: "git", root, path: "" });
+  return {
+    isRepository: result.isRepository !== false,
+    root: result.root || root,
+    entries: parseGitStatus(result.raw),
+  };
 }
 async function detectConnections() {
   const found = [
@@ -508,6 +552,7 @@ async function detectConnections() {
   return found;
 }
 module.exports = {
+  gitStatus,
   queue,
   normalizeQueue,
   quote,

@@ -363,10 +363,8 @@ handle("files:pick", async () => {
 handle("files:operation", (_event, connection, request) =>
   core.fileOperation(connection, request),
 );
-handle("files:git", async (_event, connection, root) =>
-  core.parseGitStatus(
-    (await core.fileOperation(connection, { op: "git", root, path: "" })).raw,
-  ),
+handle("files:git", (_event, connection, root) =>
+  core.gitStatus(connection, root),
 );
 handle("terminal:create", async (event, options) => {
   const { id, connection, root } = options;

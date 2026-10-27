@@ -49,11 +49,24 @@ try {
     .getByRole("button", { name: "Connection doctor", exact: false })
     .click();
   await page.getByText("Windows workspace", { exact: true }).waitFor();
+  const gitStatus = await page.evaluate(
+    (root) =>
+      window.hrig.git(
+        { id: "local", name: "Package Git check", kind: "local", root },
+        root,
+      ),
+    process.cwd(),
+  );
+  if (
+    typeof gitStatus.isRepository !== "boolean" ||
+    !Array.isArray(gitStatus.entries)
+  )
+    throw new Error("Packaged Git status returned an incompatible response");
   if (errors.length) throw new Error(errors.join("\n"));
   await fs.mkdir("test-results", { recursive: true });
   await page.screenshot({ path: "test-results/packaged.png" });
   console.log(
-    "Packaged Windows app: renderer, preload, native PTY, bundled editor, and connection doctor passed.",
+    "Packaged Windows app: renderer, preload, native PTY, bundled editor, connection doctor, and Git status passed.",
   );
 } finally {
   await app.close();
