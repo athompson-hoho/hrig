@@ -5,3 +5,11 @@ test-results/
 playwright-report/
 .hrig-test/
 *.log
+dist-mobile/
+android/.gradle/
+android/local.properties
+android/**/build/
+ios/App/Pods/
+ios/App/build/
+ios/App/App/public/
+android/app/src/main/assets/public/

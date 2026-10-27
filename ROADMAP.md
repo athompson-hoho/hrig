@@ -98,6 +98,33 @@ Delivered 33 searchable, working preferences with user/project overrides, modifi
 
 Regression investigation: the retry journey exposed repeated identical failures being batched into an unchanged error state. Retry scheduling now tracks failure events independently and keeps the existing six-attempt cap.
 
+## Mobile companion release proposals
+
+Companion versions below are independent of desktop versions. These are proposed milestones, not promises of availability. The current Android build is a debug preview; iOS is a generated project, not a tested release. Prioritize trustworthy connections and clear action results before adding more remote controls.
+
+| Companion release | Outcome | Features and improvements | Acceptance gate |
+|---|---|---|---|
+| 0.1 preview | Try the companion | Existing rig/seat list, read-only terminal capture, tasks and explicit agent messages; downloadable Android debug APK with checksum, matching gateway source, setup instructions and an honest limitations list. | Build and gateway tests pass; Orca Android emulator journey passes; artifacts identify their source and signing type. Mark as prerelease. iOS remains source-only until tested. |
+| 0.2 | Connect reliably from anywhere | Desktop companion settings with start/stop, exact reachable URLs and firewall diagnostics; QR pairing; separate expiring credentials per device; revoke one phone; saved host profiles; reconnect with backoff; last-success time and clear stale/offline states. Store persistent credentials in platform secure storage. | Real Android and iPhone can connect over LAN and Tailscale. Wrong, expired and revoked credentials fail. Sleep, network switching and host restart recover without resending messages. The UI never labels stale data as live. |
+| 0.3 | Work comfortably from a phone | Opt-in interactive terminal attachment; touch keyboard accessory for Escape, Tab, Ctrl and arrows; scrollback search/copy; readable font controls and landscape/tablet layouts. Keep read-only viewing as the default. | Attach only to the selected existing managed seat; disconnect never stops the agent. Test keyboard composition, resize, background/resume and bounded output buffers. Never replay terminal keystrokes after an uncertain disconnect. |
+| 0.4 | Review work away from the desk | Read-only project browser and Git diffs; file/line feedback addressed to a chosen seat; task detail, filters and task creation; message draft preservation and explicit delivery state. Start with review before mobile file editing. | File access stays within the configured project. Review comments reference the actual diff revision. Failed or uncertain sends retain drafts and require deliberate retry. Mutations respect advertised OpenRig capabilities and ownership. |
+| 0.5 | Keep track of a team | Rig/seat favorites, cross-rig attention inbox, optional notifications for attention/blocked work, project preview links, tablet split view and quick actions such as “Request an update.” | Notifications are opt-in, deduplicated and contain no sensitive terminal text by default. Actions show recipient and payload before sending. Preview access uses explicit port allowlists and honors host/network policy. |
+
+### Feature priorities and boundaries
+
+- **Next:** publish the tested Android preview, make gateway setup discoverable in the desktop app, and validate real LAN/Tailscale connections. A polished connection flow is more valuable than adding controls to an unreliable connection.
+- **After connection reliability:** interactive terminals and review/diff workflows offer the largest practical improvement over the current monitor-and-message client.
+- **Useful smaller improvements:** rig/seat search, task filters, copyable connection diagnostics with secrets removed, accessible labels and larger text, clear loading/empty/error states, and a host/version compatibility check during pairing.
+- **Later experiments:** voice-to-message drafts, user-editable prompt shortcuts, notification quiet hours, and a desktop-to-phone “continue reviewing” link. Voice transcripts and shortcuts must remain editable drafts until the user sends them.
+- **Keep deliberate:** stop/delete/start actions need fresh target identity and explicit confirmation. Avoid automatic agent launches, queued destructive actions, automatic message retries, public terminal URLs, and embedding Tailscale account credentials in the companion.
+
+### Current mobile evidence
+
+- Client: [mobile/main.tsx](mobile/main.tsx); constrained network boundary: [mobile-gateway.cjs](electron/mobile-gateway.cjs).
+- Automated checks: [gateway guards](tests/mobile.test.cjs) and [phone-sized UI journey](tests/mobile/companion.spec.ts).
+- Android debug APK built and exercised through Orca on Medium Phone API 37 and the rebuilt Pixel 10 Pro XL emulator: pairing, session/terminal viewing, tasks and a fixture-confirmed message. Rotation, key rejection, disconnect and process-restart pairing were also checked on the first emulator.
+- Remaining release evidence: real devices over LAN/Tailscale, iOS build/device checks, release signing and update continuity, and reproducible artifacts tied to the published source. Emulator results do not establish real-network or iOS behavior.
+
 Validation: 14 core/WSL checks and all 18 desktop journeys passed after the retry fix. The packaged native-terminal/editor/doctor/Git smoke and packaged settings/theme capture passed. Real editor options, session continuity, system appearance, project scope persistence/reset, import rejection, shell defaults, narrow layouts and popout theming are covered. README screenshots were captured from the packaged desktop app.
 
 ### 0.7.1 - Community theme adaptations

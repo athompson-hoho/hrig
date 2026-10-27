@@ -133,6 +133,41 @@ The roadmap and implementation evidence are tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Develop
 
+### iOS and Android companion (initial implementation)
+
+Download the [Android companion prerelease](https://github.com/athompson-hoho/hrig/releases/tag/companion-android-preview.1) for the debug APK, checksum, matching source and host setup instructions. See the [proposed mobile releases](ROADMAP.md#mobile-companion-release-proposals) for planned improvements.
+
+The companion lists rigs and seats, reads the latest 200 lines of a seat's terminal, shows active tasks, and sends messages to a selected seat. It uses the same OpenRig boundary as the desktop app. Terminal screens are read-only and refresh every four seconds; this version does not provide an interactive terminal, file editing, notifications, or rig lifecycle controls. It does not create or relaunch agents.
+
+Save your WSL or SSH connections in the desktop app first. On the Windows HRig computer, build and start the companion gateway:
+
+```powershell
+npm run mobile:build
+$env:HRIG_MOBILE_TOKEN = node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+$env:HRIG_MOBILE_HOST = '192.168.1.20' # Replace with this computer's LAN or Tailscale IPv4 address
+npm run mobile:gateway
+```
+
+Read the pairing key with `$env:HRIG_MOBILE_TOKEN` in that same terminal before starting the gateway, or retain it privately when setting it. Enter `http://<computer-address>:5180` and that key in the companion. The key grants screen access and permission to send messages to all saved WSL/SSH connections. It stays in the phone app's memory, while only the host address is saved. Restarting the app requires pairing again. Change the environment key and restart the gateway to revoke access.
+
+For LAN access, the phone must be on a network that can reach the computer, with inbound TCP 5180 allowed by the Windows firewall for that network. For Tailscale, connect both devices to the same tailnet and use the computer's Tailscale IP or MagicDNS name; tailnet policy must allow the connection. No Tailscale API keys or SSH keys are copied to the phone. The gateway defaults to loopback unless you explicitly set `HRIG_MOBILE_HOST`. `HRIG_MOBILE_PORT` overrides 5180 and `HRIG_DATA_DIR` selects a different desktop workspace directory. The gateway is a separate Node.js process and requires Node.js 22+; the portable desktop executable does not start it automatically.
+
+HTTP on a LAN carries the key and session text without transport encryption. Use it only on a trusted network, or use Tailscale's encrypted network. For HTTPS, you can place the loopback gateway behind Tailscale Serve and use its HTTPS address. Browser clients must load the UI from the gateway's own origin; native apps use Capacitor HTTP. Native transport settings permit HTTP so user-entered private IPs work; HTTPS is preferred when available.
+
+Native Android and iOS projects are included. The client bundle is packaged locally using [Capacitor's build and sync workflow](https://capacitorjs.com/docs/getting-started).
+
+```powershell
+npm run mobile:sync
+npm run mobile:android # Android Studio; build and run on a device
+npm run mobile:ios     # Xcode on macOS; configure signing and run on an iPhone
+```
+
+Android needs Android Studio and its SDK/JDK. iOS builds require macOS and Xcode. The Android debug APK has been built and tested through Orca on the Medium Phone API 37 emulator: invalid-key rejection, native HTTP pairing, sessions, terminal capture, task browsing, message receipt, rotation, disconnect, and re-pairing after process restart. Testing used the isolated fixture gateway below, not live agents. The test also verified light system-bar icons against the dark app background. iOS and physical-device LAN/Tailscale access still require validation; this repository does not include signed store packages. You can also open the gateway URL directly in a phone browser to try the client without installing an app. This implementation is inspired by the remote workspace workflow, with no dependency on Orca's private protocols.
+
+`npm run test:mobile` checks the touch UI against a fixture gateway. Gateway authentication and operation boundaries are included in `npm test`.
+
+For native Android testing with Orca, run `npm run mobile:sync`, then `android/gradlew.bat -p android assembleDebug` with `ANDROID_HOME` pointing to your SDK. Start the isolated gateway with `node tests/mobile/native-gateway.cjs`, attach your device using `orca emulator attach <device> --json`, install `android/app/build/outputs/apk/debug/app-debug.apk` with `orca emulator install`, and launch `dev.hrig.companion` with `orca emulator launch`. In an Android emulator use host address `http://10.0.2.2:5181` and fixture key `native-emulator-fixture-key-12345678`. The fixture supplies fake sessions and prints message receipts; it never contacts live rigs. Stop that gateway when testing is finished. This verifies the native HTTP bridge; separate LAN/Tailscale device tests are still needed.
+
 Requires Windows x64 and Node.js 22 or newer.
 
 ```powershell
@@ -191,9 +226,11 @@ The designer uses a three-step progress indicator, visual work and team choices,
 ### Wizard appearance (0.6.2)
 
 The rig designer now follows the workspace tool panels: compact headings and steps, shared control styling, flat surfaces, restrained mint selections, and denser forms and seat layouts. The screenshots above show the updated interface.
+
 ### Settings and themes (0.7.0)
 
 Open **Settings** from the activity rail, Tools, the command center, or **Ctrl+,**. Search 33 preferences across appearance, editor, terminal, workspace, connection/rig defaults, and notifications. User and local project scopes include modified filters, resets, and validated JSON import/export. Five palettes plus Follow Windows coordinate the app, editors, terminals, and detached panels. Changes to terminal appearance preserve the running session. See [SETTINGS.md](SETTINGS.md) for the feature plan, catalog, scope rules, and follow-up ideas.
+
 ### Community themes (0.7.1)
 
 Appearance includes Catppuccin (Mocha, Macchiato, Frappe, Latte), Nord, Dracula, Tokyo Night, and Gruvbox Dark. Choose **Theme default** for the native accent, or retain a custom accent. Each adaptation coordinates the app, editor syntax, all 16 terminal colors, and detached panels; terminal themes can also be selected independently. Palettes and licenses ship offline. [Theme credits and source revisions](THEME_CREDITS.md).
