@@ -2,6 +2,74 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+test("board imports require confirmation and record an exact OpenRig receipt to prevent duplicates", async () => {
+  const { env } = await fixture("wsl");
+  const app = await electron.launch({ args: ["."], env });
+  try {
+    await app.evaluate(({ ipcMain }) => {
+      (globalThis as any).qaAssignments = [];
+      ipcMain.removeHandler("rig:inventory");
+      ipcMain.handle("rig:inventory", () => ({
+        rigs: [],
+        seats: [
+          {
+            id: "builder",
+            rigId: "rig",
+            rigName: "fixture",
+            name: "builder",
+            runtime: "qa",
+            session: "qa",
+            status: "idle",
+          },
+        ],
+        sampledAt: "now",
+      }));
+      ipcMain.removeHandler("rig:action");
+      ipcMain.handle("rig:action", (_e, a, r) => {
+        (globalThis as any).qaAssignments.push(r);
+        return { qitemId: "linked-task-42" };
+      });
+    });
+    const page = await app.firstWindow();
+    await page
+      .getByRole("button", { name: "Refresh rigs", exact: true })
+      .click();
+    await command(page, "Task boards and integrations");
+    await page.getByRole("button", { name: "New task", exact: true }).click();
+    await page.getByLabel("Issue title").fill("Assign this local item");
+    await page.getByRole("button", { name: "Confirm create" }).click();
+    await page.getByRole("button", { name: /Assign this local item/ }).click();
+    await page.getByLabel("Board task recipient").selectOption("builder");
+    await page
+      .getByRole("button", { name: "Review OpenRig assignment" })
+      .click();
+    expect(
+      await app.evaluate(() => (globalThis as any).qaAssignments.length),
+    ).toBe(0);
+    await page
+      .getByRole("button", { name: "Confirm OpenRig assignment" })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /Assign this local item/ }),
+    ).toContainText("linked-task-42");
+    await page.getByRole("button", { name: /Assign this local item/ }).click();
+    await expect(
+      page.getByRole("button", { name: "Review OpenRig assignment" }),
+    ).toBeDisabled();
+    expect(
+      await app.evaluate(() => (globalThis as any).qaAssignments),
+    ).toMatchObject([
+      {
+        op: "taskCreate",
+        title: "Assign this local item",
+        destination: "builder@fixture",
+      },
+    ]);
+  } finally {
+    await app.close();
+  }
+});
 async function fixture(kind = "local") {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hrig-reliability-"));
   await fs.writeFile(path.join(dir, "demo.ts"), "export const value = 1;\n");
@@ -316,7 +384,9 @@ test("review drafts persist and stale revisions or changed recipients cannot rec
       .click();
     await command(page, "Review workspace");
     await page.getByLabel("Review note file").fill("demo.ts");
-    await page.getByLabel("Review note", {exact:true}).fill("Preserve this review");
+    await page
+      .getByLabel("Review note", { exact: true })
+      .fill("Preserve this review");
     await page.getByRole("button", { name: "Add review note" }).click();
     await expect(page.locator(".review-note")).toContainText(
       "Preserve this review",
