@@ -219,3 +219,7 @@ HR-13: terminal search with case/regex, capped match counts, next/previous navig
 HR-14 and HR-15 implemented: searchable recent/favorite project hub with endpoint-aware history and validation before switching; recent-first panel navigator, native popout focus, named groups and keyboard move/split with arrangement undo. HR-16 partially implemented: bounded fuzzy Quick Open across local/WSL/SSH, keyboard selection, line suffix and explicit partial results. Advanced content-search filters remain open. See [navigation behavior](NAVIGATION.md).
 
 Local validation: production and mobile web builds, 36 applicable backend checks (one platform skip), and all 31 desktop journeys passed, including real WSL Quick Open, draft/session continuity, native popout focus and stale-result handling.
+
+### 0.11.0 - Account-aware rig design and command coverage
+
+Optional project goals with editable suggestions; automatic runtimes selected from host-scoped authenticated providers; status-bar and wizard account discovery with read-only Orca profiles. Team assessment compares proposals and retains manual seat edits and first-handoff plans. The OpenRig control center adds installed-help command forms and single-use action reviews. Account switching, account-to-seat binding and context/quota telemetry remain future work. [Account limits](docs/ACCOUNTS.md), [CLI interface coverage](docs/CLI-GUI-COVERAGE.md).

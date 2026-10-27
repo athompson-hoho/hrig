@@ -185,6 +185,8 @@ export default function TerminalPanel({
       previousSession.current = config.seat?.session;
       return window.hrig.createTerminal({
         id,
+        rigControlToken: config.rigControlToken,
+        rigControlConfirmation: config.rigControlConfirmation,
         connection: config.connection,
         root: config.root,
         session: config.seat?.session,
@@ -253,13 +255,19 @@ export default function TerminalPanel({
           {config.seat ? config.seat.name.slice(0, 2).toUpperCase() : ">_"}
         </span>
         <div>
-          <strong>{config.seat?.name || "Shell"}</strong>
+          <strong>
+            {config.rigControlToken
+              ? config.role || "OpenRig action"
+              : config.seat?.name || "Shell"}
+          </strong>
           <span>
-            {config.seat
-              ? `${config.seat.runtime}${config.seat.model ? " · " + config.seat.model : ""}`
-              : config.connection.kind === "local"
-                ? localShellLabel(localShell)
-                : "Bash"}
+            {config.rigControlToken
+              ? "Reviewed one-time command"
+              : config.seat
+                ? `${config.seat.runtime}${config.seat.model ? " · " + config.seat.model : ""}`
+                : config.connection.kind === "local"
+                  ? localShellLabel(localShell)
+                  : "Bash"}
           </span>
         </div>
         <span className="session-connection">
@@ -269,21 +277,29 @@ export default function TerminalPanel({
         <StatusDot
           status={ended !== null ? "stopped" : ready ? "idle" : "unknown"}
         />
-        <IconButton
-          title="Reconnect terminal"
-          onClick={async () => {
-            await window.hrig.closeTerminal(config.terminalId!);
-            retries.current = 0;
-            setAttempt((n) => n + 1);
-          }}
-        >
-          <RotateCcw size={13} />
-        </IconButton>
+        {!config.rigControlToken && (
+          <IconButton
+            title="Reconnect terminal"
+            onClick={async () => {
+              await window.hrig.closeTerminal(config.terminalId!);
+              retries.current = 0;
+              setAttempt((n) => n + 1);
+            }}
+          >
+            <RotateCcw size={13} />
+          </IconButton>
+        )}
       </div>
       {config.seat && (
         <div className="terminal-context">
           <CircleHelp size={12} />
           Connected to an existing seat. Closing this panel only detaches.
+        </div>
+      )}
+      {config.rigControlToken && (
+        <div className="terminal-context">
+          This action runs once. Close this terminal and review the action again
+          to run it another time.
         </div>
       )}
       {error && <ErrorBox error={error} />}
@@ -304,8 +320,16 @@ export default function TerminalPanel({
       <div className="terminal-host" ref={host} />
       {ended !== null && (
         <div className="terminal-ended">
-          Connection ended (exit {ended}).{" "}
-          <button onClick={() => setAttempt((n) => n + 1)}>Reconnect</button>
+          {config.rigControlToken ? (
+            `Command finished (exit ${ended}). Review the action again to run it another time.`
+          ) : (
+            <>
+              Connection ended (exit {ended}).{" "}
+              <button onClick={() => setAttempt((n) => n + 1)}>
+                Reconnect
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -13,3 +13,5 @@ ios/App/Pods/
 ios/App/build/
 ios/App/App/public/
 android/app/src/main/assets/public/
+
+test-results-*/

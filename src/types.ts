@@ -81,6 +81,8 @@ export interface PanelConfig {
   seat?: Seat;
   path?: string;
   terminalId?: string;
+  rigControlToken?: string;
+  rigControlConfirmation?: string;
   mode?: string;
   port?: number;
   line?: number;
@@ -91,18 +93,47 @@ export interface TerminalEvent {
   data?: string;
   exitCode?: number;
 }
+export interface FirstHandoff {
+  mission: string;
+  boundaries: string;
+  expectedOutput: string;
+  handoff: string;
+}
+export interface DesignSeat {
+  id: string;
+  agentId: string;
+  runtime: string;
+  firstHandoff?: FirstHandoff;
+}
 export interface HrigAPI {
-  mobile(request: { op: string; id?: string }): Promise<any>;
+  rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
   updates(request:{op:string;confirmed?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
   onPrepareUpdate(callback:()=>{ready:boolean;error?:string}):()=>void;
-
+  mobile(request: { op: string; id?: string }): Promise<any>;
   platform: string;
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;
   exportTerminal(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};
+  assessTeam(
+    connection: Connection,
+    request: Record<string, unknown>,
+  ): Promise<{
+    prompt?: string;
+    providers?: { id: string; installed: boolean; status: string }[];
+    questions?: { id: string; question: string; impact: string }[];
+    proposals?: {
+      tier: string;
+      rationale: string;
+      workflow: string;
+      uncertainty: string;
+      concurrency: number;
+      evidence?: { source: string; observation: string }[];
+      seats: DesignSeat[];
+    }[];
+  }>;
   designRig(
     connection: Connection,
     request: Record<string, unknown>,
@@ -172,6 +203,8 @@ export interface HrigAPI {
   >;
   pickFolder(): Promise<string | null>;
   createTerminal(options: {
+    rigControlToken?: string;
+    rigControlConfirmation?: string;
     id: string;
     connection: Connection;
     root: string;

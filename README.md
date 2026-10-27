@@ -317,3 +317,13 @@ Open recent or favorite projects with Ctrl+O/Cmd+O, find files with fuzzy Quick 
 ![Fuzzy Quick Open with keyboard file selection](docs/screenshots/quick-open.png)
 
 ![Panel navigator for existing groups and native popouts](docs/screenshots/panel-navigator.png)
+
+## Account-aware teams (0.11.0)
+
+Rig goals are optional. Use an editable work-type suggestion, or describe the outcome yourself. Auto runtime selection uses sign-ins confirmed on the selected host, sharing seats across Codex and Claude Code when both are available. Manual runtime and agent selection remain available for every seat.
+
+The status bar and wizard show runtime authentication and Orca-managed account scope. Managed profiles do not establish launch access on another host. Account switching, seat account binding and context/quota telemetry are not implemented. See [account behavior and limits](docs/ACCOUNTS.md).
+
+![Accounts panel showing runtime authentication and a managed account from another host scope using demonstration data](docs/screenshots/accounts.png)
+
+Team assessment compares lean, balanced and throughput proposals, preserves manual edits and supports explicit first handoffs. Tools > OpenRig control center provides installed-help forms and reviewed command execution. See [CLI interface coverage](docs/CLI-GUI-COVERAGE.md).

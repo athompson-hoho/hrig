@@ -18,9 +18,18 @@ import {
 import type { Connection, Rig, Seat as RigSeat } from "./types";
 import { useSettings } from "./SettingsContext";
 import { ErrorBox, Loading } from "./components";
+import TeamAssessment from "./TeamAssessment";
+import { useAccounts, AccountDetails } from "./AccountStatus";
+import HandoffPlan, { validHandoff } from "./HandoffPlan";
+import type { DesignSeat } from "./types";
+import {
+  mergeTunedSeats,
+  protectSeat,
+  type ProtectedSeat,
+} from "./team-tuning";
 
 type Agent = { id: string; name: string; summary?: string };
-type Seat = { id: string; agentId: string; runtime: string };
+type Seat = DesignSeat;
 const goals = {
   build: {
     label: "Build or change software",
@@ -129,19 +138,37 @@ export default function RigDesigner({
   onChanged: () => void;
 }) {
   const { effective: preferences } = useSettings();
+  const accountAvailability = useAccounts(connection);
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [goal, setGoal] = useState("");
   const [kind, setKind] = useState<keyof typeof goals>("build");
   const [size, setSize] = useState(preferences["rig.defaultTeamSize"]);
-  const [runtime, setRuntime] = useState(preferences["rig.defaultRuntime"]);
+  const [runtime, setRuntime] = useState<string>("mixed");
   const [folder, setFolder] = useState(root);
+  const suggestedGoal = {
+    build: "Implement and review software improvements for this project, preserving existing behavior and verifying changes.",
+    research: "Research this project, compare practical options, and produce an actionable plan with evidence and tradeoffs.",
+    review: "Review this project, investigate defects, and recommend or implement verified fixes.",
+    design: "Design improvements to this project's product and interface, with clear workflows and implementation guidance.",
+  }[kind];
+  const effectiveGoal = goal.trim() || suggestedGoal;
   const [folders, setFolders] = useState<
     Awaited<ReturnType<typeof window.hrig.projects>>
   >([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [protectedSeats, setProtectedSeats] = useState<ProtectedSeat[]>([]);
+  function editSeat(index: number, patch: Partial<Seat>) {
+    const previous = seats[index];
+    const next = { ...previous, ...patch };
+    setSeats((rows) => rows.map((row, i) => (i === index ? next : row)));
+    setProtectedSeats((rows) => protectSeat(rows, previous, next));
+    setPreview(null);
+    setConfirmation("");
+  }
+  const [assessmentReason, setAssessmentReason] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<Awaited<
@@ -176,13 +203,35 @@ export default function RigDesigner({
     };
   }, [connection]);
   const recommend = () => {
-    setSeats(
-      goals[kind].roles.slice(0, size).map((id) => {
-        const exact = agents.find((a) => a.name.toLowerCase() === id);
-        const matching = agents.find((a) => a.name.toLowerCase().includes(id));
-        return { id, agentId: (exact || matching)?.id || "", runtime };
-      }),
-    );
+    if (!goal.trim()) setGoal(suggestedGoal);
+    setAssessmentReason("");
+    try {
+      const readyRuntimes = accountAvailability.data?.providers
+        .filter((provider) => provider.status === "authenticated")
+        .map((provider) => provider.id) || [];
+      if (runtime === "mixed" && !readyRuntimes.length)
+        throw Error("No authenticated runtime was confirmed on this host. Refresh accounts, or choose a specific runtime to configure its seats manually.");
+      const preferred = preferences["rig.defaultRuntime"];
+      readyRuntimes.sort((a, b) => Number(b === preferred) - Number(a === preferred));
+      setSeats(
+        mergeTunedSeats(
+          goals[kind].roles.slice(0, size).map((id, index) => {
+            const exact = agents.find((a) => a.name.toLowerCase() === id);
+            const matching = agents.find((a) =>
+              a.name.toLowerCase().includes(id),
+            );
+            const seatRuntime = runtime === "mixed"
+              ? readyRuntimes[index % readyRuntimes.length]
+              : runtime;
+            return { id, agentId: (exact || matching)?.id || "", runtime: seatRuntime };
+          }),
+          protectedSeats,
+        ),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+      return;
+    }
     setStep(1);
     setError("");
     setPreview(null);
@@ -194,7 +243,7 @@ export default function RigDesigner({
       const result = await window.hrig.designRig(connection, {
         op,
         name,
-        goal,
+        goal: effectiveGoal,
         root: folder,
         seats,
         confirmation,
@@ -266,15 +315,27 @@ export default function RigDesigner({
               </p>
             </div>
             <label className="field-label">
-              GOAL
+              GOAL (OPTIONAL)
               <textarea
                 aria-label="Rig goal"
+                aria-describedby="designer-goal-help"
                 value={goal}
                 maxLength={4000}
                 rows={3}
                 onChange={(e) => setGoal(e.target.value)}
-                placeholder="Describe the outcome and constraints."
+                placeholder="Describe the outcome, or leave blank to use a suggested goal."
               />
+              <span className="field-note" id="designer-goal-help">
+                Leave blank to use a default for the selected work type. This suggestion does not run an agent.
+              </span>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setGoal(suggestedGoal)}
+                disabled={!!goal.trim()}
+              >
+                Use suggested goal
+              </button>
             </label>
           </div>
           <fieldset className="designer-choice-group">
@@ -374,15 +435,19 @@ export default function RigDesigner({
           </p>
           <div className="designer-project-settings">
             <label className="field-label">
-              DEFAULT RUNTIME
+              TEAM RUNTIMES
               <select
                 aria-label="Default runtime"
                 value={runtime}
                 onChange={(e) => setRuntime(e.target.value)}
               >
+                <option value="mixed">Auto — available signed-in runtimes</option>
                 <option value="codex">Codex</option>
                 <option value="claude-code">Claude Code</option>
               </select>
+              <span className="field-note">
+                Auto shares seats across runtimes confirmed signed in on this host, starting with your preference. With only one available runtime, all seats use it. Specific runtimes remain manual overrides.
+              </span>
             </label>
             {!!folders.length && (
               <label className="field-label">
@@ -412,6 +477,11 @@ export default function RigDesigner({
               />
             </label>
           </div>
+          <details>
+            <summary>Available accounts on {connection.name}</summary>
+            <AccountDetails data={accountAvailability.data} error={accountAvailability.error} />
+            <button type="button" className="secondary-button" onClick={accountAvailability.refresh}>Refresh accounts</button>
+          </details>
           {!agents.length && (
             <p>
               No installed agents were found. Add agent specifications to
@@ -422,7 +492,6 @@ export default function RigDesigner({
             className="primary-button"
             disabled={
               !/^[a-z][a-z0-9-]{0,47}$/.test(name) ||
-              !goal.trim() ||
               !folder.trim() ||
               !agents.length
             }
@@ -432,16 +501,39 @@ export default function RigDesigner({
           </button>
         </div>
       )}
+      {!!agents.length && (
+        <div hidden={step > 1}>
+          <TeamAssessment
+            connection={connection}
+            root={folder}
+            goal={effectiveGoal}
+            work={goals[kind].label}
+            currentSeats={seats}
+            protectedSeatIds={protectedSeats.map((p) => p.seat.id)}
+            previewSeats={proposal => mergeTunedSeats(proposal.seats, protectedSeats)}
+            onApply={(proposal) => {
+              const merged = mergeTunedSeats(proposal.seats, protectedSeats);
+              setSeats(merged);
+              setAssessmentReason(
+                `${proposal.rationale} Workflow: ${proposal.workflow} Uncertainty: ${proposal.uncertainty}${protectedSeats.length ? " Manually edited seats retained; review the final roster and handoffs." : ""}`,
+              );
+              setStep(1);
+              setError("");
+              setPreview(null);
+              setConfirmation("");
+            }}
+          />
+        </div>
+      )}
       {step === 1 && (
         <div className="designer-body">
           <div className="designer-section-heading">
             <h4>Recommended seats</h4>
-            <p>{goals[kind].why}</p>
+            <p>{assessmentReason || goals[kind].why}</p>
           </div>
           <p className="field-note">
-            Recommendations match installed agent names. Choose a suitable agent
-            wherever there is no match. Runtime authentication and permissions
-            are checked by OpenRig before launch.
+            Review the installed agent and runtime for every seat. Runtime
+            authentication and permissions are checked by OpenRig before launch.
           </p>
           <div className="designer-seats-grid">
             {seats.map((s, i) => (
@@ -460,13 +552,7 @@ export default function RigDesigner({
                   <input
                     aria-label={`Seat ${i + 1} name`}
                     value={s.id}
-                    onChange={(e) =>
-                      setSeats((rows) =>
-                        rows.map((row, j) =>
-                          j === i ? { ...row, id: e.target.value } : row,
-                        ),
-                      )
-                    }
+                    onChange={(e) => editSeat(i, { id: e.target.value })}
                   />
                 </label>
                 <label className="field-label">
@@ -474,13 +560,7 @@ export default function RigDesigner({
                   <select
                     aria-label={`Seat ${i + 1} agent`}
                     value={s.agentId}
-                    onChange={(e) =>
-                      setSeats((rows) =>
-                        rows.map((row, j) =>
-                          j === i ? { ...row, agentId: e.target.value } : row,
-                        ),
-                      )
-                    }
+                    onChange={(e) => editSeat(i, { agentId: e.target.value })}
                   >
                     <option value="">Choose an installed agent</option>
                     {agents.map((a) => (
@@ -496,18 +576,34 @@ export default function RigDesigner({
                   <select
                     aria-label={`Seat ${i + 1} runtime`}
                     value={s.runtime}
-                    onChange={(e) =>
-                      setSeats((rows) =>
-                        rows.map((row, j) =>
-                          j === i ? { ...row, runtime: e.target.value } : row,
-                        ),
-                      )
-                    }
+                    onChange={(e) => editSeat(i, { runtime: e.target.value })}
                   >
                     <option value="codex">Codex</option>
                     <option value="claude-code">Claude Code</option>
                   </select>
                 </label>
+                <HandoffPlan
+                  seat={s.id}
+                  plan={s.firstHandoff}
+                  onChange={(firstHandoff) => editSeat(i, { firstHandoff })}
+                />
+                {protectedSeats.some((p) => p.seat === s) && (
+                  <div>
+                    <p className="field-note">
+                      Your edits protect this entire seat during tuning.
+                    </p>
+                    <button
+                      className="secondary-button"
+                      onClick={() =>
+                        setProtectedSeats((rows) =>
+                          rows.filter((p) => p.seat !== s),
+                        )
+                      }
+                    >
+                      Allow AI changes for {s.id || "unnamed seat"}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -519,7 +615,10 @@ export default function RigDesigner({
               className="primary-button"
               disabled={
                 seats.some(
-                  (s) => !s.agentId || !/^[a-z][a-z0-9-]{0,31}$/.test(s.id),
+                  (s) =>
+                    !s.agentId ||
+                    !/^[a-z][a-z0-9-]{0,31}$/.test(s.id) ||
+                    !validHandoff(s.firstHandoff),
                 ) || new Set(seats.map((s) => s.id)).size !== seats.length
               }
               onClick={() => {
@@ -552,7 +651,7 @@ export default function RigDesigner({
                 {seats.length} {seats.length === 1 ? "seat" : "seats"}
               </span>
             </div>
-            <p>{goal}</p>
+            <p>{effectiveGoal}</p>
             <div className="designer-project-path">
               <FolderOpen size={16} />
               <code>{folder}</code>
@@ -582,6 +681,16 @@ export default function RigDesigner({
             the first seat to the others. The goal becomes the rig summary; send
             a task after launch when you are ready to begin.
           </p>
+          <section aria-label="First-handoff review">
+            <h4>First-handoff review</h4>
+            <p>
+              Handoff plans are saved in the rig summary. Send tasks explicitly
+              after launch; these notes do not dispatch work or enforce gates.
+            </p>
+            {seats.map((s) => (
+              <HandoffPlan key={s.id} seat={s.id} plan={s.firstHandoff} />
+            ))}
+          </section>
           <p className="field-note">
             Saving writes hrig-{name}.yaml to the project. Existing files are
             preserved. OpenRig validates the spec and previews launch without

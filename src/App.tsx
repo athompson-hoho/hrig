@@ -8,6 +8,7 @@ import {
   Suspense,
 } from "react";
 import { flushSync } from "react-dom";
+import AccountStatus from "./AccountStatus";
 import {
   Actions,
   DockLocation,
@@ -100,6 +101,7 @@ import {
   visitProject,
   type RecentProject,
 } from "./project-history";
+import RigControl from "./RigControl";
 import {
   bufferText,
   clearBuffer,
@@ -1336,6 +1338,8 @@ export default function App() {
       }
       case "doctor":
         return <DoctorPanel connection={config.connection} />;
+      case "rigControl":
+        return <RigControl connection={config.connection} root={config.root} inventory={config.connection.id === connection.id ? inventory : null} onFile={(path,line) => openFile(path,false,line,config)} />;
       case "attention":
         return (
           <AttentionPanel
@@ -1597,6 +1601,7 @@ export default function App() {
       ["Problems", "problems"],
       ["Ports and previews", "ports"],
       ["Rig manager", "rigManager"],
+      ["OpenRig control center", "rigControl"],
     ].map(([name, component]) => ({
       name,
       hint: "Workspace tool",
@@ -2273,6 +2278,7 @@ export default function App() {
         </div>
         {preferences["appearance.statusBar"] && (
           <footer className="statusbar">
+            <AccountStatus connection={connection} />
             <div>
               <span className="status-brand">
                 <Network size={11} />
@@ -2527,6 +2533,7 @@ export default function App() {
                   "rigManager",
                   "Topology and confirmed lifecycle actions",
                 ],
+                ["OpenRig control center", "rigControl", "All installed commands with guided forms, tooltips, help and action review"],
               ].map(([name, component, description]) => (
                 <button
                   key={component}

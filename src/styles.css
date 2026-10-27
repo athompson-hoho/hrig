@@ -4186,3 +4186,32 @@ button:hover {
 
 .terminal-tool-overlays { position: absolute; top: 100%; left: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; }
 .terminal-find, .terminal-tool-notice { background: var(--color-14161b); border: 1px solid var(--color-252b35); border-radius: 5px; box-shadow: 0 3px 12px #0004; }
+.rig-control { --border: var(--line); --accent: var(--mint); overflow: auto; }
+.rig-control details { margin: 10px 0; }
+.rig-control summary { cursor: pointer; padding: 5px 0; font-weight: 600; }
+.rig-control input[type="checkbox"] { width: auto; margin-right: 6px; }
+.rig-command-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 8px; margin: 12px 0; }
+.rig-command-list button { text-align: left; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: inherit; display: flex; flex-direction: column; gap: 5px; overflow-wrap: anywhere; }
+.rig-command-list button:hover, .rig-command-list button:focus-visible { border-color: var(--accent); }
+.rig-command-list small, .rig-command-list span { font-size: 12px; opacity: .8; }
+.rig-breadcrumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.rig-breadcrumbs button { background: transparent; color: inherit; border: 1px solid var(--border); padding: 5px 8px; border-radius: 4px; }
+.rig-command-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; border: 1px solid var(--border); padding: 14px; margin: 14px 0; }
+.rig-option { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.rig-option code { overflow-wrap: anywhere; white-space: normal; font-size: 11px; }
+.rig-action-review { border: 1px solid var(--accent); padding: 14px; border-radius: 6px; }
+.rig-action-review button { margin: 8px 8px 0 0; }
+.rig-output { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 480px; overflow: auto; font-size: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--border); }
+.rig-action-terminal { height: 440px; min-height: 200px; position: relative; margin-top: 10px; }
+.rig-result-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rig-result-scroll { overflow-x: auto; }
+.rig-result-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rig-result-table th, .rig-result-table td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 8px; overflow-wrap: anywhere; }
+.rig-result-fields { margin: 8px 0; }
+.rig-result-fields > div { border-bottom: 1px solid var(--line); padding: 8px 0; }
+.rig-result-fields dt { font-weight: 600; margin-bottom: 5px; }
+.rig-result-fields dd { margin: 0 0 0 12px; }
+.team-comparison { border: 1px solid var(--mint); padding: 16px; border-radius: 8px; margin: 16px 0; overflow-wrap: anywhere; }
+.team-comparison article { margin: 16px 0; }
+.team-comparison-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.team-comparison-table th, .team-comparison-table td { padding: 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }

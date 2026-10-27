@@ -95,6 +95,7 @@ async function scanProject(
 
 // Keep ranking equivalent to fuzzy.mjs; parity is checked against a real Python scan.
 const PYTHON_QUICK_OPEN = `import os,sys,json
+sys.stdin.reconfigure(encoding="utf-8")
 a=json.load(sys.stdin)
 root=os.path.realpath(os.path.expanduser(a['root']))
 if not os.path.isdir(root): raise Exception('Choose a project folder, not a file.')

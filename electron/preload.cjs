@@ -4,6 +4,7 @@ const invoke =
   (...args) =>
     ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld("hrig", {
+  rigControl: invoke("rig:control"),
   updates: invoke('updates:operation'),
   onUpdates: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('updates:state',listener);return ()=>ipcRenderer.removeListener('updates:state',listener); },
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
@@ -18,6 +19,7 @@ contextBridge.exposeInMainWorld("hrig", {
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
   designRig: invoke("rig:design"),
+  assessTeam: invoke("rig:assess"),
   ports: invoke("ports:list"),
   openPreview: invoke("preview:open"),
   closePreview: invoke("preview:close"),

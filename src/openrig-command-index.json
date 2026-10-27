@@ -1,0 +1,3615 @@
+{
+  "version": "0.6.14 (df1c1517)",
+  "entries": [
+    {
+      "path": [
+        "add"
+      ],
+      "description": "Add a member to an existing pod in a running rig",
+      "argumentCount": 3,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "adopt"
+      ],
+      "description": "Materialize topology and bind discovered live sessions",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent"
+      ],
+      "description": "Manage agent specs",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "agent",
+        "validate"
+      ],
+      "description": "Validate an agent spec (agent.yaml)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image"
+      ],
+      "description": "Browse, snapshot, and manage agent images (PL-016)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 9
+    },
+    {
+      "path": [
+        "agent-image",
+        "create"
+      ],
+      "description": "Capture a productive seat's resumable state into a new agent image",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "delete"
+      ],
+      "description": "Delete an agent image (subject to evidence-preservation guard)",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "list"
+      ],
+      "description": "List all agent images in the library",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "pin"
+      ],
+      "description": "Pin an image so prune cannot delete it",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "preview"
+      ],
+      "description": "Show manifest + sized supplementary file metadata + starter snippet",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "prune"
+      ],
+      "description": "Delete evictable images (protected by evidence-preservation guard)",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "show"
+      ],
+      "description": "Show image manifest + statistics",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "sync"
+      ],
+      "description": "Re-walk discovery roots and refresh the library index",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "agent-image",
+        "unpin"
+      ],
+      "description": "Unpin an image",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "archive"
+      ],
+      "description": "Archive a rig (soft + reversible: hides it from the default view, retains all\ndata). NOT a delete; reverse with 'rig unarchive'.",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "ask"
+      ],
+      "description": "Search rig transcript history with a natural language question",
+      "argumentCount": 2,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "attach"
+      ],
+      "description": "Attach the current shell or agent into a rig node",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth"
+      ],
+      "description": "Manage agent auth profiles (CLI-local; runtime via --runtime). Tokens are never\nprinted, logged, or stored.",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 6
+    },
+    {
+      "path": [
+        "auth",
+        "list"
+      ],
+      "description": "List saved profiles by name.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "save"
+      ],
+      "description": "Snapshot the active auth state into a named profile (file copy; contents never\nechoed).",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "seats"
+      ],
+      "description": "Seat -> profile registry (metadata only; not proof of a live account).",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "auth",
+        "seats",
+        "list"
+      ],
+      "description": "List seat -> profile mappings.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "seats",
+        "report"
+      ],
+      "description": "Counts: total / known / unknown / malformed.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "seats",
+        "set"
+      ],
+      "description": "Upsert a seat -> profile metadata row.",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "seats",
+        "show"
+      ],
+      "description": "Show the registry row for one seat.",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "status"
+      ],
+      "description": "Auth-file presence + login state (no secrets).",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "switch"
+      ],
+      "description": "Activate a saved profile.",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "auth",
+        "validate"
+      ],
+      "description": "Check a profile's file mode + JSON parseability (NOT live-auth).",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bind"
+      ],
+      "description": "Bind a discovered session to a rig node (existing or new)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bootstrap"
+      ],
+      "description": "Bootstrap a rig from a spec file or bundle",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "broadcast"
+      ],
+      "description": "Send a message to multiple agent sessions",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle"
+      ],
+      "description": "Manage rig bundles",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 6
+    },
+    {
+      "path": [
+        "bundle",
+        "check"
+      ],
+      "description": "Check the shareable bundle standard locally; advisory, no daemon or launch",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle",
+        "configurations"
+      ],
+      "description": "List the configurations a rig spec's configurations.yaml declares, with their\nconfiguration IDs",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle",
+        "create"
+      ],
+      "description": "Create a .rigbundle from a rig spec or GitHub folder link",
+      "argumentCount": 1,
+      "optionCount": 15,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle",
+        "history"
+      ],
+      "description": "List bundle install audit records from ~/.openrig/bundle-audit.jsonl",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle",
+        "inspect"
+      ],
+      "description": "Inspect a .rigbundle or build and inspect a GitHub folder link",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "bundle",
+        "install"
+      ],
+      "description": "Install a .rigbundle or GitHub folder link (bootstrap from bundle)",
+      "argumentCount": 1,
+      "optionCount": 11,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "capture"
+      ],
+      "description": "Capture terminal output from agent sessions",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom"
+      ],
+      "description": "Chat room for rig communication",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 6
+    },
+    {
+      "path": [
+        "chatroom",
+        "clear"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom",
+        "history"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom",
+        "send"
+      ],
+      "description": "",
+      "argumentCount": 2,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom",
+        "topic"
+      ],
+      "description": "",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom",
+        "wait"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "chatroom",
+        "watch"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "community-harness"
+      ],
+      "description": "Community harnesses installed as presets (not tested by OpenRig)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "community-harness",
+        "list"
+      ],
+      "description": "List installed community harness presets, with maintainer and declared limits",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "compact"
+      ],
+      "description": "Manually run the guided compaction sequence (prep → /compact → restore → audit)\nfor one Claude seat",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "compact-plan"
+      ],
+      "description": "Plan Claude compact-in-place candidates without compacting anything",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "config"
+      ],
+      "description": "Inspect and change OpenRig configuration",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "config",
+        "get"
+      ],
+      "description": "Read a single config value",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "config",
+        "init-workspace"
+      ],
+      "description": "Scaffold a repo-ready project workspace",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "config",
+        "reset"
+      ],
+      "description": "Clear a config override (or delete the entire file when no key given)",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "config",
+        "set"
+      ],
+      "description": "Set a config value",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context"
+      ],
+      "description": "Browse, preview, compose, and manage operator-authored context packs",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 13
+    },
+    {
+      "path": [
+        "context",
+        "add"
+      ],
+      "description": "Install a pack; --git discovers a pack in a Git repository and retains its\nupdate relationship",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "compose"
+      ],
+      "description": "Compose ordered files into a durable context-pack ref (never delivers)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "get"
+      ],
+      "description": "Serve the assembled bundle for an agent to load on demand (the pull verb)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "list"
+      ],
+      "description": "List all context packs in the library",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "preview"
+      ],
+      "description": "Show the assembled bundle without delivering it",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "profile"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "recap-write"
+      ],
+      "description": "Write this seat's authored RECAP (decisions-with-rationale) at the handover\nboundary; supersedes the previous recap into the seat's chain",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "rm"
+      ],
+      "description": "Remove a context pack from the library by its path-like ref",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "show"
+      ],
+      "description": "Show pack manifest + per-file metadata",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "source"
+      ],
+      "description": "Inspect Git checkout vs served context, or explicitly fetch/merge and select an\nupdate",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 2
+    },
+    {
+      "path": [
+        "context",
+        "source",
+        "inspect"
+      ],
+      "description": "Read local revision, edits, conflicts and selection; no fetch or consumption\nclaim",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "source",
+        "update"
+      ],
+      "description": "Explicitly fetch/merge the upstream, then select the clean pack; refuse local\nselection edits",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "sync"
+      ],
+      "description": "Re-walk discovery roots and refresh the library index",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "trace"
+      ],
+      "description": "Walk the topology tree for one chain filename (instance -> rig -> optional pod\n-> optional seat), keyed off topology.root",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "context",
+        "work-install"
+      ],
+      "description": "Resolve System World plus project work context and the managed skill loadout",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "crash-cart"
+      ],
+      "description": "Emit the daemon-down recovery verdict + discovery as JSON (read-only).",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "create"
+      ],
+      "description": "Create a one-seat rig without writing a spec",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "daemon"
+      ],
+      "description": "Manage the OpenRig daemon",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "daemon",
+        "logs"
+      ],
+      "description": "Show daemon logs",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "daemon",
+        "start"
+      ],
+      "description": "Start the daemon",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "daemon",
+        "status"
+      ],
+      "description": "Show daemon status",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "daemon",
+        "stop"
+      ],
+      "description": "Stop the daemon (10s shutdown budget; 12s process wait; incomplete drain exits\nnonzero)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "destroy"
+      ],
+      "description": "Destroy OpenRig local state for recovery",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "discover"
+      ],
+      "description": "Scan for unmanaged tmux sessions",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "doctor"
+      ],
+      "description": "Check installation, provider authentication, writable paths, port/daemon and\nconditional cmux control",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "down"
+      ],
+      "description": "Tear down a rig",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "env"
+      ],
+      "description": "Inspect and control rig environment services for service-backed rigs and managed\napps",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "env",
+        "down"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "env",
+        "logs"
+      ],
+      "description": "",
+      "argumentCount": 2,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "env",
+        "status"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "expand"
+      ],
+      "description": "Add a pod to a running rig",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "export"
+      ],
+      "description": "Export a rig spec as YAML",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "file"
+      ],
+      "description": "Cross-host file movement over ssh/rsync (v0: one explicit verb — copy)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "file",
+        "copy"
+      ],
+      "description": "Copy one file. <hostId>:<absolute-path> = remote (ssh registry entry); bare path\n= local; local files with a colon need the ./ prefix. Valid shapes:\nlocal→remote, remote→local, local→local. An existing destination is OVERWRITTEN\n— preview with --dry-run.",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "fork"
+      ],
+      "description": "Fork a live seat's context into a new seat (composes the shipped agent-image\nfork path)",
+      "argumentCount": 1,
+      "optionCount": 8,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "gateway"
+      ],
+      "description": "Gateway: the human registry + connector surfaces",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "gateway",
+        "human"
+      ],
+      "description": "Manage human specs (file-per-human fragments under gateway/humans/)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "gateway",
+        "human",
+        "add"
+      ],
+      "description": "Add a human fragment (verb-add-only; the fragment is truth, the registry is a\nGENERATED projection)",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "gateway",
+        "human",
+        "list"
+      ],
+      "description": "Show the configured human (OpenRig supports one; extra hand-authored fragments\nare listed with an advisory)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "gateway",
+        "human",
+        "remove"
+      ],
+      "description": "Remove a human: refuses while open conversations or non-terminal rows exist\n(--force archives and records what was orphaned; the fragment is archived, never\ndeleted)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "gateway",
+        "human",
+        "set"
+      ],
+      "description": "Edit one field through the verb (same validation as add; re-projection\nimmediate). Fields: display-name, delivery-class, away, binding.<n>",
+      "argumentCount": 3,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "gateway",
+        "human",
+        "show"
+      ],
+      "description": "Show the effective record: fragment values + which defaults filled the rest,\nwith provenance",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "grow"
+      ],
+      "description": "Add one or more seats to a running rig",
+      "argumentCount": 2,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "handover"
+      ],
+      "description": "Hand a seat to a successor: create -> deliver context -> verify continuity ->\nrebind",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health"
+      ],
+      "description": "Inspect read-only, explainable system health records",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "health",
+        "checkpoint"
+      ],
+      "description": "Inspect or submit an outcome-boundary lineage census (not a per-edit ritual)",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "diagnose"
+      ],
+      "description": "Preview policy admission; --apply creates or re-presents bounded diagnostic\ncontext",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "diagnosis"
+      ],
+      "description": "Read occurrences and record agent-owned dispositions",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "health",
+        "diagnosis",
+        "list"
+      ],
+      "description": "List occurrence summaries; evidence payloads require --full",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "diagnosis",
+        "notify"
+      ],
+      "description": "Explicitly request human delivery under policy and verified connector readiness",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "diagnosis",
+        "record"
+      ],
+      "description": "",
+      "argumentCount": 1,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "diagnosis",
+        "show"
+      ],
+      "description": "Inspect current state and decisions; expand retained evidence deliberately",
+      "argumentCount": 1,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "explain"
+      ],
+      "description": "Explain one health finding from its canonical bounded record",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "health",
+        "policy"
+      ],
+      "description": "Inspect effective policy and engine state; apply edited JSON with --file",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "heartbeat"
+      ],
+      "description": "Show workflow execution proof state from queue files",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host"
+      ],
+      "description": "Manage the multi-host registry (~/.openrig/hosts.yaml)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 6
+    },
+    {
+      "path": [
+        "host",
+        "add"
+      ],
+      "description": "Add a host entry (validated with the registry loader's own rules)",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host",
+        "doctor"
+      ],
+      "description": "Stepwise host verification (+ --posture for the product-factory-vps baseline)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host",
+        "list"
+      ],
+      "description": "List registered hosts w/ status + selected marker (config pointers only — never\nsecret values)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host",
+        "pair"
+      ],
+      "description": "Pair with a remote host from one pasted address — one approval on the target,\ndone (FR-6)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host",
+        "rename"
+      ],
+      "description": "Rename THIS host's display name (renders in dashboard, explorer, ls, whoami)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "host",
+        "select"
+      ],
+      "description": "Select which host you are viewing/acting on (persisted; 'local' returns to this\nhost)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "import"
+      ],
+      "description": "Import a rig spec from YAML",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "launch"
+      ],
+      "description": "Launch or relaunch a node in a running rig",
+      "argumentCount": 2,
+      "optionCount": 8,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mcp"
+      ],
+      "description": "MCP server for agent integration",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "mcp",
+        "serve"
+      ],
+      "description": "Start MCP server (stdio transport)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode"
+      ],
+      "description": "Inspect and explicitly set scoped operating posture (human-led/delegated) and\noperator-context modes.",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 6
+    },
+    {
+      "path": [
+        "mode",
+        "cite"
+      ],
+      "description": "Emit a citation line for the effective mode at a read context. Per convention\n§Citation Rules.",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode",
+        "defaults"
+      ],
+      "description": "Print the recommended per-mode 8×7 + default-scope + stale rule.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode",
+        "effective"
+      ],
+      "description": "Inspect effective operating posture, scope, phase and source. Resolved unset\nscopes default to human-led; unreadable or ambiguous identity stays unknown.",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode",
+        "set"
+      ],
+      "description": "Propose a mode binding. Without --confirm, restates the proposed binding and\nexits 2 (no daemon write). With --confirm, sets it.",
+      "argumentCount": 1,
+      "optionCount": 14,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode",
+        "show"
+      ],
+      "description": "List all operator-context-mode bindings.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "mode",
+        "unset"
+      ],
+      "description": "Delete one binding (operator-only). Scope: global_host | rig | project | mission\n| workstream | qitem. Where a saved mode and a posture are both kept, this\nremoves the latest set one, or the one --category names.",
+      "argumentCount": 2,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "package"
+      ],
+      "description": "Manage agent packages (legacy)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "package",
+        "install"
+      ],
+      "description": "Install a package",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "package",
+        "list"
+      ],
+      "description": "List installed packages",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "package",
+        "plan"
+      ],
+      "description": "Preview install plan (dry run)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "package",
+        "rollback"
+      ],
+      "description": "Rollback an install",
+      "argumentCount": 1,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "package",
+        "validate"
+      ],
+      "description": "Validate a package manifest",
+      "argumentCount": 1,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "parked"
+      ],
+      "description": "Are we parked? Derived diagnosis: stopped seats owing work; HELD is healthy only\nwhile its recorded wake is live",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "plugin"
+      ],
+      "description": "Inspect plugins (read-only)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "plugin",
+        "list"
+      ],
+      "description": "List discoverable plugins (aggregated across vendored + runtime caches)",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "plugin",
+        "show"
+      ],
+      "description": "Show plugin manifest + skills + hooks + mcp servers",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "plugin",
+        "used-by"
+      ],
+      "description": "List profile consumers and resource definitions for this plugin",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "plugin",
+        "validate"
+      ],
+      "description": "Validate plugin manifest + skill frontmatter against agentskills.io spec",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy"
+      ],
+      "description": "Teach and record the rig-level permission policy. The team and kernel launch\ndefaults pass allow/ask lists per launch and save none; a selected Claude\nsettings fragment can merge native settings, rules included; the harness-native\npermissions are the control surface. OpenRig records posture into RigSpec;\nharness-native permissions enforce — never runtime enforcement. (The\ncontext-mode verb formerly at this name is now: rig mode.)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "policy",
+        "apply"
+      ],
+      "description": "Record a policy choice into an EXISTING rig spec (the same recording flow as\n`rig setup --policy`, which stays as the setup-step composition), or with --seat\nstore it on an existing seat. Restore, resume and launches that read the seat's\nstored state use the stored policy, unless an explicit native selection (rig\nseat set-permissions) takes precedence; `rig up <rig name>` uses it, while a\nlaunch from a spec that declares a policy replaces it with the spec's policy,\nwhich later restores then use. The team and kernel launch defaults pass\nallow/ask lists per launch and save none; a selected Claude settings fragment\ncan merge native settings, rules included; the harness-native permissions are\nthe control surface. OpenRig records posture into RigSpec; harness-native\npermissions enforce — never runtime enforcement.",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "current"
+      ],
+      "description": "Show the EFFECTIVE permission policy for a rig spec and what would apply, per\nsite (rig + member overrides), through the authoritative validator/resolver.",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "list"
+      ],
+      "description": "List the built-in permission-policy templates, plus the custom policies visible\nin a spec context. The team and kernel launch defaults pass allow/ask lists per\nlaunch and save none; a selected Claude settings fragment can merge native\nsettings, rules included; the harness-native permissions are the control\nsurface. OpenRig records posture into RigSpec; harness-native permissions\nenforce — never runtime enforcement.",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "permissions"
+      ],
+      "description": "Native permission policy: list, show, current and apply. Work posture is\nseparate; this does not relaunch seats.",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "policy",
+        "permissions",
+        "apply"
+      ],
+      "description": "Record a policy choice into an EXISTING rig spec (the same recording flow as\n`rig setup --policy`, which stays as the setup-step composition), or with --seat\nstore it on an existing seat. Restore, resume and launches that read the seat's\nstored state use the stored policy, unless an explicit native selection (rig\nseat set-permissions) takes precedence; `rig up <rig name>` uses it, while a\nlaunch from a spec that declares a policy replaces it with the spec's policy,\nwhich later restores then use. The team and kernel launch defaults pass\nallow/ask lists per launch and save none; a selected Claude settings fragment\ncan merge native settings, rules included; the harness-native permissions are\nthe control surface. OpenRig records posture into RigSpec; harness-native\npermissions enforce — never runtime enforcement.",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "permissions",
+        "current"
+      ],
+      "description": "Show the EFFECTIVE permission policy for a rig spec and what would apply, per\nsite (rig + member overrides), through the authoritative validator/resolver.",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "permissions",
+        "list"
+      ],
+      "description": "List the built-in permission-policy templates, plus the custom policies visible\nin a spec context. The team and kernel launch defaults pass allow/ask lists per\nlaunch and save none; a selected Claude settings fragment can merge native\nsettings, rules included; the harness-native permissions are the control\nsurface. OpenRig records posture into RigSpec; harness-native permissions\nenforce — never runtime enforcement.",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "permissions",
+        "show"
+      ],
+      "description": "Show one built-in policy choice, or validate + open a CUSTOM policy spec by ref\n(relative to --spec's directory, else cwd).",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "policy",
+        "show"
+      ],
+      "description": "Show one built-in policy choice, or validate + open a CUSTOM policy spec by ref\n(relative to --spec's directory, else cwd).",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "preflight"
+      ],
+      "description": "Check system readiness for OpenRig",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project"
+      ],
+      "description": "Coordination L2 — agent-backed classifier with daemon-enforced lease +\nidempotency + reclaim",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 13
+    },
+    {
+      "path": [
+        "project",
+        "candidates"
+      ],
+      "description": "Read current source-bound candidates and eligible item IDs for the occupant",
+      "argumentCount": 0,
+      "optionCount": 8,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "classify"
+      ],
+      "description": "Project a stream item with classification fields (idempotent on stream_item_id;\nrequires active lease)",
+      "argumentCount": 1,
+      "optionCount": 18,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "experimental"
+      ],
+      "description": "Optional Jev experiment; advisory, finite foreground runs, disabled by default",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "project",
+        "experimental",
+        "capture"
+      ],
+      "description": "Classify a selected archived capture; never captures a live terminal or changes\nits verdict",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "experimental",
+        "disable"
+      ],
+      "description": "",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "experimental",
+        "enable"
+      ],
+      "description": "",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "experimental",
+        "status"
+      ],
+      "description": "",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "lease-acquire"
+      ],
+      "description": "Acquire the active classifier lease for the caller",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "lease-heartbeat"
+      ],
+      "description": "Send a heartbeat for an active classifier lease (extends TTL)",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "lease-show"
+      ],
+      "description": "Show the currently-active classifier lease",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "list"
+      ],
+      "description": "List project classifications with filters",
+      "argumentCount": 0,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "reclaim-classifier"
+      ],
+      "description": "Operator-verb: reclaim the active classifier lease. Use --if-dead to refuse if\nholder is still alive.",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "shadow-drain"
+      ],
+      "description": "Inspect, drain or stop an explicitly configured private shadow sink; never\nenables capture",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "shadow-status"
+      ],
+      "description": "Inspect, drain or stop an explicitly configured private shadow sink; never\nenables capture",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "shadow-stop"
+      ],
+      "description": "Inspect, drain or stop an explicitly configured private shadow sink; never\nenables capture",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "show"
+      ],
+      "description": "Show one project classification",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "project",
+        "wake"
+      ],
+      "description": "Run one bounded occupant wake with source-bound decisions or explicit Jev\nexperiment; no registration",
+      "argumentCount": 0,
+      "optionCount": 8,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "proof"
+      ],
+      "description": "Capture evidence (add), record an attributed item judgment (judge), and read\nderived readiness (show). Capture, policy acceptance, higher outcome judgment\nand publication are separate.",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "proof",
+        "add"
+      ],
+      "description": "Drop a proof artifact: authors the C1 frontmatter from flags, writes\n<slice>/proof/<name>, echoes the parsed header. Contract/self-check/C8 outputs\nare advisories (exit 0) — never gates.",
+      "argumentCount": 1,
+      "optionCount": 15,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "proof",
+        "judge"
+      ],
+      "description": "Record one attributed item judgment and derive readiness. Use\nmission/slices/slice#item (index, text or ID), optionally prefixed <project>:\nfor a catalog project. Policy inherits proofPolicy.judges from owning slice,\nmission or project.",
+      "argumentCount": 1,
+      "optionCount": 11,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "proof",
+        "show"
+      ],
+      "description": "Read current attributed proof readiness for a slice, mission or active project;\nno status files are changed. Prefix the scope with <project>: (or pass\n--project) to read a catalog project.",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider"
+      ],
+      "description": "Provider accounts, usage signals, and interruption-safe account switching",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 7
+    },
+    {
+      "path": [
+        "provider",
+        "accounts"
+      ],
+      "description": "The accounts block of the provider read model",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "bindings"
+      ],
+      "description": "The bindings block of the provider read model",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "moves"
+      ],
+      "description": "Recorded subscription moves, newest first (needs provider.subscription_moves on)",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 2
+    },
+    {
+      "path": [
+        "provider",
+        "moves",
+        "record"
+      ],
+      "description": "Record a move you made or attempted (JSON: home, host, from, to, reason,\nreadings, seats, peers, supersedes; needs provider.subscription_moves on)",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "moves",
+        "show"
+      ],
+      "description": "One recorded move: seats and results, from and to, the reason, the readings and\ntheir age, peers (needs provider.subscription_moves on)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "precheck"
+      ],
+      "description": "Whether switching a seat to an account is safe (never offers an unsafe switch)",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "signals"
+      ],
+      "description": "The signals block of the provider read model",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "status"
+      ],
+      "description": "The whole four-block provider read model (accounts, bindings, signals)",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "provider",
+        "switch"
+      ],
+      "description": "Switch a seat to an account (precheck-gated; the daemon orchestrates the switch)",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "ps"
+      ],
+      "description": "List rigs and their status",
+      "argumentCount": 0,
+      "optionCount": 19,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue"
+      ],
+      "description": "Coordination L3 — owned-work queue + inbox/outbox",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 21
+    },
+    {
+      "path": [
+        "queue",
+        "block"
+      ],
+      "description": "Park a qitem as HELD with a continuation and wake. Requires --on <blocker>.\nChoose --wake-watchdog, --wake-after, or a live blocker qitem for the wake.",
+      "argumentCount": 1,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "claim"
+      ],
+      "description": "Claim a qitem (pending → in-progress); computes closure_required_at from tier",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "create"
+      ],
+      "description": "Create a new qitem",
+      "argumentCount": 0,
+      "optionCount": 25,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "fallback"
+      ],
+      "description": "Reroute a qitem to a fallback destination (e.g. unreachable seat)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "handoff"
+      ],
+      "description": "Transactional handoff: closes source as handed-off + creates new qitem owned by\n--to",
+      "argumentCount": 1,
+      "optionCount": 16,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "handoff-and-complete"
+      ],
+      "description": "Atomic close (state=done, closure_reason=handed_off_to) + create new qitem owned\nby --to. Variant of handoff that fully terminates the source qitem.",
+      "argumentCount": 1,
+      "optionCount": 16,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "inbox-absorb"
+      ],
+      "description": "Absorb a pending inbox entry into the receiver's main queue",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "inbox-deny"
+      ],
+      "description": "Deny a pending inbox entry with a recorded reason",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "inbox-drop"
+      ],
+      "description": "Drop a mailbox-style entry into a destination's inbox",
+      "argumentCount": 1,
+      "optionCount": 8,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "inbox-pending"
+      ],
+      "description": "List pending inbox entries for a destination seat",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "list"
+      ],
+      "description": "List qitems (default: active + compact + current-rig; like 'docker ps')",
+      "argumentCount": 0,
+      "optionCount": 12,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "outbox-list"
+      ],
+      "description": "List outbox entries for a sender seat",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "outbox-record"
+      ],
+      "description": "Record an outbound dispatch in the sender's outbox",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "overdue"
+      ],
+      "description": "List in-progress qitems past their closure_required_at deadline (current rig,\nbounded, body-free by default)",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "resolve"
+      ],
+      "description": "Resolve a leg-1 parked qitem (state=blocked on a human seat): records the\ndecision text durably in queue_transitions, unparks blocked -> in-progress, and\nnudges the owner. Non-closure.",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "show"
+      ],
+      "description": "Show one qitem and its derived waiting state (bounded preview; --full for\ncomplete body)",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "transitions"
+      ],
+      "description": "Show the append-only transition log for a qitem",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "unclaim"
+      ],
+      "description": "Release a claimed qitem (in-progress → pending)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "undelivered"
+      ],
+      "description": "List PENDING qitems whose create-path nudge FAILED (delivery never reached the\ndestination; current rig, bounded, body-free by default)",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "update"
+      ],
+      "description": "Append a note and/or mutate qitem state. A note without --state never changes\nrow state. state=done REQUIRES --closure-reason (one of: handed_off_to,\nblocked_on, denied, canceled, no-follow-on, escalation). Closure ≠ acceptance:\nhanded_off_to records delivery to the next stage; acceptance is the next stage's\nverdict on its own qitem, not this closure.",
+      "argumentCount": 1,
+      "optionCount": 14,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "queue",
+        "whoami"
+      ],
+      "description": "Show the caller's queue position from the daemon's perspective",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "reconcile-session"
+      ],
+      "description": "Adopt a live, hand-resumed session back into its persisted node (no launch, no\ninput)",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "release"
+      ],
+      "description": "Release claimed sessions from a rig without killing tmux sessions",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "remove"
+      ],
+      "description": "Remove a node from a running rig",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "requirements"
+      ],
+      "description": "Check requirements for a rig spec",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "restore"
+      ],
+      "description": "Restore a rig from a snapshot",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "restore",
+        "status"
+      ],
+      "description": "Show the derived current receipt for one restore attempt",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "restore-check"
+      ],
+      "description": "Check restore readiness across running rigs",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "restore-packet"
+      ],
+      "description": "Generate, read, and validate cross-runtime restore packets per the v0 standard",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "restore-packet",
+        "read"
+      ],
+      "description": "Render a restore packet contents (human or --json)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "restore-packet",
+        "validate"
+      ],
+      "description": "Validate a restore packet against the v0 schema",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "restore-packet",
+        "write"
+      ],
+      "description": "Generate a restore packet from a source session or JSONL file",
+      "argumentCount": 0,
+      "optionCount": 17,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "roster"
+      ],
+      "description": "Find recommended specialists across rigs and hosts (read-only)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "roster",
+        "find"
+      ],
+      "description": "Find a capability or seat across all rosters",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "roster",
+        "list"
+      ],
+      "description": "List authored purposes and curators",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "roster",
+        "show"
+      ],
+      "description": "Read a roster with current node observations",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope"
+      ],
+      "description": "Scope tree primitive: missions, slices, sub-slices (per\nconventions/scope-and-versioning)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "scope",
+        "audit"
+      ],
+      "description": "Read-only scope audit: flag scope findings and show the advisory dependency\ngraph",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission"
+      ],
+      "description": "Mission-tier commands",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 9
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "approve"
+      ],
+      "description": "Approve a mission: same staged/delegated semantics as slice approve, at mission\ntier.",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "create"
+      ],
+      "description": "Create a new mission with SPEC.md and mission.yaml (mints a stable dot-ID into\nfrontmatter)",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "graph"
+      ],
+      "description": "Show advisory sibling build-order edges and the current ready set",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "ls"
+      ],
+      "description": "List missions (top-level folders with SPEC.md or a legacy README.md)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "progress"
+      ],
+      "description": "Update a mission's progress rail deterministically (append a row, or set a row's\nstatus)",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "repair"
+      ],
+      "description": "Backfill missing PROGRESS.md + conform mandatory frontmatter (id/stage/verified)\nfor a mission and its slices; idempotent",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "show"
+      ],
+      "description": "Inspect a single mission",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "stage"
+      ],
+      "description": "Set a mission's epistemic stage (wip | provisional | established | canonical |\nsuperseded | retired); superseded needs --successor",
+      "argumentCount": 2,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "mission",
+        "verified"
+      ],
+      "description": "Stamp a mission's verified line: <today> against <source> (provenance mandatory;\noverwrites the prior line)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "resolve-notes"
+      ],
+      "description": "Resolve the readable mission notes file for an absolute work-node directory",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice"
+      ],
+      "description": "Slice-tier commands",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 11
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "approve"
+      ],
+      "description": "Approve a slice: writes the frontmatter stamp + an append-only audit row\n(daemon-side, one operation). --scope spec = the PLAN-LOCK (PRD-matches-intent;\nthis artifact set gets built); delivery (default) = the PROOF-LOCK (terminal\nsign-off). Approval is freeze/sign-off, never proven-green. Conventions SSOT:\ndocs/reference/sdlc-conventions.md (installed:\n$OPENRIG_HOME/reference/sdlc-conventions.md).",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "close"
+      ],
+      "description": "Close a slice (move to <mission>/closed/, update status)",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "create"
+      ],
+      "description": "Create a new slice with SPEC.md, slice.yaml, PROGRESS.md, PROOF.md, and proof/.\nConventions SSOT: docs/reference/sdlc-conventions.md (installed:\n$OPENRIG_HOME/reference/sdlc-conventions.md).",
+      "argumentCount": 2,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "ls"
+      ],
+      "description": "List slices in a mission (or across all missions)",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "move"
+      ],
+      "description": "Move a slice between missions (re-numbers in destination)",
+      "argumentCount": 2,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "progress"
+      ],
+      "description": "Update a slice's progress rail deterministically (append a row, or set a row's\nstatus)",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "repair"
+      ],
+      "description": "Backfill a slice's missing PROGRESS.md + conform mandatory frontmatter\n(id/stage/verified); idempotent",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "ship"
+      ],
+      "description": "Ship a slice to a release mission (preserves git history)",
+      "argumentCount": 2,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "show"
+      ],
+      "description": "Inspect a single slice (frontmatter + README + children)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "stage"
+      ],
+      "description": "Set a slice's epistemic stage (wip | provisional | established | canonical |\nsuperseded | retired); superseded needs --successor",
+      "argumentCount": 2,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "scope",
+        "slice",
+        "verified"
+      ],
+      "description": "Stamp a slice's verified line: <today> against <source> (provenance mandatory;\noverwrites the prior line)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat"
+      ],
+      "description": "Inspect OpenRig seat observability state",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 18
+    },
+    {
+      "path": [
+        "seat",
+        "clean"
+      ],
+      "description": "Return a DEAD seat to launchable (clears stale binding + session records;\naudited)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "clear-attention"
+      ],
+      "description": "Reconcile seat attention using the checks for its attention class",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "continue"
+      ],
+      "description": "Deliver pending startup context to the same fresh or forked conversation",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "effort"
+      ],
+      "description": "Show one seat's effort four ways: requested, saved, sent at launch, and what the\nnative session records",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "handover"
+      ],
+      "description": "Hand a seat to a successor (two-phase). Pass --dry-run to plan without changing\ntopology.",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "held-messages"
+      ],
+      "description": "Read retained messages outside the protected terminal; reading never delivers\nthem",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "launch"
+      ],
+      "description": "Launch a deliberate fresh occupant for exactly one existing seat",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "restart"
+      ],
+      "description": "Restart one Codex seat in place so it reads its Codex home's current account",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "retire-held-message"
+      ],
+      "description": "Release one held message's active quota, preserving evidence; does not deliver\nor close work",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-cwd"
+      ],
+      "description": "Save an existing seat's working directory for its next fresh launch or rebuild\nhandover",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-effort"
+      ],
+      "description": "Save one seat's reasoning effort for its next managed continuation (audited); no\nrestart",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-model"
+      ],
+      "description": "Persist a seat's model id (audited); subsequent managed resumes use the new\nmodel",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-permissions"
+      ],
+      "description": "Select native permissions for future managed launches; no relaunch or\nwork-posture change",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-resume-token"
+      ],
+      "description": "Set a managed seat's durable resume token (token read from stdin; attested +\naudited)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "set-typing-guard"
+      ],
+      "description": "Choose how this seat's typing guard handles automatic input",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "status"
+      ],
+      "description": "Show read-only seat handover observability status",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "stop"
+      ],
+      "description": "Stop exactly one LIVE managed seat (kills only that seat's tmux session;\naudited)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "seat",
+        "switch-client"
+      ],
+      "description": "Retarget an attached tmux client's view to the seat's canonical session\n(view-only)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "send"
+      ],
+      "description": "Send a message to an agent's terminal",
+      "argumentCount": 2,
+      "optionCount": 13,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "setup"
+      ],
+      "description": "Prepare the machine for OpenRig",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "shrink"
+      ],
+      "description": "Remove an entire pod from a running rig",
+      "argumentCount": 2,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "skill"
+      ],
+      "description": "Skill management and audit",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 2
+    },
+    {
+      "path": [
+        "skill",
+        "audit"
+      ],
+      "description": "Read-only skill provenance and freshness audit",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "skill",
+        "loadout"
+      ],
+      "description": "Inspect or reconcile the composed managed skill loadout for one Claude/Codex\nworking directory",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack"
+      ],
+      "description": "Slack connector: configuration + in-daemon subsystem admin (S10)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 9
+    },
+    {
+      "path": [
+        "slack",
+        "channel-map"
+      ],
+      "description": "Post a rig's or seat's human-bound items to its own channel (list | set |\nremove)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "slack",
+        "channel-map",
+        "list"
+      ],
+      "description": "Show the default channel and every mapped rig or seat with its channel",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "channel-map",
+        "remove"
+      ],
+      "description": "Remove a rig's or seat's entry; it falls back to its rig's entry or the default\nchannel",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "channel-map",
+        "set"
+      ],
+      "description": "Map a rig (my-rig) or seat (lead@my-rig) to a Slack channel id; replaces an\nexisting entry",
+      "argumentCount": 2,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "disable"
+      ],
+      "description": "Disable the connector (the daemon rewires to an inert delivery path)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "enable"
+      ],
+      "description": "Enable the connector (daemon seeds the current backlog as history — no replay\nstorm — then rewires)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "inbound"
+      ],
+      "description": "[RETIRED — S10] the in-daemon subsystem owns Socket Mode inbound",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "manifest"
+      ],
+      "description": "Print the Slack app manifest for creating your own OpenRig Slack app (offline)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "outbound"
+      ],
+      "description": "[RETIRED — S10] the in-daemon subsystem owns outbound delivery",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "setup"
+      ],
+      "description": "Configure the connector (first-class config; secrets stay in the env file, never\nhere)",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "status"
+      ],
+      "description": "Show local configuration and bounded daemon socket/recovery observations (no\nSlack calls)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "slack",
+        "verify"
+      ],
+      "description": "Live-verify GRANTED Slack scopes (from response headers) + channel membership",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "snapshot"
+      ],
+      "description": "Manage rig snapshots",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "snapshot",
+        "list"
+      ],
+      "description": "List snapshots for a rig",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "spec"
+      ],
+      "description": "Manage rig specs",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 4
+    },
+    {
+      "path": [
+        "spec",
+        "audit"
+      ],
+      "description": "Advisory audit of rig-spec culture and startup context",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "spec",
+        "preflight"
+      ],
+      "description": "Run preflight diagnostics on a rig spec",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "spec",
+        "show"
+      ],
+      "description": "Print the spec that recreates a running rig",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "spec",
+        "validate"
+      ],
+      "description": "Validate a rig spec locally (no daemon required)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs"
+      ],
+      "description": "Browse, preview, and manage the spec library, including managed apps",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 7
+    },
+    {
+      "path": [
+        "specs",
+        "add"
+      ],
+      "description": "Add a spec file or full spec directory to the user library",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "ls"
+      ],
+      "description": "List library rigs, agents, and managed apps",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "preview"
+      ],
+      "description": "Show structured spec review, including managed app details",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "remove"
+      ],
+      "description": "Remove a user-file spec from the library",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "rename"
+      ],
+      "description": "Rename a user-file spec in the library",
+      "argumentCount": 2,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "show"
+      ],
+      "description": "Show spec metadata and path",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "specs",
+        "sync"
+      ],
+      "description": "Rescan spec library roots",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "start"
+      ],
+      "description": "Start the daemon, verify kernel, and restore rigs that were last running",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "startup-proof"
+      ],
+      "description": "Submit and inspect startup orientation proof",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "startup-proof",
+        "submit"
+      ],
+      "description": "Submit this seat's startup proof through the authenticated OpenRig activity hook",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "status"
+      ],
+      "description": "Show rig status",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "stream"
+      ],
+      "description": "Coordination L1 — append-only intake stream",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "stream",
+        "archive"
+      ],
+      "description": "Soft-archive a stream item (audit row preserved)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "stream",
+        "emit"
+      ],
+      "description": "Append a stream item",
+      "argumentCount": 0,
+      "optionCount": 10,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "stream",
+        "list"
+      ],
+      "description": "List stream items chronologically",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "stream",
+        "show"
+      ],
+      "description": "Fetch one stream item by id",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "stream",
+        "watch"
+      ],
+      "description": "Watch the stream (initial replay + live items)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "telemetry"
+      ],
+      "description": "Read one bounded page of retained metadata, with explicit history gaps",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "telemetry",
+        "events"
+      ],
+      "description": "Event metadata only; no payload content",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "telemetry",
+        "tenures"
+      ],
+      "description": "Newest retained occupant tenures for one immutable node (default 32)",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "telemetry",
+        "transitions"
+      ],
+      "description": "Active and archived queue-transition metadata",
+      "argumentCount": 0,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "terminal"
+      ],
+      "description": "Open the OpenRig view and agent conversations in terminal tiles",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "terminal",
+        "open"
+      ],
+      "description": "Open a desktop terminal showing the view's live agents as interactive tiles",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "terminal",
+        "status"
+      ],
+      "description": "Show terminal provider availability + liveness (doctor)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "terminal",
+        "views"
+      ],
+      "description": "List saved views + the rigs openable as derived views",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "transcript"
+      ],
+      "description": "Read agent transcript output",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "tui"
+      ],
+      "description": "open the status dashboard, not agent chat (--shared is the OpenRig view\nfallback)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "tui",
+        "commands"
+      ],
+      "description": "list every TUI command (serialized from the ONE command registry; --json for\nagents)",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "ui"
+      ],
+      "description": "UI commands",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 1
+    },
+    {
+      "path": [
+        "ui",
+        "open"
+      ],
+      "description": "Open the OpenRig UI in the default browser",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "unarchive"
+      ],
+      "description": "Unarchive a rig (reverse of 'rig archive'): returns it to the default view.\nAlways safe.",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "unclaim"
+      ],
+      "description": "Release an adopted session without killing the tmux session",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "up"
+      ],
+      "description": "Launch a rig or managed app from a spec, library entry, or bundle",
+      "argumentCount": 1,
+      "optionCount": 13,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "usage"
+      ],
+      "description": "Per-seat token telemetry over time (series + top-N burn) — facts for the\noversight detector",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "usage",
+        "cost"
+      ],
+      "description": "what each seat's harness reports about cost, beside tokens: kind, source, window\nand coverage",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "usage",
+        "series"
+      ],
+      "description": "raw per-seat usage samples, oldest first",
+      "argumentCount": 0,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "usage",
+        "top"
+      ],
+      "description": "top-N seats by token burn over the window",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "view"
+      ],
+      "description": "Coordination L5 — daemon-backed views over coordination state",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 3
+    },
+    {
+      "path": [
+        "view",
+        "list"
+      ],
+      "description": "List built-in + custom views",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "view",
+        "register"
+      ],
+      "description": "Register or update a custom view",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "view",
+        "show"
+      ],
+      "description": "Run a view (built-in or custom). Built-in views: recently-active, founder,\npod-load, escalations, held, activity, pickup",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "walk"
+      ],
+      "description": "Walk a seat through a paced sequence of context pieces",
+      "argumentCount": 1,
+      "optionCount": 15,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "watchdog"
+      ],
+      "description": "Coordination Watchdog — daemon-native scheduler for reminders, artifact gates,\nworkflow health, idle gates, and context usage",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 5
+    },
+    {
+      "path": [
+        "watchdog",
+        "list"
+      ],
+      "description": "List watchdog jobs (default: active + compact + at most 100)",
+      "argumentCount": 0,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "watchdog",
+        "register"
+      ],
+      "description": "Register a watchdog; queue block --wake-watchdog attaches its job id. Context\ntranscripts measured 113K–153K tokens/MB. The margin is the protection because\nprompt-bound consumers act only at turn boundaries",
+      "argumentCount": 0,
+      "optionCount": 13,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "watchdog",
+        "show"
+      ],
+      "description": "Show one watchdog job",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "watchdog",
+        "status"
+      ],
+      "description": "Show one watchdog job + recent evaluation history",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "watchdog",
+        "stop"
+      ],
+      "description": "Stop a watchdog job (operator-stopped; scheduler skips it)",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "whoami"
+      ],
+      "description": "Show current managed identity in an OpenRig topology",
+      "argumentCount": 0,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow"
+      ],
+      "description": "Daemon-native Workflow Runtime — declarative spec + transactional-scribe step\nprojection (PL-004 Phase D)",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 19
+    },
+    {
+      "path": [
+        "workflow",
+        "abort"
+      ],
+      "description": "Transactionally cancel every live packet and abort the whole workflow instance",
+      "argumentCount": 1,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "compile"
+      ],
+      "description": "Compile project.yaml → mission.yaml → slice.yaml into an inspectable lifecycle\ngraph (read-only)",
+      "argumentCount": 1,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "continue"
+      ],
+      "description": "Inspect an instance's current frontier + step trail (read-only; advancing\nhappens via 'rig workflow project')",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "guidance"
+      ],
+      "description": "Read current selected SDLC teaching, original intent and authored/bound\nprovenance",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "instantiate"
+      ],
+      "description": "Create a workflow instance + entry-step qitem from a spec",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "instantiate-lifecycle"
+      ],
+      "description": "Compile and instantiate an eligible lifecycle; recover a lost response with\nworkflow operation <key>",
+      "argumentCount": 1,
+      "optionCount": 6,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "list"
+      ],
+      "description": "List workflow instances; optionally filter by status",
+      "argumentCount": 0,
+      "optionCount": 2,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "operation"
+      ],
+      "description": "Recover a lifecycle creation or revision effect by its stable key, even after a\nlost response or source edit",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "project"
+      ],
+      "description": "Close a current packet AND project the next-step packet (transactional-scribe;\none daemon transaction)",
+      "argumentCount": 0,
+      "optionCount": 13,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "resume"
+      ],
+      "description": "Redrive a FAILED instance from its failed step (completed steps never re-run;\none fresh max_hops window)",
+      "argumentCount": 1,
+      "optionCount": 4,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "revise"
+      ],
+      "description": "Compare authored and running lifecycle graphs; deliberately adopt compatible\nchanges without replaying work",
+      "argumentCount": 1,
+      "optionCount": 7,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "route"
+      ],
+      "description": "Re-route the current frontier step to a new owner (same step, honest handoff\nclosure; never advances)",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "run"
+      ],
+      "description": "Instantiate a workflow AND follow it live to a terminal state (exit 0 completed\n/ 3 failed or aborted)",
+      "argumentCount": 1,
+      "optionCount": 9,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "show"
+      ],
+      "description": "Show current work, exception-owner readiness and existing exception obligations",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "specs"
+      ],
+      "description": "List registered workflow specs; built-in starters tagged with (built-in)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "status"
+      ],
+      "description": "Which instances need attention: counts + one row per failed/stuck/waiting\ninstance with reason + next action (read-only)",
+      "argumentCount": 0,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "trace"
+      ],
+      "description": "Show one workflow instance + its append-only step trail (audit-only verdict)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "validate"
+      ],
+      "description": "Validate a workflow spec file (returns structured ok/error report)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workflow",
+        "watch"
+      ],
+      "description": "Attach to an in-flight instance and follow it live (read-only; exit mirrors the\noutcome)",
+      "argumentCount": 1,
+      "optionCount": 1,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workspace"
+      ],
+      "description": "PL-007 Workspace Primitive — typed-kind tooling. `validate` walks a root and\nreports frontmatter gaps; `doctor` runs the 8-check workspace-readiness\ndiagnostic.",
+      "argumentCount": 0,
+      "optionCount": 0,
+      "childCount": 2
+    },
+    {
+      "path": [
+        "workspace",
+        "doctor"
+      ],
+      "description": "Run the 8-check workspace-readiness diagnostic against the daemon's resolved\nworkspace. Reports state of workspace root, missions folder, file allowlist,\ndaemon alignment, daemon reload, slice docs, mission NOTES, and SDLC convention\nsections. Read-only.",
+      "argumentCount": 0,
+      "optionCount": 3,
+      "childCount": 0
+    },
+    {
+      "path": [
+        "workspace",
+        "validate"
+      ],
+      "description": "Walk a workspace root, parse each .md file's YAML frontmatter, and emit a\nstructured gap report. Advisory only — never modifies files. Default root: cwd.",
+      "argumentCount": 1,
+      "optionCount": 5,
+      "childCount": 0
+    }
+  ]
+}

@@ -21,6 +21,45 @@ test(
       ],
     };
     try {
+      await features.edit(connection, {
+        op: "create",
+        root,
+        path: "package.json",
+        content: JSON.stringify({
+          dependencies: { react: "1.0" },
+          scripts: { test: "PRIVATE_COMMAND_DO_NOT_COLLECT" },
+          privateToken: "PRIVATE_TOKEN_DO_NOT_COLLECT",
+        }),
+      });
+      const brief = await features.assessTeam(connection, {
+        op: "brief",
+        root,
+        goal: draft.goal,
+        constraints: "Two active seats",
+        work: "Build",
+      });
+      assert.match(brief.prompt, /logicalCpus/);
+      assert.match(brief.prompt, /Two active seats/);
+      assert.match(brief.prompt, /dependencyNames/);
+      assert.match(brief.prompt, /react/);
+      assert.doesNotMatch(
+        brief.prompt,
+        /PRIVATE_COMMAND_DO_NOT_COLLECT|PRIVATE_TOKEN_DO_NOT_COLLECT/,
+      );
+      const assessment = await features.assessTeam(connection, {
+        op: "import",
+        content: JSON.stringify({
+          proposals: ["lean", "balanced", "throughput"].map((tier) => ({
+            tier,
+            rationale: "Independent verification",
+            workflow: "Build then review",
+            uncertainty: "Deployment unknown",
+            concurrency: 2,
+            seats: draft.seats,
+          })),
+        }),
+      });
+      assert.equal(assessment.proposals.length, 3);
       await assert.rejects(
         () => features.designRig(connection, { ...draft, name: "../bad" }),
         /lowercase/,
@@ -55,6 +94,33 @@ test(
         /installed agent/,
       );
       const preview = await features.designRig(connection, draft);
+      const handoff = {
+        mission: "Implement the change",
+        boundaries: "Only assigned scope",
+        expectedOutput: "Diff and test evidence",
+        handoff: "Ask reviewer to verify before completion",
+      };
+      const planned = await features.designRig(connection, {
+        ...draft,
+        name: "handoff-team",
+        seats: [{ ...draft.seats[0], firstHandoff: handoff }, draft.seats[1]],
+      });
+      assert.match(planned.spec.summary, /Mission: Implement the change/);
+      assert.match(planned.spec.summary, /Ask reviewer to verify/);
+      await assert.rejects(
+        () =>
+          features.designRig(connection, {
+            ...draft,
+            op: "launch",
+            confirmation: draft.name,
+            previewToken: preview.previewToken,
+            seats: [
+              { ...draft.seats[0], firstHandoff: handoff },
+              draft.seats[1],
+            ],
+          }),
+        /Preview this exact design/,
+      );
       assert.equal(
         preview.spec.pods[0].members[0].agent_ref,
         "path:" + root + "/implementer",

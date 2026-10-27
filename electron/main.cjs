@@ -16,6 +16,7 @@ const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const core = require("./core.cjs");
 const features = require("./features.cjs");
+const rigControl = require("./rig-control.cjs").createRigControl(features.runRig, (connection,args,timeout,root) => features.runRig(connection,args,timeout,root,true));
 const backend=require("./backend.cjs").createBackend();
 const { spawn } = require("node:child_process");
 const net = require("node:net");
@@ -36,6 +37,7 @@ function handle(channel, fn) {
     return fn(event, ...args);
   });
 }
+handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
 require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs});
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
@@ -44,6 +46,7 @@ const mobile = require('./mobile-service.cjs').mobileService({
   directory: app.getPath('userData'),
   assets: path.join(__dirname, '../dist-mobile'),
   connections: async () => JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'workspace.json'), 'utf8')).connections || [],
+  activeConnection: async () => JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'workspace.json'), 'utf8')).activeConnection,
 });
 handle('mobile:operation', (_event, request) => mobile.operation(request));
 app.on('before-quit', () => mobile.stop());
@@ -251,7 +254,7 @@ ipcMain.on("state:flush", (event, state) => {
 });
 handle("connections:detect", () => core.detectConnections());
 handle("rig:inventory", (_event, connection) => backend.inventory(connection));
-handle("rig:send",(_event,c,seat,message)=>backend.sendMessage(c,seat,message));
+handle("rig:send", (_event,connection,seat,message)=>backend.sendMessage(connection,seat,message));
 handle("connection:doctor", (_event, connection) =>
   backend.doctor(connection),
 );
@@ -260,6 +263,9 @@ handle("rig:action", (_event, connection, request) =>
 );
 handle("rig:design", (_event, connection, request) =>
   backend.designRig(connection, request),
+);
+handle("rig:assess", (_event, connection, request) =>
+  features.assessTeam(connection, request),
 );
 handle("editor:operation", (_event, connection, request) =>
   backend.edit(connection, request),
@@ -398,7 +404,11 @@ handle("terminal:create", async (event, options) => {
     session = seat.session;
   }
   let file, args;
-  if (connection.kind === "local") {
+  if (options.rigControlToken) {
+    const planned = rigControl.consumeTerminal(connection, options.rigControlToken, options.rigControlConfirmation);
+    const directory = !planned.root || planned.root === "~" ? '"$HOME"' : planned.root.startsWith("~/") ? '"$HOME"/' + core.quote(planned.root.slice(2)) : core.quote(planned.root);
+    ({ file, args } = core.transport(connection, `unset OPENRIG_SESSION_NAME RIGGED_SESSION_NAME; cd -- ${directory} && { ` + features.rigCommand(connection, planned.args) + "; }", true));
+  } else if (connection.kind === "local") {
     if(session) ({file,args}=core.transport(connection,core.sessionCommand(session),true));
     else ({file,args}=require('./platform.cjs').localShell(process.platform,options.localShell));
   } else {
@@ -437,7 +447,7 @@ handle("terminal:create", async (event, options) => {
     name: "xterm-256color",
     cols: options.cols || 100,
     rows: options.rows || 30,
-    cwd: connection.kind === "local" ? root || process.cwd() : process.cwd(),
+    cwd: options.rigControlToken ? process.cwd() : connection.kind === "local" ? root || process.cwd() : process.cwd(),
     env,
     useConpty: true,
   });

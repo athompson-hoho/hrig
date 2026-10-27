@@ -2,6 +2,89 @@ const core = require("./core.cjs");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const teamAssessment = require("./team-assessment.cjs");
+
+async function assessTeam(connection, request) {
+  core.validateConnection(connection);
+  if (request.op === "accounts")
+    return require("./accounts.cjs").discover(connection, () => assessmentProvider(connection, { op: "providers" }));
+  if (request.op === "providers") return assessmentProvider(connection, request);
+  const catalog = await rigAction(connection, { op: "agents" });
+  const agents = Array.isArray(catalog)
+    ? catalog
+    : catalog.entries || catalog.items || [];
+  if (request.op === "import")
+    return teamAssessment.validateRecommendation(request.content, agents);
+  if (
+    !["brief", "run"].includes(request.op) ||
+    typeof request.root !== "string" ||
+    !request.root.trim() ||
+    typeof request.goal !== "string" ||
+    !request.goal.trim() ||
+    request.goal.length > 4000 ||
+    typeof request.constraints !== "string" ||
+    request.constraints.length > 4000
+  )
+    throw new Error(
+      "Provide a project folder, goal and constraints under 4,000 characters.",
+    );
+  if (request.answers !== undefined && (!Array.isArray(request.answers) || request.answers.length > 3 || request.answers.some(a => !a || typeof a.question !== "string" || a.question.length > 4000 || typeof a.answer !== "string" || a.answer.length > 4000)))
+    throw new Error("Provide at most three answers under 4,000 characters each.");
+  const tuning = teamAssessment.validateTuning(request, agents);
+  const context = await python(
+    connection,
+    `import os,sys,json,platform,shutil
+a=json.load(sys.stdin)
+root=os.path.realpath(os.path.expanduser(a['root']))
+if not os.path.isdir(root): raise RuntimeError('Project folder does not exist')
+memory={}
+try:
+ for line in open('/proc/meminfo'):
+  key,_,value=line.partition(':')
+  if key in ('MemTotal','MemAvailable'): memory[key+'KiB']=int(value.split()[0])
+except OSError: pass
+names=[]
+with os.scandir(root) as entries:
+ for entry in entries:
+  if len(names)>=100: break
+  if not entry.name.startswith('.') and entry.name not in ('node_modules','vendor','dist','build'): names.append(entry.name)
+manifest={}
+try:
+ target=os.path.realpath(os.path.join(root,'package.json'))
+ if os.path.commonpath([root,target])==root and os.path.getsize(target)<65536:
+  with open(target) as f: package=json.load(f)
+  manifest={'dependencyNames':sorted(set(package.get('dependencies',{}))|set(package.get('devDependencies',{})))[:100],'scriptNames':sorted(package.get('scripts',{}))[:40]}
+except (OSError,ValueError,TypeError,AttributeError): pass
+print(json.dumps({'root':root,'platform':platform.system(),'architecture':platform.machine(),'logicalCpus':os.cpu_count(),'memory':memory,'providerExecutables':{n:bool(shutil.which(n)) for n in ('codex','claude','grok','antigravity')},'topLevelEntries':sorted(names),'entryLimit':100,'package.json':manifest}))`,
+    { root: request.root },
+  );
+  const accountAvailability = await require("./accounts.cjs").discover(connection, () => assessmentProvider(connection, { op: "providers" }));
+  const prompt = teamAssessment.buildPrompt(
+      { ...context, accountAvailability: { providers: accountAvailability.providers, checkedAt: accountAvailability.checkedAt, warning: accountAvailability.warning, note: "Recommend authenticated runtimes on this host. Managed Orca accounts do not establish CLI access. Never infer quota or context availability from authentication." } },
+      {
+        root: request.root,
+        goal: request.goal,
+        constraints: request.constraints,
+        work: request.work,
+        answers: request.answers || [],
+        ...tuning,
+      },
+      agents,
+    );
+  if (request.op === "run") {
+    const result = await assessmentProvider(connection, { op: "run", root: request.root, provider: request.provider, prompt });
+    return { prompt, ...teamAssessment.validateRecommendation(result.content, agents) };
+  }
+  return { prompt };
+}
+
+async function assessmentProvider(connection, request) {
+  if (!["providers", "run"].includes(request.op) || (request.op === "run" && !["codex", "claude-code"].includes(request.provider)))
+    throw new Error("Choose a supported assessment provider.");
+  const source = require("./assessment-provider.cjs").runner;
+  const program = "import base64;exec(base64.b64decode(" + JSON.stringify(Buffer.from(source).toString("base64")) + "))";
+  return core.parseJson(await core.remote(connection, NVM + `python3 -c ${core.quote(program)}`, { input: JSON.stringify(request), timeout: 165000 }));
+}
 
 // Program source is encoded; request payloads travel on stdin, not command lines.
 async function python(connection, source, request) {
@@ -25,7 +108,7 @@ function rigCommand(connection, args) {
     args.map(core.quote).join(" ")
   );
 }
-async function runRig(connection, args, timeout = 25000) {
+async function runRig(connection, args, timeout = 25000, root, captureStderr = false) {
   core.validateConnection(connection);
   if (connection.kind === "local" && process.platform==='win32')
     throw new Error("Choose a WSL or SSH connection for OpenRig.");
@@ -35,12 +118,13 @@ async function runRig(connection, args, timeout = 25000) {
       NVM +
       "exec python3 -c " +
       core.quote(
-        "import os,json,sys\na=json.load(sys.stdin)\na[0]=os.path.expanduser(a[0])\nfor i in range(len(a)-1):\n if a[i]=='--cwd': a[i+1]=os.path.realpath(os.path.expanduser(a[i+1]))\nos.execvp(a[0],a)",
+        "import os,json,sys\nr=json.load(sys.stdin)\na=r['args']\na[0]=os.path.expanduser(a[0])\nif r.get('root'): os.chdir(os.path.realpath(os.path.expanduser(r['root'])))\nfor i in range(len(a)-1):\n if a[i]=='--cwd': a[i+1]=os.path.realpath(os.path.expanduser(a[i+1]))\nos.execvp(a[0],a)",
       ),
   );
   return core.execute(t.file, t.args, {
     timeout,
-    input: JSON.stringify([connection.rigBinary || "rig", ...args]),
+    captureStderr,
+    input: JSON.stringify({ args: [connection.rigBinary || "rig", ...args], root }),
   });
 }
 async function diagnose(connection) {
@@ -450,7 +534,7 @@ async function designRig(connection, a) {
   const spec = {
     version: "0.2",
     name: a.name,
-    summary: a.goal.trim(),
+    summary: a.goal.trim() + teamAssessment.handoffSummary(a.seats),
     pods: [
       {
         id: "team",
@@ -615,6 +699,7 @@ print(json.dumps(sorted(folders.values(),key=lambda row:row['path'])))`,
   );
 }
 module.exports = {
+  assessTeam,
   designRig,
   projects,
   python,
