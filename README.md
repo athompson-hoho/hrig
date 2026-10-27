@@ -19,6 +19,20 @@ A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig).
 
 </details>
 
+
+<details>
+<summary>Community themes: Catppuccin, Nord, and Dracula</summary>
+
+![Catppuccin Mocha across the HRig workspace](docs/screenshots/community-catppuccin-mocha.png)
+
+![Catppuccin Latte light theme](docs/screenshots/community-catppuccin-latte.png)
+
+![Nord theme in HRig](docs/screenshots/community-nord.png)
+
+![Dracula theme in HRig](docs/screenshots/community-dracula.png)
+
+</details>
+
 **Guided rig design**
 
 The rig designer guides you from a goal to an editable team and a launch review. These screenshots use an isolated demonstration rig.
@@ -50,7 +64,7 @@ The rig designer guides you from a goal to an editable team and a launch review.
 
 ## Run the desktop app
 
-Open **`release/HRig 0.7.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.7.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -180,3 +194,6 @@ The rig designer now follows the workspace tool panels: compact headings and ste
 ### Settings and themes (0.7.0)
 
 Open **Settings** from the activity rail, Tools, the command center, or **Ctrl+,**. Search 33 preferences across appearance, editor, terminal, workspace, connection/rig defaults, and notifications. User and local project scopes include modified filters, resets, and validated JSON import/export. Five palettes plus Follow Windows coordinate the app, editors, terminals, and detached panels. Changes to terminal appearance preserve the running session. See [SETTINGS.md](SETTINGS.md) for the feature plan, catalog, scope rules, and follow-up ideas.
+### Community themes (0.7.1)
+
+Appearance includes Catppuccin (Mocha, Macchiato, Frappe, Latte), Nord, Dracula, Tokyo Night, and Gruvbox Dark. Choose **Theme default** for the native accent, or retain a custom accent. Each adaptation coordinates the app, editor syntax, all 16 terminal colors, and detached panels; terminal themes can also be selected independently. Palettes and licenses ship offline. [Theme credits and source revisions](THEME_CREDITS.md).

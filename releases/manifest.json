@@ -38,5 +38,10 @@
     "version": "0.7.0",
     "title": "Settings, preferences, and coordinated themes",
     "sourceRef": "HEAD"
+  },
+  {
+    "version": "0.7.1",
+    "title": "Community themes for workspace, editor, and terminals",
+    "sourceRef": "HEAD"
   }
 ]

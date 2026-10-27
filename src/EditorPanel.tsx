@@ -9,7 +9,7 @@ import { ErrorBox, Loading, Modal } from "./components";
 import type { PanelConfig } from "./types";
 import { buffers, problems } from "./editor-buffers";
 import { useSettings } from "./SettingsContext";
-import { themes, themeId, themeColor } from "./themes";
+import { editorTheme, themeId } from "./themes";
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === "json") return new JsonWorker();
@@ -76,31 +76,12 @@ export default function EditorPanel({
   onSaved: () => void;
 }) {
   const { effective: preferences } = useSettings();
-  const colorTheme = themeId(preferences),
-    palette = themes[colorTheme];
+  const colorTheme = themeId(preferences);
   useEffect(() => {
-    monaco.editor.defineTheme("hrig-settings", {
-      base: palette.dark ? "vs-dark" : "vs",
-      inherit: true,
-      rules:
-        colorTheme === "hrig-dark"
-          ? [
-              { token: "comment", foreground: "697386" },
-              { token: "string", foreground: "a1d6b8" },
-              { token: "keyword", foreground: "b8abed" },
-            ]
-          : [],
-      colors: {
-        "editor.background": palette.panel,
-        "editor.foreground": palette.text,
-        "editorLineNumber.foreground": palette.muted,
-        "editorCursor.foreground": themeColor(
-          "#98e2c2",
-          colorTheme,
-          preferences["appearance.accent"],
-        ),
-      },
-    });
+    monaco.editor.defineTheme(
+      "hrig-settings",
+      editorTheme(preferences, colorTheme),
+    );
     monaco.editor.setTheme("hrig-settings");
   }, [colorTheme, preferences["appearance.accent"]]);
   const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {

@@ -1,53 +1,8 @@
 import { sourceColors } from "./theme-colors";
 import type { Preferences } from "./settings";
-export const themes = {
-  "hrig-dark": {
-    name: "HRig Dark",
-    background: "#101115",
-    panel: "#14161b",
-    line: "#353e4c",
-    text: "#d0d5e0",
-    muted: "#8995a7",
-    dark: true,
-  },
-  graphite: {
-    name: "Graphite",
-    background: "#171717",
-    panel: "#202020",
-    line: "#444444",
-    text: "#e1e1e1",
-    muted: "#a0a0a0",
-    dark: true,
-  },
-  midnight: {
-    name: "Midnight",
-    background: "#0b1220",
-    panel: "#101b2d",
-    line: "#31455d",
-    text: "#dbe8f8",
-    muted: "#8cabc8",
-    dark: true,
-  },
-  light: {
-    name: "Daylight",
-    background: "#f5f6f8",
-    panel: "#ffffff",
-    line: "#c7cdd7",
-    text: "#222d3c",
-    muted: "#58677b",
-    dark: false,
-  },
-  "high-contrast": {
-    name: "High Contrast",
-    background: "#000000",
-    panel: "#000000",
-    line: "#9cacbf",
-    text: "#ffffff",
-    muted: "#c6d1e0",
-    dark: true,
-  },
-};
-export type ThemeId = keyof typeof themes;
+import { themes, type ThemeId } from "./theme-catalog";
+export { themes, type ThemeId } from "./theme-catalog";
+
 export const accents: Record<string, string> = {
   mint: "#a0e3c2",
   blue: "#91b4ec",
@@ -89,11 +44,11 @@ export function themeId(
     ? systemDark
       ? "hrig-dark"
       : "light"
-    : preferences["appearance.theme"] in themes
+    : Object.hasOwn(themes, preferences["appearance.theme"])
       ? (preferences["appearance.theme"] as ThemeId)
       : "hrig-dark";
 }
-export function themeColor(source: string, id: ThemeId, accent = "mint") {
+export function themeColor(source: string, id: ThemeId, accent = "theme") {
   const p = themes[id],
     [r, g, b] = rgb(source),
     brightness = (r * 0.2126 + g * 0.7152 + b * 0.0722) / 255;
@@ -104,10 +59,31 @@ export function themeColor(source: string, id: ThemeId, accent = "mint") {
         ? source.slice(4).repeat(2)
         : "";
   const green = g > r * 1.08 && g > b * 1.02;
-  if (id === "hrig-dark" && accent === "mint") return source;
+  if (id === "hrig-dark" && (accent === "mint" || accent === "theme"))
+    return source;
+  let chosen =
+    accent === "theme"
+      ? p.accent || accents.mint
+      : accents[accent] || accents.mint;
+  if (!p.dark && rgb(chosen).reduce((a, b) => a + b, 0) / 765 > 0.6)
+    chosen = mix(p.text, chosen, 0.35);
+  if (p.family === "Community") {
+    const anchors: Record<string, string> = {
+      "#101115": p.background,
+      "#14161b": p.panel,
+      "#181a20": p.surface || p.panel,
+      "#272a33": p.line,
+      "#c9cdd7": p.text,
+      "#d0d5e0": p.text,
+      "#777e8e": p.muted,
+      "#a0e3c2": chosen,
+      "#a0dbb6": chosen,
+      "#98e2c2": chosen,
+    };
+    if (anchors[source.toLowerCase()]) return anchors[source.toLowerCase()];
+  }
   let color: string;
   if (green) {
-    const chosen = accents[accent] || accents.mint;
     color = p.dark
       ? brightness < 0.3
         ? mix(p.panel, chosen, brightness * 0.65)
@@ -155,15 +131,18 @@ export function terminalTheme(p: Preferences, id: ThemeId) {
   const selected =
     p["terminal.theme"] === "inherit"
       ? id
-      : p["terminal.theme"] === "light"
-        ? "light"
-        : "hrig-dark";
+      : p["terminal.theme"] === "dark"
+        ? "hrig-dark"
+        : Object.hasOwn(themes, p["terminal.theme"])
+          ? (p["terminal.theme"] as ThemeId)
+          : "hrig-dark";
   const palette = themes[selected];
   return {
     background: palette.panel,
     foreground: palette.text,
     cursor: themeColor("#98e2c2", selected, p["appearance.accent"]),
-    selectionBackground: selected === "light" ? "#c8daef" : "#33564e",
+    selectionBackground:
+      palette.selection || (palette.dark ? "#33564e" : "#c8daef"),
     black: palette.dark ? "#20232c" : "#242b36",
     red: palette.dark ? "#ed929d" : "#a02539",
     green: palette.dark ? "#98d8b3" : "#246841",
@@ -173,5 +152,47 @@ export function terminalTheme(p: Preferences, id: ThemeId) {
     cyan: palette.dark ? "#8cd3d9" : "#1c6574",
     white: palette.dark ? "#d7dce7" : "#7b8594",
     brightBlack: "#747c8e",
+    ...palette.ansi,
+  };
+}
+export function editorTheme(p: Preferences, id: ThemeId) {
+  const palette = themes[id],
+    s = palette.syntax;
+  const rules = s
+    ? Object.entries(s).map(([token, color]) => ({
+        token,
+        foreground: color.slice(1),
+      }))
+    : id === "hrig-dark"
+      ? [
+          { token: "comment", foreground: "697386" },
+          { token: "string", foreground: "a1d6b8" },
+          { token: "keyword", foreground: "b8abed" },
+        ]
+      : [];
+  return {
+    base: (palette.dark ? "vs-dark" : "vs") as "vs-dark" | "vs",
+    inherit: true,
+    rules,
+    colors: {
+      "editor.background": palette.panel,
+      "editor.foreground": palette.text,
+      "editorLineNumber.foreground": palette.muted,
+      "editorCursor.foreground": themeColor(
+        "#98e2c2",
+        id,
+        p["appearance.accent"],
+      ),
+      "editor.selectionBackground":
+        palette.selection || (palette.dark ? "#30463f" : "#c8daef"),
+      "editor.lineHighlightBackground": mix(
+        palette.panel,
+        palette.selection || palette.line,
+        0.25,
+      ),
+      "editorWidget.background": palette.surface || palette.panel,
+      "editorWidget.border": palette.line,
+      "editorGutter.background": palette.panel,
+    },
   };
 }

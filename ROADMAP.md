@@ -99,3 +99,7 @@ Delivered 33 searchable, working preferences with user/project overrides, modifi
 Regression investigation: the retry journey exposed repeated identical failures being batched into an unchanged error state. Retry scheduling now tracks failure events independently and keeps the existing six-attempt cap.
 
 Validation: 14 core/WSL checks and all 18 desktop journeys passed after the retry fix. The packaged native-terminal/editor/doctor/Git smoke and packaged settings/theme capture passed. Real editor options, session continuity, system appearance, project scope persistence/reset, import rejection, shell defaults, narrow layouts and popout theming are covered. README screenshots were captured from the packaged desktop app.
+
+### 0.7.1 - Community theme adaptations
+
+Added all four Catppuccin flavours, Nord, Dracula, Tokyo Night and Gruvbox Dark, with pinned upstream palettes and bundled licenses. Community previews, native/default accent selection, coordinated syntax and complete ANSI palettes, independent terminal selection, scoped persistence and popout updates are implemented. Core palette anchors and secondary UI contrast are tested.

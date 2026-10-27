@@ -34,7 +34,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | Key | Default | Behavior |
 | --- | --- | --- |
 | `appearance.theme` | `hrig-dark` | Apply a coordinated theme to the workspace, editor, terminals, dialogs, and detached windows. |
-| `appearance.accent` | `mint` | Highlight selections and primary workspace actions. |
+| `appearance.accent` | `theme` | Highlight selections and primary workspace actions. |
 | `appearance.density` | `compact` | Choose compact workspace rows or more room around tabs, settings, and sidebar items. |
 | `appearance.fontFamily` | `"DM Sans", "Segoe UI", sans-serif` | CSS font family for the workspace. Fonts must be installed on this computer. |
 | `appearance.reduceMotion` | `false` | Disable animated transitions and smooth editor scrolling. Windows reduced-motion preferences are also respected. |
@@ -70,3 +70,9 @@ The Settings JSON view exports preferences only, including any configured defaul
 ## Follow-up ideas
 
 Future candidates: custom VS Code/terminal theme imports, named profiles, remappable shortcuts, per-language editor settings, settings-file synchronization, and signed automatic updates. These are not exposed as working controls in this release. Agent credentials, provider models, permissions, extension installation, and OpenRig policies stay under the owning harness rather than being silently changed by desktop preferences.
+
+## Community themes (0.7.1)
+
+Choose Catppuccin Mocha, Macchiato, Frappe or Latte, Nord, Dracula, Tokyo Night, or Gruvbox Dark under Appearance. HRig now has 13 palettes plus Follow Windows. Native syntax colors and all 16 ANSI terminal colors are included. Secondary UI text is adapted for readability while core colors retain the upstream palette. **Theme default** uses each theme's native accent; explicit mint, blue, violet, and amber overrides remain available and existing choices are retained.
+
+Terminals can follow the app or use any bundled palette independently. Community themes work with user/project scopes, JSON transfers, detached windows, and live session-preserving changes. Themes are bundled data, with no runtime downloads or third-party extension execution. See [THEME_CREDITS.md](THEME_CREDITS.md) for pinned sources and bundled licenses.

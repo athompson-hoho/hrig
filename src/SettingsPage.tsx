@@ -163,7 +163,7 @@ export default function SettingsPage({ project }: { project: string }) {
   const matches = schema.filter(
     (row) =>
       (text
-        ? `${row.key} ${row.label} ${row.description} ${row.category}`
+        ? `${row.key} ${row.label} ${row.description} ${row.category} ${row.options?.map((o) => o.label + " " + o.value).join(" ") || ""}`
             .toLowerCase()
             .includes(text)
         : row.category === category) &&
@@ -306,41 +306,84 @@ export default function SettingsPage({ project }: { project: string }) {
                 <span>{matches.length} settings</span>
               </div>
               {!query && category === "Appearance" && !modifiedOnly && (
-                <div
-                  className="theme-picker"
-                  role="group"
-                  aria-label="Theme previews"
-                >
-                  {Object.entries(themes).map(([id, theme]) => (
-                    <button
-                      key={id}
-                      aria-label={"Use " + theme.name + " theme"}
-                      aria-pressed={value === id}
-                      className={value === id ? "selected" : ""}
-                      onClick={() =>
-                        context.update(scope, "appearance.theme", id)
-                      }
-                    >
-                      <span
-                        className="theme-preview"
-                        style={{
-                          background: theme.background,
-                          color: theme.text,
-                          borderColor: theme.line,
-                        }}
+                <>
+                  {["Built-in", "Community"].map((group) => (
+                    <section className="theme-collection" key={group}>
+                      <h4>{group} themes</h4>
+                      <div
+                        className="theme-picker"
+                        role="group"
+                        aria-label={group + " theme previews"}
                       >
-                        <i style={{ background: theme.line }} />
-                        <b style={{ background: theme.panel }}>
-                          <em style={{ background: theme.muted }} />
-                          <em style={{ background: theme.text }} />
-                          <em style={{ background: theme.muted }} />
-                        </b>
-                      </span>
-                      <strong>{theme.name}</strong>
-                      {value === id && <Check size={12} />}
-                    </button>
+                        {Object.entries(themes)
+                          .filter(
+                            ([, theme]) =>
+                              (theme.family === "Community") ===
+                              (group === "Community"),
+                          )
+                          .map(([id, theme]) => (
+                            <button
+                              key={id}
+                              title={
+                                theme.family === "Community"
+                                  ? "HRig adaptation of " + theme.name
+                                  : theme.name
+                              }
+                              aria-label={"Use " + theme.name + " theme"}
+                              aria-pressed={value === id}
+                              className={value === id ? "selected" : ""}
+                              onClick={() =>
+                                context.update(scope, "appearance.theme", id)
+                              }
+                            >
+                              <span
+                                className="theme-preview"
+                                style={{
+                                  background: theme.background,
+                                  color: theme.text,
+                                  borderColor: theme.line,
+                                }}
+                              >
+                                <i style={{ background: theme.line }} />
+                                <b style={{ background: theme.panel }}>
+                                  <em
+                                    style={{
+                                      background:
+                                        theme.syntax?.keyword || theme.muted,
+                                    }}
+                                  />
+                                  <em
+                                    style={{
+                                      background:
+                                        theme.syntax?.string || theme.text,
+                                    }}
+                                  />
+                                  <em
+                                    style={{
+                                      background: theme.accent || theme.muted,
+                                    }}
+                                  />
+                                </b>
+                              </span>
+                              <strong>{theme.name}</strong>
+                              {value === id && <Check size={12} />}
+                            </button>
+                          ))}
+                      </div>
+                    </section>
                   ))}
-                </div>
+                  <p className="theme-credits-note">
+                    Community palettes are bundled offline with theme-specific
+                    editor and terminal colors.{" "}
+                    <a
+                      href="https://github.com/athompson-hoho/hrig/blob/master/THEME_CREDITS.md"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Credits and licenses
+                    </a>
+                  </p>
+                </>
               )}
               {matches.map((row) => (
                 <Row key={scope + row.key} row={row} scope={scope} />

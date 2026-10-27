@@ -1,0 +1,32 @@
+{
+  "catppuccin": {
+    "repository": "catppuccin/palette",
+    "commit": "07d02aa110ef9eb7e7427afca5c73ba9cf7f8ebd",
+    "palette": "palette.json",
+    "license": "LICENSE"
+  },
+  "nord": {
+    "repository": "nordtheme/nord",
+    "commit": "1cef71605416a222e57225b544540ce0fcec18d4",
+    "palette": "src/nord.css",
+    "license": "license"
+  },
+  "dracula": {
+    "repository": "dracula/visual-studio-code",
+    "commit": "b50e62e320906d5f57a8bf05fd6ddf23b890d6dd",
+    "palette": "src/dracula.yml",
+    "license": "LICENSE"
+  },
+  "tokyo": {
+    "repository": "folke/tokyonight.nvim",
+    "commit": "cdc07ac78467a233fd62c493de29a17e0cf2b2b6",
+    "palette": "extras/kitty/tokyonight_night.conf",
+    "license": "LICENSE"
+  },
+  "gruvbox": {
+    "repository": "gruvbox-community/gruvbox",
+    "commit": "180ad85971343df68be3422a5630fa84e45a9ab2",
+    "palette": "colors/gruvbox.vim",
+    "license": "LICENSE.md"
+  }
+}

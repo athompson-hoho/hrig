@@ -1,6 +1,7 @@
+import { themes } from "./theme-catalog";
 export const defaults = {
   "appearance.theme": "hrig-dark",
-  "appearance.accent": "mint",
+  "appearance.accent": "theme",
   "appearance.density": "compact",
   "appearance.fontFamily": '"DM Sans", "Segoe UI", sans-serif',
   "appearance.reduceMotion": false,
@@ -66,11 +67,10 @@ export const schema: Setting[] = [
     description:
       "Apply a coordinated theme to the workspace, editor, terminals, dialogs, and detached windows.",
     options: [
-      { value: "hrig-dark", label: "HRig Dark" },
-      { value: "graphite", label: "Graphite" },
-      { value: "midnight", label: "Midnight" },
-      { value: "light", label: "Daylight" },
-      { value: "high-contrast", label: "High Contrast" },
+      ...Object.entries(themes).map(([value, theme]) => ({
+        value,
+        label: theme.name,
+      })),
       { value: "system", label: "Follow Windows" },
     ],
   },
@@ -79,7 +79,10 @@ export const schema: Setting[] = [
     category: "Appearance",
     label: "Accent color",
     description: "Highlight selections and primary workspace actions.",
-    options: options("mint", "blue", "violet", "amber"),
+    options: [
+      { value: "theme", label: "Theme default" },
+      ...options("mint", "blue", "violet", "amber"),
+    ],
   },
   {
     key: "appearance.density",
@@ -249,8 +252,11 @@ export const schema: Setting[] = [
       "Follow the application theme or keep terminals explicitly dark or light.",
     options: [
       { value: "inherit", label: "Follow application" },
-      { value: "dark", label: "HRig Dark" },
-      { value: "light", label: "Daylight" },
+      { value: "dark", label: "HRig Dark (legacy)" },
+      ...Object.entries(themes).map(([value, theme]) => ({
+        value,
+        label: theme.name,
+      })),
     ],
   },
   {
