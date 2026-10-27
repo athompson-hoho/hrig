@@ -50,8 +50,8 @@ if (!checkOnly && git("status", "--porcelain"))
 const metadata = JSON.parse(
   gh("repo", "view", repo, "--json", "visibility,url"),
 );
-if (metadata.visibility !== "PRIVATE")
-  throw new Error("Refusing to publish: this repository must be private.");
+if (metadata.visibility !== "PUBLIC")
+  throw new Error("Refusing to publish: this repository must be public.");
 const prepared = [];
 for (const release of releases) {
   const { version, sourceRef } = release;

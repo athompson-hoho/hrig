@@ -2,6 +2,35 @@
 
 A Windows desktop workspace for [OpenRig](https://github.com/mvschwarz/openrig). Arrange existing agent sessions with graphical tabs, splits, floating panels, and separate windows. Open project files and Git diffs alongside your agents.
 
+## Screenshots
+
+Rig Studio guides you from a goal to an editable team and a launch review. These screenshots use an isolated demonstration rig.
+
+**Review the team before launching**
+
+![Rig Studio review showing the project goal, working directory, and agent roster](docs/screenshots/rig-designer-review.png)
+
+<details>
+<summary>Choose your goal, type of work, and team size</summary>
+
+![Rig Studio needs step with work type cards and solo, pair, and team choices](docs/screenshots/rig-designer-needs.png)
+
+</details>
+
+<details>
+<summary>Customize agents and runtimes for each seat</summary>
+
+![Rig Studio team step with side-by-side agent seat cards](docs/screenshots/rig-designer-team.png)
+
+</details>
+
+<details>
+<summary>Use the designer in a narrow docked panel</summary>
+
+![Rig Studio review adapting to a narrow workspace panel](docs/screenshots/rig-designer-narrow.png)
+
+</details>
+
 ## Run the desktop app
 
 Open **`release/HRig 0.6.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
@@ -120,9 +149,9 @@ Each rig has a **Delete** action showing its ID and affected seats. Type its nam
 
 ### Releases
 
-Private repository: https://github.com/athompson-hoho/hrig. Download portable Windows executables from its Releases page. Version-specific notes and source targets are tracked in `releases/`; each published executable has a SHA-256 checksum asset. The historical v0.1.0 tag preserves packaged application files because its original TypeScript source was not committed. Full editable source begins at v0.5.0.
+Repository: https://github.com/athompson-hoho/hrig. Download portable Windows executables from its Releases page. Version-specific notes and source targets are tracked in `releases/`; each published executable has a SHA-256 checksum asset. The historical v0.1.0 tag preserves packaged application files because its original TypeScript source was not committed. Full editable source begins at v0.5.0.
 
-To publish a prepared release, build and smoke-test the executable, add detailed notes and an entry to `releases/manifest.json`, commit the changes, then run `npm run release:publish -- <version>`. Use `--check` to validate without publishing. The publisher requires a private repository, verifies package/tag versions and remote asset hashes, and publishes only after uploads finish. It marks only the final manifest version as latest. Existing assets with different hashes are refused.
+To publish a prepared release, build and smoke-test the executable, add detailed notes and an entry to `releases/manifest.json`, commit the changes, then run `npm run release:publish -- <version>`. Use `--check` to validate without publishing. The publisher requires a public repository, verifies package/tag versions and remote asset hashes, and publishes only after uploads finish. It marks only the final manifest version as latest. Existing assets with different hashes are refused.
 
 ### Rig Studio visual update (0.6.1)
 
