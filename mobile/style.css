@@ -32,12 +32,6 @@ header {
 .brand span {
   color: #8cdbbc;
 }
-.brand small {
-  margin-left: 12px;
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: #8598a6;
-}
 button,
 input,
 select,
@@ -112,6 +106,15 @@ textarea {
 .hint {
   font-size: 12px;
   margin-top: 24px;
+}
+.verification-phrase {
+  display: block;
+  padding: 18px 0;
+  font:
+    700 30px ui-monospace,
+    monospace;
+  letter-spacing: 4px;
+  color: #8cdbbc;
 }
 .host {
   display: flex;

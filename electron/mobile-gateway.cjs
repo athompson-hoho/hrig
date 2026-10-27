@@ -9,19 +9,22 @@ const features = require("./features.cjs");
 // these four operations are available to a paired phone.
 function createGateway({
   token,
+  auth,
+  tls,
   connections,
   assets,
   backend = core,
   runRig = features.runRig,
 }) {
-  if (typeof token !== "string" || token.length < 32)
+  if (!auth && (typeof token !== "string" || token.length < 32))
     throw new Error("HRIG_MOBILE_TOKEN must contain at least 32 characters.");
   const origins = new Set([
     "capacitor://localhost",
     "http://localhost",
     "https://localhost",
   ]);
-  return http.createServer(async (req, res) => {
+  const serverModule = tls ? require("node:https") : http;
+  return serverModule.createServer(tls || {}, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -41,7 +44,7 @@ function createGateway({
       res.setHeader("Vary", "Origin");
       res.setHeader(
         "Access-Control-Allow-Headers",
-        "Authorization, Content-Type",
+        "Authorization, Content-Type, X-Hrig-Pairing",
       );
       res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     }
@@ -51,6 +54,41 @@ function createGateway({
     }
     const url = new URL(req.url, "http://localhost");
     if (url.pathname === "/api") {
+      req.setEncoding("utf8");
+      // Pairing invitations are single-use and cannot access workspace APIs.
+      // Device approval is available exclusively through trusted desktop IPC.
+      if (
+        auth &&
+        req.method === "POST" &&
+        req.headers["x-hrig-pairing"] === "1"
+      ) {
+        try {
+          let body = "";
+          for await (const chunk of req) {
+            body += chunk;
+            if (Buffer.byteLength(body) > 4096)
+              throw new Error("Pairing request is too large.");
+          }
+          const request = JSON.parse(body);
+          const result =
+            request.op === "pair.request"
+              ? auth.request(request)
+              : request.op === "pair.poll"
+                ? auth.poll(request)
+                : request.op === "pair.cancel"
+                  ? auth.cancelRequest(request)
+                  : null;
+          if (!result) throw new Error("Unknown pairing operation.");
+          res
+            .writeHead(200, { "Content-Type": "application/json" })
+            .end(JSON.stringify({ result }));
+        } catch (error) {
+          res
+            .writeHead(400, { "Content-Type": "application/json" })
+            .end(JSON.stringify({ error: error.message }));
+        }
+        return;
+      }
       const supplied = crypto
         .createHash("sha256")
         .update(req.headers.authorization || "")
@@ -59,7 +97,13 @@ function createGateway({
         .createHash("sha256")
         .update(`Bearer ${token}`)
         .digest();
-      if (!crypto.timingSafeEqual(supplied, expected)) {
+      if (
+        auth
+          ? !auth.authenticate(
+              (req.headers.authorization || "").replace(/^Bearer /, ""),
+            )
+          : !crypto.timingSafeEqual(supplied, expected)
+      ) {
         res
           .writeHead(401, { "Content-Type": "application/json" })
           .end(JSON.stringify({ error: "Pairing key rejected." }));

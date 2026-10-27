@@ -1,7 +1,8 @@
 {
   "appId": "dev.hrig.companion",
-  "appName": "HRig Companion",
+  "appName": "hRig",
   "webDir": "dist-mobile",
+  "loggingBehavior": "none",
   "plugins": {
     "CapacitorHttp": { "enabled": true },
     "SystemBars": { "style": "DARK" }

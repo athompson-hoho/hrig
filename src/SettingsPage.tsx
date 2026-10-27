@@ -27,16 +27,18 @@ import {
 import { themes } from "./themes";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
-import UpdateSettings from "./UpdateSettings";
+import UpdateSettings from './UpdateSettings';
+import MobileDevices from "./MobileDevices";
 const categories = [
   ["Appearance", Palette],
   ["Editor", Code2],
   ["Terminal", TerminalSquare],
   ["Workspace", LayoutGrid],
   ["Connections & rigs", Network],
+  ["Mobile devices", Network],
   ["Notifications", Bell],
   ["Keyboard shortcuts", Keyboard],
-  ["Updates", Download],
+  ['Updates', Download],
   ["About", Info],
 ] as const;
 function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
@@ -291,7 +293,7 @@ export default function SettingsPage({ project }: { project: string }) {
         </nav>
         <main className="settings-content">
           <p className="settings-scope-note">
-            {scope === "project"
+            {category === "Mobile devices" ? "Mobile access and device approvals apply to this computer, across all projects." : scope === "project"
               ? "Project overrides are saved locally in HRig for this connection and folder. Reset a row to inherit your user setting."
               : "User settings are saved on this computer. Project overrides take precedence."}
           </p>
@@ -301,7 +303,7 @@ export default function SettingsPage({ project }: { project: string }) {
               {notice}
             </p>
           )}
-          {category === "Updates" && !query ? <UpdateSettings /> : query || schema.some((r) => r.category === category) ? (
+          {category==='Updates' && !query ? <UpdateSettings /> : category === "Mobile devices" && !query ? <MobileDevices /> : query || schema.some((r) => r.category === category) ? (
             <>
               <div className="settings-section-title">
                 <h3>{query ? "Search results" : category}</h3>

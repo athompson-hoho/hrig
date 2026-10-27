@@ -3,6 +3,13 @@ import { createRoot } from "react-dom/client";
 import { Capacitor, CapacitorHttp } from "@capacitor/core";
 import type { Inventory, Seat } from "../src/types";
 import "./style.css";
+import PairComputer from "./PairComputer";
+import {
+  hostRequest,
+  reconnectProfile,
+  LinkError,
+  type HostProfile,
+} from "./link";
 
 type Host = { id: string; name: string };
 type Task = { id: string; title: string; status: string; destination: string };
@@ -16,6 +23,10 @@ function App() {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [connection, setConnection] = useState("");
   const [paired, setPaired] = useState(false);
+  const [legacy, setLegacy] = useState(false);
+  const [autoConnect, setAutoConnect] = useState(true);
+  const profile = useRef<HostProfile | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<number | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tab, setTab] = useState("Sessions");
@@ -30,6 +41,12 @@ function App() {
     op: string,
     extra: Record<string, unknown> = {},
   ): Promise<T> {
+    if (profile.current)
+      return hostRequest(profile.current, {
+        op,
+        connectionId: connection,
+        ...extra,
+      }) as Promise<T>;
     const url = new URL(endpoint);
     if (
       !["http:", "https:"].includes(url.protocol) ||
@@ -90,6 +107,7 @@ function App() {
     if (!paired || !connection) return;
     const id = ++generation.current;
     let stopped = false;
+    let failures = 0;
     let timer: ReturnType<typeof setTimeout>;
     setInventory(null);
     setTasks([]);
@@ -101,6 +119,12 @@ function App() {
         return;
       }
       try {
+        if (failures && profile.current) {
+          const resumed = await reconnectProfile(profile.current);
+          if (stopped) return;
+          profile.current = resumed.profile;
+          setHosts(resumed.hosts);
+        }
         const [latest, queue] = await Promise.all([
           call<Inventory>("inventory"),
           call<Task[]>("queue"),
@@ -109,11 +133,21 @@ function App() {
           setInventory(latest);
           setTasks(queue);
           setError("");
+          setLastUpdate(Date.now());
+          failures = 0;
         }
       } catch (e) {
-        if (!stopped) setError((e as Error).message);
+        if (!stopped) {
+          setError((e as Error).message);
+          failures++;
+        }
+        if (e instanceof LinkError && e.status === 401) return;
       }
-      if (!stopped) timer = setTimeout(refresh, 8000);
+      if (!stopped)
+        timer = setTimeout(
+          refresh,
+          Math.min(30000, 4000 * 2 ** Math.min(failures, 3)),
+        );
     };
     void refresh();
     return () => {
@@ -164,13 +198,16 @@ function App() {
       <header>
         <div className="brand">
           h<span>Rig</span>
-          <small>COMPANION</small>
         </div>
         {paired && (
           <button
             onClick={() => {
               generation.current++;
               setPaired(false);
+              profile.current = null;
+              setLegacy(false);
+              setAutoConnect(false);
+              setLastUpdate(null);
               setKey("");
               setSeat(null);
               setInventory(null);
@@ -183,8 +220,30 @@ function App() {
           </button>
         )}
       </header>
-      {!paired ? (
+      {!paired && !legacy ? (
+        <PairComputer
+          autoConnect={autoConnect}
+          onLegacy={() => setLegacy(true)}
+          onConnect={(saved, found) => {
+            profile.current = saved;
+            setEndpoint(saved.activeURL);
+            setHosts(found);
+            setConnection(found[0]?.id || "");
+            setPaired(true);
+            setError("");
+          }}
+        />
+      ) : !paired ? (
         <section className="pair">
+          <button
+            onClick={() => {
+              setLegacy(false);
+              setKey("");
+              setError("");
+            }}
+          >
+            ← Pair a computer
+          </button>
           <div className="eyebrow">YOUR WORKSPACE, WITH YOU</div>
           <h1>
             Stay close to
@@ -192,7 +251,7 @@ function App() {
             your agents.
           </h1>
           <p>
-            Connect to your HRig computer over your local network or Tailscale.
+            Connect to your hRig computer over your local network or Tailscale.
           </p>
           <form onSubmit={pair}>
             <label>
@@ -218,7 +277,7 @@ function App() {
               />
             </label>
             <button className="primary" disabled={busy}>
-              {busy ? "Connecting…" : "Connect to HRig →"}
+              {busy ? "Connecting…" : "Connect to hRig →"}
             </button>
           </form>
           <p className="hint">
@@ -251,15 +310,22 @@ function App() {
             </label>
             <span className="badge">
               {error
-                ? "Needs attention"
+                ? "Offline / needs attention"
                 : inventory
                   ? "Connected"
                   : "Connecting"}
             </span>
           </section>
+          {error && lastUpdate && (
+            <p role="status">
+              Showing saved session data. Last updated{" "}
+              {new Date(lastUpdate).toLocaleTimeString()}. Messages are never
+              replayed automatically.
+            </p>
+          )}
           {hosts.length === 0 && (
             <p>
-              Save a WSL or SSH connection in the HRig desktop app, then
+              Save a WSL or SSH connection in the hRig desktop app, then
               reconnect here.
             </p>
           )}

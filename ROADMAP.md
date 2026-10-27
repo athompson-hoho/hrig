@@ -48,6 +48,21 @@ Suggested delivery order, subject to approval:
 
 Release numbers and dates remain unassigned. Each batch requires the existing release gates plus targeted acceptance checks above. Before calling remote support production-validated, add a disposable SSH-host journey (authentication failure, reconnect and port forwarding); notification delivery, Narrator/scaling and real mobile LAN/Tailscale/iOS checks remain explicit deployment gates. No proposed item authorizes starting, deleting or messaging a user's live rig during QA.
 
+## Rig team architect backlog
+
+Direct provider assessment, evidence-backed recommendations and targeted follow-up questions are implemented. The items below remain saved for later prioritization unless explicitly marked implemented.
+
+| ID | Backlog item | Acceptance |
+|---|---|---|
+| TA-01 | Distinct proposal strategies | Lean, Balanced and Throughput differ in ownership, parallelism and review depth; identify a preferred option and explain tradeoffs. |
+| TA-02 | Staged execution | Separate responsibilities from active processes; activate later roles at handoff gates and enforce a concurrency limit through OpenRig-supported orchestration. |
+| TA-03 | Recommendation tuning — implemented | Balanced, lower usage, stronger verification and faster completion priorities feed direct and portable assessments. Manually edited seats remain protected across reassessment and application, including renames and handoff edits; protection can be explicitly released. |
+| TA-04 | Solo recommendation | Recommend one agent with review checkpoints when team coordination would cost more than it contributes. |
+| TA-05 | Work-shape analysis | Use coupling and independently verifiable task boundaries rather than repository size to justify parallel implementation. |
+| TA-06 | First-handoff preview — implemented | Inspect per-seat mission, boundaries, required evidence and handoff conditions in proposals; edit with seats and review before launch. Plans persist in the rig summary; task dispatch remains explicit. |
+| TA-07 | Reassessment diff | Compare proposed seats, runtimes and responsibilities against the current design before applying changes. |
+| TA-08 | Outcome feedback | Collect optional usefulness feedback and observed resource pressure/blocked handoffs to improve future recommendations. |
+
 ## Implementation record
 
 - Baseline: 0.1.0 desktop app; six core/WSL checks and seven Electron journeys. User confirmed live WSL discovery works.
@@ -137,7 +152,7 @@ Companion versions below are independent of desktop versions. These are proposed
 
 ### Pairing proposal for mobile release 0.2
 
-The app's display name is **hRig** on Android, iOS and the mobile web UI. Keep the installed application IDs stable so a name change does not create a second app. The existing shared-key form remains the current implementation; the following flow is proposed, not implemented.
+The app's display name is **hRig** on Android, iOS and the mobile web UI. Installed application IDs stay stable so a name change does not create a second app. The core pairing flow below is now implemented locally: desktop TLS controls and approval, QR invitations and manual fallback, per-device credentials, native secure storage, reconnect and revocation. The old shared-key form remains a legacy option. This is not yet a published or fully device-validated 0.2 release.
 
 1. **Start from the desktop:** Settings > Mobile devices > Pair a phone. hRig starts or checks the gateway, displays the computer name, and offers LAN and Tailscale addresses with a reachability explanation. No terminal command or manually copied long key should be needed for the standard flow.
 2. **Scan from the phone:** the first screen offers Scan QR code, Enter pairing details, and saved computers. QR is the primary path; manual pairing stays available when camera access is declined or scanning fails. The QR contains a protocol version, gateway identity, candidate addresses, and a short-lived, single-use invitation, never the host's persistent shared credential. Show the countdown and allow Cancel or Generate new code.
@@ -151,6 +166,8 @@ The app's display name is **hRig** on Android, iOS and the mobile web UI. Keep t
 **Diagnostics that help:** identify host unreachable, gateway stopped, LAN isolation/firewall, invitation expired or already used, approval denied, revoked device, and incompatible host version. Provide one clear next action for each. Diagnostic exports omit invitations, credentials, terminal content and sensitive network details by default.
 
 **Ship in slices:** first add desktop gateway controls and the matching phone connection states; then invitation/approval APIs and secure device storage; then QR scan/manual fallback; finally reconnect, revocation and real-network validation. Test camera denial, expiry, replayed invitations, guessing limits, host impersonation, two simultaneous phones, host restart, revoked credentials, Wi-Fi/cellular transitions and lost approvals. Validate on real Android/iPhone devices over both LAN and Tailscale before calling pairing complete.
+
+Implementation evidence: [pairing store](electron/mobile-pairing.cjs), [desktop TLS service](electron/mobile-service.cjs), [desktop controls](src/MobileDevices.tsx), [phone pairing](mobile/PairComputer.tsx), and native pinned transports/secure storage in the Android HrigLink plugin and iOS AppDelegate. Backend guards and the real Electron settings journey cover invitations, approval, expiry, rate limits, persistence, denial, cancellation and revocation. Pixel emulator checks exercised pinned TLS/manual pairing, a matching phrase, wrong-certificate rejection, encrypted Android storage, cold-start reconnect and revoked access. Real QR camera capture, physical LAN/Tailscale switching, and iOS native build/device validation remain open. The Android application ID remains `dev.hrig.companion`; its displayed name is hRig.
 
 ### Feature priority list
 

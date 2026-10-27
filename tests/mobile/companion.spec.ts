@@ -56,11 +56,12 @@ test("phone pairing, sessions, screen, messaging, tasks and disconnect", async (
   page,
 }) => {
   await page.goto(address);
+  await page.getByRole("button", { name: "Legacy shared-key connection" }).click();
   await page.getByLabel("Pairing key").fill("wrong");
-  await page.getByRole("button", { name: "Connect to HRig" }).click();
+  await page.getByRole("button", { name: "Connect to hRig" }).click();
   await expect(page.getByRole("alert")).toHaveText("Pairing key rejected.");
   await page.getByLabel("Pairing key").fill(token);
-  await page.getByRole("button", { name: "Connect to HRig" }).click();
+  await page.getByRole("button", { name: "Connect to hRig" }).click();
   await page.getByRole("button", { name: /builder/ }).click();
   await expect(page.getByLabel("Session screen")).toContainText(
     "Working on the companion gateway",
@@ -90,5 +91,6 @@ test("phone pairing, sessions, screen, messaging, tasks and disconnect", async (
     fullPage: true,
   });
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+  await page.getByRole("button", { name: "Legacy shared-key connection" }).click();
   await expect(page.getByLabel("Pairing key")).toHaveValue("");
 });

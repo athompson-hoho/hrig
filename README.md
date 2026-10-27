@@ -135,6 +135,21 @@ The roadmap and implementation evidence are tracked in [ROADMAP.md](ROADMAP.md).
 
 ### iOS and Android companion (initial implementation)
 
+The mobile app is now named **hRig**. The new pairing flow is implemented locally and requires a desktop build and phone build from the same source revision; the older published preview still uses the legacy shared-key connection.
+
+1. On the desktop, open **Settings > Mobile devices**, then **Start mobile access** and **Pair a phone**.
+2. In the native hRig phone app, choose **Scan QR code**. If camera access is unavailable, choose **Enter pairing details** and paste the desktop invitation.
+3. Review the computer and give the phone a name. Choose **Request desktop approval**, compare the verification phrase on both screens, then approve on the desktop.
+4. The phone remembers this computer using Android Keystore-backed encryption or iOS Keychain. It reconnects on app restart and retries read-only connection checks after network failures. Messages are never replayed automatically. **Disconnect** keeps the remembered computer; **Forget this computer** deletes its local credential. **Revoke** on the desktop invalidates that phone immediately.
+
+Desktop mobile access uses TLS on port **5182**, bound to IPv4 network interfaces only after you start it. Invitations include the host certificate fingerprint; the native phone transport verifies it before sending credentials. Invitations expire in two minutes, are single-use, and require desktop approval; pending approvals expire in five minutes. Device credentials expire in 90 days, and the host stores only their verifiers. The gateway stays off after restarting the desktop until you start it again. Allow port 5182 through the appropriate host firewall/tailnet policy. No firewall or Tailscale policy is changed automatically. Keep the invitation private and scan it directly from your own desktop.
+
+Android now requires API 26 or newer for the QR scanner. The Android build and native pinned-TLS/manual-pairing, secure persistence, cold-start reconnect and revocation flows were exercised on the Pixel emulator. Camera-denial fallback and scanner launch were checked; scanning a real desktop QR, real-device LAN/Tailscale access and all iOS native behavior still need device validation. The iOS native plugin is source-only in this Windows development environment.
+
+To repeat the new native checks with a debug APK installed and running on an authorized Android emulator, start `node tests/mobile/native-pairing.cjs` in one terminal, then run `node tests/mobile/native-pairing-smoke.cjs <emulator-serial>` in another. Stop desktop mobile access first so port 5182 is available. This isolated fixture also uses loopback port 5183 for test administration and never contacts live rigs. The smoke test exercises desktop approval, pinned TLS, encrypted Android storage, certificate mismatch rejection, revocation, cancellation and credential-log suppression. Stop the fixture process afterward. Native bridge logging is disabled in the app configuration to keep plugin credentials out of debug logs.
+
+**Legacy shared-key setup:** the following instructions remain available under **Legacy shared-key connection** on the phone. They start a separate HTTP gateway on port 5180 and do not provide per-device approval or revocation.
+
 Download the [Android companion prerelease](https://github.com/athompson-hoho/hrig/releases/tag/companion-android-preview.1) for the debug APK, checksum, matching source and host setup instructions. See the [proposed mobile releases](ROADMAP.md#mobile-companion-release-proposals) for planned improvements.
 
 The companion lists rigs and seats, reads the latest 200 lines of a seat's terminal, shows active tasks, and sends messages to a selected seat. It uses the same OpenRig boundary as the desktop app. Terminal screens are read-only and refresh every four seconds; this version does not provide an interactive terminal, file editing, notifications, or rig lifecycle controls. It does not create or relaunch agents.

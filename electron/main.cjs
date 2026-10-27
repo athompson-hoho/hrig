@@ -39,6 +39,13 @@ function handle(channel, fn) {
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
+const mobile = require('./mobile-service.cjs').mobileService({
+  directory: app.getPath('userData'),
+  assets: path.join(__dirname, '../dist-mobile'),
+  connections: async () => JSON.parse(await fs.readFile(path.join(app.getPath('userData'), 'workspace.json'), 'utf8')).connections || [],
+});
+handle('mobile:operation', (_event, request) => mobile.operation(request));
+app.on('before-quit', () => mobile.stop());
 handle('integrations:operation',(_event,request)=>integrations(request));
 handle('integrations:open',(_event,value)=>{
   const url=new URL(value);

@@ -91,6 +91,7 @@ export interface TerminalEvent {
   exitCode?: number;
 }
 export interface HrigAPI {
+  mobile(request: { op: string; id?: string }): Promise<any>;
   updates(request:{op:string;confirmed?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
   onPrepareUpdate(callback:()=>{ready:boolean;error?:string}):()=>void;
