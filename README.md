@@ -284,6 +284,8 @@ Electron remains the desktop runtime. Windows gains an assisted per-user install
 
 ## Terminal output tools (0.10.0)
 
+[Download HRig 0.10.0](https://github.com/athompson-hoho/hrig/releases/tag/v0.10.0) for Windows, macOS or Linux.
+
 Find text inside each terminal with Ctrl+F/Cmd+F, case/regex matching and next/previous navigation. Copy a selection or retained output, export plain text through a native save dialog, and open confirmed browser links or project files. Shells and agent sessions stay attached. [Behavior and limits](TERMINALS.md).
 
 ![Terminal search and output tools in a narrow HRig workspace](docs/screenshots/terminal-tools.png)
