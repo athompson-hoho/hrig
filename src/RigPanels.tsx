@@ -2,50 +2,139 @@ import { useEffect, useState } from "react";
 import { Send, ListTodo, Activity, RefreshCw, Bot } from "lucide-react";
 import { Empty, ErrorBox, IconButton, Loading, StatusDot } from "./components";
 import type { Connection, Seat } from "./types";
-export function MessagePanel({
+import { draftKey, draftOperation, useDraft } from "./drafts";
+function RecipientMessage({
   connection,
-  seats,
+  root,
+  seat,
   onSent,
 }: {
   connection: Connection;
-  seats: Seat[];
+  root: string;
+  seat: Seat;
   onSent: (text: string) => void;
 }) {
-  const [target, setTarget] = useState("");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [history, setHistory] = useState<
-    { target: string; text: string; time: string }[]
-  >([]);
+  const key = draftKey(
+    "message",
+    connection,
+    root,
+    JSON.stringify([seat.rigId, seat.rigName, seat.id, seat.name]),
+  );
+  const [draft, setDraft, storageError] = useDraft(
+    key,
+    "message",
+    {
+      message: "",
+      status: "draft",
+      history: [] as { text: string; time: string }[],
+    },
+    { connection, root, seatId: seat.id, rigId: seat.rigId },
+  );
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const address = seat.name + "@" + seat.rigName;
   const send = async () => {
+    const snapshot = draft.message;
     setBusy(true);
     setError("");
-    const seat = target || seats[0]?.id;
-    const selected = seats.find((s) => s.id === seat);
-    if (!selected) {
-      setBusy(false);
-      return;
-    }
-    const address = `${selected.name}@${selected.rigName}`;
+    const pending = { ...draft, status: "sending" };
     try {
-      await window.hrig.sendMessage(connection, address, message);
-      setHistory((h) => [
-        {
-          target: address,
-          text: message,
-          time: new Date().toLocaleTimeString(),
-        },
-        ...h,
-      ]);
-      setMessage("");
-      onSent(`Message delivered to ${address}`);
+      draftOperation("put", key, {
+        kind: "message",
+        connection,
+        root,
+        data: pending,
+      });
+      setDraft(pending);
+      await window.hrig.sendMessage(connection, address, snapshot);
+      setDraft({
+        ...draft,
+        message: "",
+        status: "accepted",
+        history: [
+          { text: snapshot, time: new Date().toISOString() },
+          ...draft.history,
+        ].slice(0, 20),
+      });
+      onSent("Message accepted by OpenRig for " + address);
     } catch (e) {
       setError((e as Error).message);
+      setDraft({ ...draft, status: "unknown" });
     } finally {
       setBusy(false);
     }
   };
+  return (
+    <>
+      <label className="field-label">
+        MESSAGE
+        <textarea
+          aria-label="Message draft"
+          value={draft.message}
+          disabled={busy}
+          onChange={(e) =>
+            setDraft({ ...draft, message: e.target.value, status: "draft" })
+          }
+          placeholder="What would you like this seat to work on?"
+          rows={7}
+        />
+      </label>
+      {(error || storageError) && <ErrorBox error={error || storageError} />}
+      {["unknown", "sending"].includes(draft.status) && !busy && (
+        <p role="status" className="editor-notice">
+          Delivery is uncertain. Your draft is preserved. Check with the
+          recipient before deliberately sending again; HRig never retries
+          automatically.
+        </p>
+      )}
+      {draft.status === "accepted" && (
+        <p role="status" className="success-note">
+          Accepted by OpenRig. This does not confirm the agent read it.
+        </p>
+      )}
+      <button
+        className="primary-button"
+        disabled={busy || !draft.message.trim() || !!storageError}
+        onClick={send}
+      >
+        <Send size={14} />
+        {busy
+          ? "Sending…"
+          : ["unknown", "sending"].includes(draft.status)
+            ? "Send again deliberately"
+            : "Send message"}
+      </button>
+      <p className="field-note">
+        Draft saved locally for {address} in this project. Sending a message
+        does not create a task.
+      </p>
+      <div className="sent-messages">
+        {draft.history.map((h, i) => (
+          <div key={i}>
+            <span>
+              {address}
+              <small>{h.time}</small>
+            </span>
+            <p>{h.text}</p>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+export function MessagePanel({
+  connection,
+  root,
+  seats,
+  onSent,
+}: {
+  connection: Connection;
+  root: string;
+  seats: Seat[];
+  onSent: (text: string) => void;
+}) {
+  const [target, setTarget] = useState("");
+  const seat = seats.find((s) => s.id === (target || seats[0]?.id));
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -59,13 +148,14 @@ export function MessagePanel({
         <Empty
           icon={<Bot size={28} />}
           title="No seats available"
-          description="Connect a machine with a running rig to send messages."
+          description="Connect and refresh a machine with a running rig to send messages. Saved drafts remain on this computer."
         />
       ) : (
         <>
           <label className="field-label">
             TO
             <select
+              aria-label="Message recipient"
               value={target || seats[0]?.id}
               onChange={(e) => setTarget(e.target.value)}
             >
@@ -76,39 +166,15 @@ export function MessagePanel({
               ))}
             </select>
           </label>
-          <label className="field-label">
-            MESSAGE
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="What would you like this seat to work on?"
-              rows={7}
+          {seat && (
+            <RecipientMessage
+              key={JSON.stringify([connection, root, seat.rigId, seat.id])}
+              connection={connection}
+              root={root}
+              seat={seat}
+              onSent={onSent}
             />
-          </label>
-          {error && <ErrorBox error={error} />}
-          <button
-            className="primary-button"
-            disabled={busy || !message.trim()}
-            onClick={send}
-          >
-            <Send size={14} />
-            {busy ? "Sending…" : "Send message"}
-          </button>
-          <p className="field-note">
-            Sending a message does not create a task automatically. The agent
-            manages its work through OpenRig.
-          </p>
-          <div className="sent-messages">
-            {history.map((h, i) => (
-              <div key={i}>
-                <span>
-                  {h.target}
-                  <small>{h.time}</small>
-                </span>
-                <p>{h.text}</p>
-              </div>
-            ))}
-          </div>
+          )}
         </>
       )}
     </div>

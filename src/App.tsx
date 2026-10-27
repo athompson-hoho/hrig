@@ -93,7 +93,12 @@ import {
   getDirtyBuffers,
   markSaved,
   buffers,
+  bufferConfigs,
+  persistBuffer,
 } from "./editor-buffers";
+import SavedDrafts from "./SavedDrafts";
+import WorkItems from "./WorkItems";
+import { draftOperation } from "./drafts";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -160,6 +165,15 @@ function panelIcon(component: string | undefined, size = 14) {
 export default function App() {
   const [state, setState] = useState<WorkspaceState>(defaultState);
   const [loaded, setLoaded] = useState(false);
+  const [recoveryCount, setRecoveryCount] = useState(() => {
+    try {
+      return Object.values(draftOperation("list")).filter(
+        (d: any) => d.kind === "editor",
+      ).length;
+    } catch {
+      return 0;
+    }
+  });
   const [bootError, setBootError] = useState("");
   const [model, setModel] = useState<Model>(initialModel);
   const layout = useRef<ILayoutApi>(null);
@@ -169,6 +183,7 @@ export default function App() {
   const [modal, setModal] = useState<ModalKind>(null);
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
+  const inventoryCache = useRef(new Map<string, Inventory>());
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -268,6 +283,18 @@ export default function App() {
       }),
   };
   const workspace = `${connection.id}::${root}::${state.activeRig}`;
+  const sameConnection = (c: Connection) =>
+    JSON.stringify([c.id, c.kind, c.host, c.port, c.distro, c.rigBinary]) ===
+    JSON.stringify([
+      connection.id,
+      connection.kind,
+      connection.host,
+      connection.port,
+      connection.distro,
+      connection.rigBinary,
+    ]);
+  const freshSeats = (c: Connection) =>
+    !inventoryError && sameConnection(c) ? inventory?.seats || [] : [];
   const seats = (inventory?.seats || []).filter(
     (s) => !state.activeRig || s.rigId === state.activeRig,
   );
@@ -379,7 +406,8 @@ export default function App() {
   }, [loaded, workspace]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
-    if (!inventory || !preferences["notifications.desktop"]) return;
+    if (!inventory || inventoryError || !preferences["notifications.desktop"])
+      return;
     const current = new Set<string>();
     for (const seat of inventory.seats.filter(
       (s) => s.status === "attention" || (s.status === "failed" && s.error),
@@ -413,8 +441,20 @@ export default function App() {
     if (!loaded) return;
     let active = true;
     let inFlight = false;
-    setInventory(null);
-    setInventoryError("");
+    const inventoryKey = JSON.stringify([
+      connection.id,
+      connection.kind,
+      connection.host,
+      connection.port,
+      connection.distro,
+      connection.rigBinary,
+    ]);
+    setInventory(inventoryCache.current.get(inventoryKey) || null);
+    setInventoryError(
+      inventoryCache.current.has(inventoryKey)
+        ? "Checking the last successful snapshot…"
+        : "",
+    );
     if (connection.kind === "local") {
       setBusy(false);
       return;
@@ -427,12 +467,12 @@ export default function App() {
         const result = await window.hrig.inventory(connection);
         if (active) {
           setInventory(result);
+          inventoryCache.current.set(inventoryKey, result);
           setInventoryError("");
         }
       } catch (e) {
         if (active) {
           setInventoryError((e as Error).message);
-          setInventory(null);
         }
       } finally {
         inFlight = false;
@@ -451,6 +491,8 @@ export default function App() {
   }, [
     loaded,
     connection.id,
+    connection.kind,
+    connection.port,
     connection.rigBinary,
     connection.host,
     connection.distro,
@@ -608,6 +650,10 @@ export default function App() {
     log(`Opened ${name}`);
   };
   const openSeat = (seat: Seat) => {
+    if (inventoryError) {
+      notify("Refresh the connection before opening a stale seat.");
+      return;
+    }
     if (!seat.session) {
       notify(
         `${seat.name} has no attachable tmux session. Inspect its readiness in OpenRig.`,
@@ -644,6 +690,36 @@ export default function App() {
       path.split("/").pop()!,
       { path, line },
       id,
+    );
+  };
+  const saveAll = async () => {
+    const failures: string[] = [];
+    for (const [id, buffer] of getDirtyBuffers()) {
+      const c = bufferConfigs.get(id);
+      if (!c) continue;
+      const content = buffer.content;
+      try {
+        const result = await window.hrig.edit(c.connection, {
+          op: "save",
+          root: c.root,
+          path: c.path,
+          content,
+          revision: buffer.revision,
+        });
+        buffer.saved = content;
+        buffer.revision = result.revision;
+        persistBuffer(id);
+        markDirty(id, buffer.content !== content);
+      } catch (e) {
+        failures.push(c.path + ": " + (e as Error).message);
+      }
+    }
+    window.dispatchEvent(new Event("hrig:buffers-saved"));
+    setFileRevision((n) => n + 1);
+    notify(
+      failures.length
+        ? "Save All: " + failures.join("; ")
+        : "All open changes saved",
     );
   };
   const allTabs = () => {
@@ -770,6 +846,7 @@ export default function App() {
           if (buffer) {
             buffer.revision = saved.revision;
             buffer.saved = text;
+            persistBuffer(tab.getId());
             if (buffer.content !== text)
               throw new Error(
                 "The file changed while saving. Review the newest edits before closing.",
@@ -950,16 +1027,24 @@ export default function App() {
       case "review":
         return (
           <ReviewWorkspace
+            key={JSON.stringify([config.connection, config.root])}
             onProject={openProject}
             connection={config.connection}
             root={config.root}
-            seats={seats}
+            seats={freshSeats(config.connection).filter(
+              (s) => !state.activeRig || s.rigId === state.activeRig,
+            )}
             onSeat={(seat) => {
               openSeat(seat);
               applyPreset("Review");
             }}
             onDiff={(path) => {
-              openFile(path, true);
+              addPanel(
+                "diff",
+                path.split("/").pop() || path,
+                { ...config, path },
+                `diff:${config.connection.id}:${config.root}:${path}`,
+              );
               applyPreset("Review");
             }}
           />
@@ -998,21 +1083,50 @@ export default function App() {
         return <PreviewPanel config={config} />;
       case "rigManager":
         return (
-          <RigManager
-            onDeleted={(id) => {
-              setState((s) =>
-                s.activeConnection === config.connection.id &&
-                s.activeRig === id
-                  ? { ...s, activeRig: "" }
-                  : s,
-              );
-              notify("Rig deleted");
-            }}
+          <fieldset
+            className="panel-guard"
+            disabled={!!inventoryError || !sameConnection(config.connection)}
+          >
+            <RigManager
+              onDeleted={(id) => {
+                setState((s) =>
+                  s.activeConnection === config.connection.id &&
+                  s.activeRig === id
+                    ? { ...s, activeRig: "" }
+                    : s,
+                );
+                notify("Rig deleted");
+              }}
+              connection={config.connection}
+              root={config.root}
+              inventory={inventory}
+              onChanged={refreshAll}
+              onSeat={openSeat}
+            />
+          </fieldset>
+        );
+      case "savedDrafts":
+        return (
+          <SavedDrafts
+            onOpen={(c) =>
+              addPanel(
+                "editor",
+                c.path?.split(/[\\/]/).pop() || "Recovery",
+                c,
+                `file:${c.connection.id}:${c.root}:${c.path}`,
+              )
+            }
+          />
+        );
+      case "workItems":
+        return (
+          <WorkItems
+            key={JSON.stringify([config.connection, config.root])}
             connection={config.connection}
             root={config.root}
-            inventory={inventory}
-            onChanged={refreshAll}
-            onSeat={openSeat}
+            seats={
+              inventoryError || !sameConnection(config.connection) ? [] : seats
+            }
           />
         );
       case "missingSeat":
@@ -1044,19 +1158,17 @@ export default function App() {
           <TaskBoard
             connection={config.connection}
             rigName={config.mode}
-            seats={inventory?.seats || []}
+            seats={freshSeats(config.connection)}
             onSeat={openSeat}
           />
         );
       case "messages":
         return (
           <MessagePanel
+            key={JSON.stringify([config.connection, config.root])}
+            root={config.root}
             connection={config.connection}
-            seats={
-              inventory?.seats.filter(
-                (s) => config.connection.id === connection.id,
-              ) || []
-            }
+            seats={freshSeats(config.connection)}
             onSent={notify}
           />
         );
@@ -1082,6 +1194,19 @@ export default function App() {
   };
   const commands = [
     {
+      name: "Save All",
+      hint: "All open files",
+      icon: <Save size={16} />,
+      action: () => void saveAll(),
+    },
+    {
+      name: "Saved drafts and recovery",
+      hint: "Local recovery storage",
+      icon: <Save size={16} />,
+      action: () =>
+        addPanel("savedDrafts", "Saved drafts", {}, "tool:savedDrafts"),
+    },
+    {
       name: "Open settings",
       hint: "Preferences and themes",
       icon: <Settings2 size={16} />,
@@ -1089,6 +1214,7 @@ export default function App() {
     },
     ...[
       ["Visual workspace arranger", "arranger"],
+      ["Task boards and integrations", "workItems"],
       ["Connection doctor", "doctor"],
       ["Attention center", "attention"],
       ["Project tools and text search", "projectTools"],
@@ -1335,6 +1461,21 @@ export default function App() {
             </button>
           </div>
         </header>
+        {recoveryCount > 0 && (
+          <div className="editor-notice" role="status">
+            {recoveryCount} unsaved recovery{" "}
+            {recoveryCount === 1 ? "copy" : "copies"} available.{" "}
+            <button
+              className="small-button"
+              onClick={() => {
+                addPanel("savedDrafts", "Saved drafts", {}, "tool:savedDrafts");
+                setRecoveryCount(0);
+              }}
+            >
+              Review saved drafts
+            </button>
+          </div>
+        )}
         <div className="main-shell">
           <nav className="activity-rail">
             <div>
@@ -1916,6 +2057,16 @@ export default function App() {
                   "Seats and work needing your input",
                 ],
                 ["Task board", "queue", "Inspect and assign work"],
+                [
+                  "Project boards and integrations",
+                  "workItems",
+                  "Local tasks, GitHub Issues/Projects, and Linear",
+                ],
+                [
+                  "Saved drafts and recovery",
+                  "savedDrafts",
+                  "Restore files and manage local drafts",
+                ],
                 [
                   "Review workspace",
                   "review",

@@ -64,7 +64,7 @@ The rig designer guides you from a goal to an editable team and a launch review.
 
 ## Run the desktop app
 
-Open **`release/HRig 0.7.1.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
+Open **`release/HRig 0.8.0.exe`**. Close an older HRig instance first so the new version can take over the workspace. This is an unsigned, portable Windows x64 build; it does not require Node.js on Windows to run.
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
@@ -234,3 +234,9 @@ Open **Settings** from the activity rail, Tools, the command center, or **Ctrl+,
 ### Community themes (0.7.1)
 
 Appearance includes Catppuccin (Mocha, Macchiato, Frappe, Latte), Nord, Dracula, Tokyo Night, and Gruvbox Dark. Choose **Theme default** for the native accent, or retain a custom accent. Each adaptation coordinates the app, editor syntax, all 16 terminal colors, and detached panels; terminal themes can also be selected independently. Palettes and licenses ship offline. [Theme credits and source revisions](THEME_CREDITS.md).
+
+## Recovery and project boards
+
+HRig 0.8.0 adds unsaved-file recovery, Save All and persistent message/review drafts. Doctor failures stop loading, and stale connection snapshots are clearly labeled. See [Recovery](RECOVERY.md) for storage and conflict handling.
+
+Open **Tools → Project boards and integrations** for local tasks, GitHub Issues/Projects and Linear. External mutations and linked OpenRig task assignments require explicit confirmation. GitHub uses the Windows CLI login; Linear personal keys use Windows encrypted storage. [Setup and supported actions](INTEGRATIONS.md).

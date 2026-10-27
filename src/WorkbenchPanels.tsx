@@ -22,9 +22,12 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+  const [checking, setChecking] = useState(false);
   useEffect(() => {
     let active = true;
     setReport(null);
+    setError("");
+    setChecking(true);
     window.hrig
       .doctor(connection)
       .then((r) => {
@@ -32,6 +35,9 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
       })
       .catch((e) => {
         if (active) setError(e.message);
+      })
+      .finally(() => {
+        if (active) setChecking(false);
       });
     return () => {
       active = false;
@@ -57,9 +63,9 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
         </button>
       </div>
       {error && <ErrorBox error={error} />}{" "}
-      {!report ? (
+      {checking ? (
         <Loading text="Checking connection and dependencies…" />
-      ) : (
+      ) : report ? (
         <>
           <div
             className={`diagnostic-summary ${report.healthy ? "good" : "warning"}`}
@@ -84,7 +90,7 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
             profiles.
           </p>
         </>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -101,7 +107,7 @@ export function AttentionPanel({
   notifications: boolean;
   onNotifications: (value: boolean) => void;
 }) {
-  const [blocked, setBlocked] = useState<any[]>([]);
+  const [blocked, setBlocked] = useState<any[] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
@@ -150,7 +156,8 @@ export function AttentionPanel({
         Windows notifications when a seat newly needs input
       </label>
       {error && <ErrorBox error={error} />}{" "}
-      {!seats.length && !blocked.length && !error && (
+      {blocked === null && !error && <Loading text="Checking attention" />}
+      {!seats.length && blocked !== null && !blocked.length && !error && (
         <Empty
           icon={<Check size={28} />}
           title="Nothing needs your attention"
@@ -177,7 +184,7 @@ export function AttentionPanel({
           <span>Open seat →</span>
         </button>
       ))}
-      {blocked.map((item) => (
+      {(blocked || []).map((item) => (
         <div className="attention-row" key={String(item.id)}>
           <StatusDot status="attention" />
           <section>

@@ -346,7 +346,14 @@ export default function Sidebar({
             <span className="count">{seats.length}</span>
           </div>
           <div className="sidebar-scroll">
-            {inventoryError ? (
+            {inventoryError && inventory && (
+              <div className="error-box" role="status">
+                Stale inventory · Last success: {inventory.sampledAt}.{" "}
+                {inventoryError}{" "}
+                <button onClick={onRefresh}>Retry connection</button>
+              </div>
+            )}
+            {inventoryError && !inventory ? (
               <div className="connection-empty">
                 <Bot size={25} />
                 <h4>
@@ -362,7 +369,8 @@ export default function Sidebar({
             ) : seats.length ? (
               seats.map((s) => (
                 <button
-                  draggable
+                  disabled={!!inventoryError}
+                  draggable={!inventoryError}
                   onDragStart={(event) => onDrag(event, s)}
                   onClick={() => onSeat(s)}
                   className="seat-row"

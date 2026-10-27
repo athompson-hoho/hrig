@@ -43,5 +43,10 @@
     "version": "0.7.1",
     "title": "Community themes for workspace, editor, and terminals",
     "sourceRef": "HEAD"
+  },
+  {
+    "version": "0.8.0",
+    "title": "Recovery, durable drafts and project boards",
+    "sourceRef": "HEAD"
   }
 ]

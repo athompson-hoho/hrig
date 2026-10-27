@@ -161,7 +161,7 @@ export default function TaskBoard({
       </div>
       {items === null && !error ? (
         <Loading />
-      ) : !items?.length ? (
+      ) : items === null && error ? null : !items?.length ? (
         <div className="panel-empty">
           <ListTodo size={28} />
           <h3>Room for your next idea</h3>

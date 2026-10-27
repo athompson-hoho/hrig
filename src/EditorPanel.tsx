@@ -7,7 +7,13 @@ import TsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
 import { Save, FileCode2 } from "lucide-react";
 import { ErrorBox, Loading, Modal } from "./components";
 import type { PanelConfig } from "./types";
-import { buffers, problems } from "./editor-buffers";
+import {
+  buffers,
+  problems,
+  bufferConfigs,
+  persistBuffer,
+} from "./editor-buffers";
+import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { editorTheme, themeId } from "./themes";
 self.MonacoEnvironment = {
@@ -115,6 +121,42 @@ export default function EditorPanel({
   const [compare, setCompare] = useState(false);
   const [reloadConfirm, setReloadConfirm] = useState(false);
   const [notice, setNotice] = useState("");
+  const recoveryKey = draftKey(
+    "editor",
+    config.connection,
+    config.root,
+    config.path,
+  );
+  const [recovery, setRecovery] = useState<{
+    content: string;
+    saved: string;
+    revision: string;
+  } | null>(() => {
+    if (diff || buffers.has(id)) return null;
+    try {
+      return readDraft(recoveryKey)?.data || null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const persist = () => {
+    try {
+      persistBuffer(id);
+    } catch (e) {
+      setError("Recovery copy: " + (e as Error).message);
+    }
+  };
+  useEffect(() => {
+    const cleared = () => {
+      try {
+        if (!readDraft(recoveryKey)) setRecovery(null);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    };
+    window.addEventListener("hrig:drafts-cleared", cleared);
+    return () => window.removeEventListener("hrig:drafts-cleared", cleared);
+  }, [recoveryKey]);
   const saveRef = useRef<() => void>(() => {});
   const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -140,6 +182,7 @@ export default function EditorPanel({
       });
       buffer.saved = content;
       buffer.revision = result.revision;
+      persist();
       const changed = buffer.content !== content;
       setDirty(changed);
       onDirty(id, changed);
@@ -152,6 +195,7 @@ export default function EditorPanel({
   };
   saveRef.current = save;
   useEffect(() => {
+    if (!diff) bufferConfigs.set(id, config);
     let active = true;
     const read = window.hrig.edit(config.connection, {
       op: "read",
@@ -194,6 +238,19 @@ export default function EditorPanel({
       diffRef.current?.setModel(null);
       diffRef.current = null;
     };
+  }, [id]);
+  useEffect(() => {
+    const sync = () => {
+      const b = buffers.get(id);
+      if (b) {
+        setValue(b.content);
+        const d = b.content !== b.saved;
+        setDirty(d);
+        onDirty(id, d);
+      }
+    };
+    window.addEventListener("hrig:buffers-saved", sync);
+    return () => window.removeEventListener("hrig:buffers-saved", sync);
   }, [id]);
   useEffect(() => {
     if (diff) return;
@@ -250,13 +307,51 @@ export default function EditorPanel({
           <button
             className={`small-button ${dirty ? "highlight" : ""}`}
             onClick={save}
-            disabled={saving || value === undefined}
+            disabled={saving || value === undefined || !!recovery}
           >
             <Save size={12} />
             {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
           </button>
         )}
       </div>
+      {recovery && (
+        <div className="external-change" role="status">
+          <span>
+            Unsaved recovery copy available. Disk content is unchanged.
+          </span>
+          <button
+            className="small-button"
+            onClick={() => {
+              const b = buffers.get(id);
+              if (!b) return;
+              const disk = { ...b };
+              Object.assign(b, recovery);
+              setValue(b.content);
+              setDirty(true);
+              onDirty(id, true);
+              if (disk.revision !== recovery.revision)
+                setExternal({ content: disk.content, revision: disk.revision });
+              setRecovery(null);
+              persist();
+            }}
+          >
+            Restore recovery copy
+          </button>
+          <button
+            className="small-button"
+            onClick={() => {
+              try {
+                draftOperation("delete", recoveryKey);
+                setRecovery(null);
+              } catch (e) {
+                setError((e as Error).message);
+              }
+            }}
+          >
+            Discard recovery copy
+          </button>
+        </div>
+      )}
       {external && (
         <div className="external-change">
           <span>
@@ -314,6 +409,7 @@ export default function EditorPanel({
             const b = buffers.get(id);
             if (!b) return;
             b.content = text || "";
+            if (!recovery) persist();
             setValue(b.content);
             const d = b.content !== b.saved;
             setDirty(d);
@@ -346,6 +442,7 @@ export default function EditorPanel({
           options={{
             ...editorOptions,
             automaticLayout: true,
+            readOnly: !!recovery,
             lineHeight: Math.round(preferences["editor.fontSize"] * 1.7),
             padding: { top: 16 },
             scrollBeyondLastLine: false,
@@ -378,6 +475,7 @@ export default function EditorPanel({
                   b.content = disk.content;
                   b.saved = disk.content;
                   b.revision = disk.revision;
+                  persist();
                   diffRef.current?.setModel(null);
                   setCompare(false);
                   setExternal(null);

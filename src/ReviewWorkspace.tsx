@@ -3,16 +3,7 @@ import { GitBranch, Send, FileCode2, AlertCircle } from "lucide-react";
 import type { Connection, Seat, GitEntry } from "./types";
 import { ErrorBox, Loading } from "./components";
 import { problems } from "./editor-buffers";
-const reviewDrafts = new Map<
-  string,
-  {
-    target: string;
-    path: string;
-    line: string;
-    text: string;
-    notes: { path: string; line: string; text: string }[];
-  }
->();
+import { draftKey, draftOperation, useDraft } from "./drafts";
 export function ReviewWorkspace({
   connection,
   root,
@@ -30,19 +21,44 @@ export function ReviewWorkspace({
 }) {
   const [changes, setChanges] = useState<GitEntry[] | null>(null);
   const [isRepository, setIsRepository] = useState(true);
-  const draftKey = connection.id + "::" + root;
-  const [target, setTarget] = useState(
-    reviewDrafts.get(draftKey)?.target || "",
+  const key = draftKey("review", connection, root);
+  type Note = {
+    path: string;
+    line: string;
+    text: string;
+    revision: string;
+    recipient: string;
+  };
+  const [draft, setDraft, storageError] = useDraft(
+    key,
+    "review",
+    {
+      target: "",
+      path: "",
+      line: "",
+      text: "",
+      notes: [] as Note[],
+      status: "draft",
+      anchorPath: "",
+      anchorRevision: "",
+    },
+    { connection, root },
   );
-  const [path, setPath] = useState(reviewDrafts.get(draftKey)?.path || "");
-  const [line, setLine] = useState(reviewDrafts.get(draftKey)?.line || "");
-  const [text, setText] = useState(reviewDrafts.get(draftKey)?.text || "");
-  const [notes, setNotes] = useState<
-    { path: string; line: string; text: string }[]
-  >(reviewDrafts.get(draftKey)?.notes || []);
-  useEffect(() => {
-    reviewDrafts.set(draftKey, { target, path, line, text, notes });
-  }, [draftKey, target, path, line, text, notes]);
+  const { target, path, line, text, notes } = draft;
+  const setTarget = (v: string) =>
+    setDraft((d) => ({ ...d, target: v, status: "draft" }));
+  const setPath = (v: string) =>
+    setDraft((d) => ({ ...d, path: v, status: "draft" }));
+  const setLine = (v: string) =>
+    setDraft((d) => ({ ...d, line: v, status: "draft" }));
+  const setText = (v: string) =>
+    setDraft((d) => ({ ...d, text: v, status: "draft" }));
+  const setNotes = (v: Note[] | ((n: Note[]) => Note[])) =>
+    setDraft((d) => ({
+      ...d,
+      notes: typeof v === "function" ? v(d.notes) : v,
+      status: "draft",
+    }));
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -87,10 +103,11 @@ export function ReviewWorkspace({
           Refresh changes
         </button>
       </div>
-      {error && <ErrorBox error={error} />}
+      {(error || storageError) && <ErrorBox error={error || storageError} />}
       <label className="field-label">
         FEEDBACK RECIPIENT
         <select
+          disabled={busy}
           aria-label="Review recipient"
           value={target || seats[0]?.id || ""}
           onChange={(e) => {
@@ -125,22 +142,29 @@ export function ReviewWorkspace({
               Choose project folder
             </button>
           </div>
-        ) : changes === null ? (
+        ) : changes === null && !error ? (
           <Loading />
-        ) : changes.length ? (
+        ) : error && changes === null ? null : changes?.length ? (
           changes.map((c) => (
             <button
               key={c.path}
-              onClick={() => {
-                reviewDrafts.set(draftKey, {
-                  target,
-                  path: c.path,
-                  line,
-                  text,
-                  notes,
-                });
-                setPath(c.path);
-                onDiff(c.path);
+              onClick={async () => {
+                try {
+                  const file = await window.hrig.edit(connection, {
+                    op: "read",
+                    root,
+                    path: c.path,
+                  });
+                  setDraft((d) => ({
+                    ...d,
+                    path: c.path,
+                    anchorPath: c.path,
+                    anchorRevision: file.revision,
+                  }));
+                  onDiff(c.path);
+                } catch (e) {
+                  setError((e as Error).message);
+                }
               }}
             >
               <FileCode2 size={14} />
@@ -157,6 +181,7 @@ export function ReviewWorkspace({
         <label className="field-label">
           FILE
           <input
+            disabled={busy}
             aria-label="Review note file"
             value={path}
             onChange={(e) => setPath(e.target.value)}
@@ -167,6 +192,7 @@ export function ReviewWorkspace({
           <input
             type="number"
             min="1"
+            disabled={busy}
             aria-label="Review note line"
             value={line}
             onChange={(e) => setLine(e.target.value)}
@@ -174,6 +200,7 @@ export function ReviewWorkspace({
         </label>
       </div>
       <textarea
+        disabled={busy}
         aria-label="Review note"
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -183,11 +210,46 @@ export function ReviewWorkspace({
       <div className="arrange-controls">
         <button
           className="secondary-button"
-          disabled={!path || !text.trim()}
-          onClick={() => {
-            setNotes((n) => [...n, { path, line, text }]);
-            setText("");
-            setSent(false);
+          disabled={busy || !seat || !path || !text.trim() || !!storageError}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              const file = await window.hrig.edit(connection, {
+                op: "read",
+                root,
+                path,
+              });
+              if (
+                draft.anchorPath === path &&
+                draft.anchorRevision &&
+                draft.anchorRevision !== file.revision
+              )
+                throw new Error(
+                  "The reviewed file changed. Open the diff again before adding this note.",
+                );
+              setNotes((n) => [
+                ...n,
+                {
+                  path,
+                  line,
+                  text,
+                  revision: file.revision,
+                  recipient: JSON.stringify([
+                    seat!.rigId,
+                    seat!.rigName,
+                    seat!.id,
+                    seat!.name,
+                  ]),
+                },
+              ]);
+              setText("");
+              setSent(false);
+            } catch (e) {
+              setError("Cannot anchor review note: " + (e as Error).message);
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           Add review note
@@ -200,7 +262,11 @@ export function ReviewWorkspace({
             {n.line ? ":" + n.line : ""}
           </strong>
           <p>{n.text}</p>
+          <small className="field-note">
+            Revision: {n.revision.slice(0, 12)}
+          </small>
           <button
+            disabled={busy}
             onClick={() =>
               setNotes((old) => old.filter((_, index) => index !== i))
             }
@@ -211,11 +277,44 @@ export function ReviewWorkspace({
       ))}
       <button
         className="primary-button"
-        disabled={busy || !seat || !notes.length}
+        disabled={busy || !seat || !notes.length || !!storageError}
         onClick={async () => {
           setBusy(true);
           setError("");
           try {
+            for (const note of notes) {
+              if (
+                note.recipient !==
+                JSON.stringify([
+                  seat!.rigId,
+                  seat!.rigName,
+                  seat!.id,
+                  seat!.name,
+                ])
+              )
+                throw new Error(
+                  "These notes belong to another recipient. Select their original seat.",
+                );
+              const current = await window.hrig.edit(connection, {
+                op: "read",
+                root,
+                path: note.path,
+              });
+              if (current.revision !== note.revision)
+                throw new Error(
+                  "Stale review note: " +
+                    note.path +
+                    " changed. Remove and re-add the note after reviewing the latest diff.",
+                );
+            }
+            const pending = { ...draft, status: "sending" };
+            draftOperation("put", key, {
+              kind: "review",
+              connection,
+              root,
+              data: pending,
+            });
+            setDraft(pending);
             await window.hrig.sendMessage(
               connection,
               seat!.name + "@" + seat!.rigName,
@@ -225,14 +324,23 @@ export function ReviewWorkspace({
                 notes
                   .map(
                     (n) =>
-                      n.path + (n.line ? ":" + n.line : "") + "\n" + n.text,
+                      n.path +
+                      (n.line ? ":" + n.line : "") +
+                      "\nRevision: " +
+                      n.revision +
+                      "\n" +
+                      n.text,
                   )
                   .join("\n\n"),
             );
             setSent(true);
-            setNotes([]);
+            setDraft((d) => ({ ...d, notes: [], status: "accepted" }));
           } catch (e) {
             setError((e as Error).message);
+            setDraft((d) => ({
+              ...d,
+              status: d.status === "sending" ? "unknown" : d.status,
+            }));
           } finally {
             setBusy(false);
           }
@@ -241,7 +349,18 @@ export function ReviewWorkspace({
         <Send size={14} />
         {busy ? "Sending…" : "Send notes to selected seat"}
       </button>
-      {sent && <p className="success-note">Feedback sent through OpenRig.</p>}
+      {draft.status === "accepted" && (
+        <p className="success-note">
+          Feedback sent through OpenRig. Accepted does not confirm the agent
+          read it.
+        </p>
+      )}
+      {["sending", "unknown"].includes(draft.status) && !busy && (
+        <p className="editor-notice" role="status">
+          Delivery may be uncertain. Notes are preserved; check the recipient
+          before sending again. No automatic retries.
+        </p>
+      )}
     </div>
   );
 }

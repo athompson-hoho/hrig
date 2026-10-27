@@ -4165,3 +4165,10 @@ button:hover {
   line-height: 1.7;
   margin: 12px 0 18px;
 }
+.panel-guard { border: 0; margin: 0; padding: 0; min-width: 0; height: 100%; overflow: auto; }
+.work-board { display: flex; gap: 12px; overflow-x: auto; padding: 12px 0; align-items: flex-start; }
+.work-column { min-width: 240px; flex: 1; background: var(--panel); border: 1px solid var(--line); padding: 12px; border-radius: 5px; }
+.work-column h4 { margin: 0 0 12px; }
+.work-card { display: flex; flex-direction: column; text-align: left; gap: 8px; padding: 12px; margin-bottom: 8px; width: 100%; border: 1px solid var(--line); background: var(--panel); color: inherit; border-radius: 4px; }
+.work-card small { color: var(--muted); }
+.work-description { white-space: pre-wrap; max-height: 300px; overflow: auto; overflow-wrap: anywhere; }

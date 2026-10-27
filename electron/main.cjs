@@ -7,6 +7,8 @@ const {
   screen,
   powerMonitor,
   Notification,
+  safeStorage,
+  shell,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
@@ -32,6 +34,18 @@ function handle(channel, fn) {
     return fn(event, ...args);
   });
 }
+const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
+const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
+handle('integrations:operation',(_event,request)=>integrations(request));
+handle('integrations:open',(_event,value)=>{
+  const url=new URL(value);
+  if(url.protocol!=='https:' || !['github.com','linear.app'].includes(url.hostname) || url.username || url.password) throw new Error('Only HTTPS GitHub and Linear source links can be opened.');
+  return shell.openExternal(url.href);
+});
+ipcMain.on('drafts:operation', (event, request) => {
+  try { trusted(event); event.returnValue = { result: drafts(request) }; }
+  catch (error) { event.returnValue = { error: error.message }; }
+});
 
 function isPopoutUrl(url) {
   try {
