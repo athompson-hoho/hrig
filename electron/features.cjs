@@ -30,6 +30,7 @@ async function assessTeam(connection, request) {
     );
   if (request.answers !== undefined && (!Array.isArray(request.answers) || request.answers.length > 3 || request.answers.some(a => !a || typeof a.question !== "string" || a.question.length > 4000 || typeof a.answer !== "string" || a.answer.length > 4000)))
     throw new Error("Provide at most three answers under 4,000 characters each.");
+  const accountBudgets = (await import("./runtime-preferences.mjs")).normalizeMonthlyBudgets(request.accountBudgets);
   const tuning = teamAssessment.validateTuning(request, agents);
   const context = await python(
     connection,
@@ -60,7 +61,7 @@ print(json.dumps({'root':root,'platform':platform.system(),'architecture':platfo
   );
   const accountAvailability = await require("./accounts.cjs").discover(connection, () => assessmentProvider(connection, { op: "providers" }));
   const prompt = teamAssessment.buildPrompt(
-      { ...context, accountAvailability: { providers: accountAvailability.providers, checkedAt: accountAvailability.checkedAt, warning: accountAvailability.warning, note: "Recommend authenticated runtimes on this host. Managed Orca accounts do not establish CLI access. Never infer quota or context availability from authentication." } },
+      { ...context, accountAvailability: { monthlyPlanUsd: accountBudgets, budgetSource: "operator-provided preference; not detected quota", providers: accountAvailability.providers, checkedAt: accountAvailability.checkedAt, warning: accountAvailability.warning, note: "Recommend authenticated runtimes on this host. Managed Orca accounts do not establish CLI access. Never infer quota or context availability from authentication." } },
       {
         root: request.root,
         goal: request.goal,
@@ -488,6 +489,7 @@ async function designRig(connection, a) {
     );
   if (typeof a.goal !== "string" || !a.goal.trim() || a.goal.length > 4000)
     throw new Error("Describe the goal in 1 to 4,000 characters.");
+  if (a.yolo !== undefined && typeof a.yolo !== "boolean") throw new Error("YOLO selection must be a boolean.");
   if (!["preview", "launch"].includes(a.op))
     throw new Error("Unsupported design action.");
   if (!Array.isArray(a.seats) || !a.seats.length || a.seats.length > 6)
@@ -535,6 +537,7 @@ async function designRig(connection, a) {
     version: "0.2",
     name: a.name,
     summary: a.goal.trim() + teamAssessment.handoffSummary(a.seats),
+    ...(a.yolo === true ? { permission_policy: "builtin:yolo" } : {}),
     pods: [
       {
         id: "team",
@@ -619,6 +622,7 @@ print(json.dumps(os.path.join(os.path.realpath(os.path.expanduser(a['root'])),a[
     a.root,
     "--json",
     ...(a.op === "preview" ? ["--plan"] : []),
+    ...(a.yolo === true ? ["--non-interruptive"] : []),
   ];
   const help = await runRig(connection, ["up", "--help"]);
   for (const flag of args.filter((v) => v.startsWith("--")))

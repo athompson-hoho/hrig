@@ -1,4 +1,5 @@
 ﻿const { execFile } = require("node:child_process");
+const { codexPlan, safePlan } = require("./account-plan.cjs");
 function run(file, args) {
   return new Promise((resolve, reject) =>
     execFile(
@@ -65,7 +66,7 @@ async function windowsProviders() {
         command +
         ' -ErrorAction SilentlyContinue; if (!$command) { \'{"installed":false,"status":"missing"}\'; exit }; try { $ErrorActionPreference="Continue"; $result=& $command.Source ' +
         args.join(" ") +
-        " 2>&1 | Out-String; $status=if ($LASTEXITCODE -eq 0) {'authenticated'} else {'unverified'}; @{installed=$true;status=$status} | ConvertTo-Json -Compress } catch { '{\"installed\":true,\"status\":\"unverified\"}' }";
+        " 2>&1 | Out-String; $status=if ($LASTEXITCODE -eq 0) {'authenticated'} else {'unverified'}; $plan=$null; try { $meta=$result | ConvertFrom-Json; $plan=$meta.subscriptionType; if (!$plan) {$plan=$meta.subscription_type}; if (!$plan) {$plan=$meta.planType} } catch {}; @{installed=$true;status=$status;plan=$plan} | ConvertTo-Json -Compress } catch { '{\"installed\":true,\"status\":\"unverified\"}' }";
       try {
         return {
           id,
@@ -83,6 +84,10 @@ async function windowsProviders() {
       }
     }),
   );
+  const codex = providers.find(
+    (p) => p.id === "codex" && p.status === "authenticated",
+  );
+  if (codex) codex.plan = await codexPlan();
   return { providers };
 }
 async function discover(connection, probe) {
@@ -98,7 +103,12 @@ async function discover(connection, probe) {
   ]);
   return {
     providers:
-      providers.status === "fulfilled" ? providers.value.providers || [] : [],
+      providers.status === "fulfilled"
+        ? (providers.value.providers || []).map((p) => ({
+            ...p,
+            plan: safePlan(p.plan),
+          }))
+        : [],
     accounts:
       orca.status === "fulfilled"
         ? sanitizeOrca(JSON.parse(orca.value), connection)

@@ -12,3 +12,9 @@ Codex authentication check: https://learn.chatgpt.com/docs/auth
 Claude Code authentication check: https://code.claude.com/docs/en/cli-reference
 
 Validation: TypeScript compilation; metadata whitelisting and local/WSL/SSH scope tests; read-only runtime status checks against local Windows and Ubuntu WSL. No visible desktop test windows were launched.
+
+## Plan-aware recommendations (0.13.0)
+
+On demand, Codex account metadata is read through app-server initialize and account/read with refreshToken:false; no model turn or login is started. Claude uses the subscription label exposed by auth status. Only known plan labels are returned; credentials and raw account responses are not stored or included in assessment briefs. Unknown or unavailable labels stay unknown. This checks the selected host CLI identity, not an arbitrary Orca-managed profile or per-seat override.
+
+The rig wizard exposes project-scoped Claude/Codex monthly plan amounts in USD, also available in Settings. The initial $200/$100 amounts reflect the operator-provided values, not detected invoice prices. Set 0 for unknown and adjust when changing accounts. When both known amounts are provided, Auto uses weighted allocation and gives the lead role to the higher amount, with an independent second runtime when available. $200 Claude / $100 Codex yields Claude + Codex for a pair and Claude + Codex + Claude + Claude for four seats. Authentication remains required for automatic selection. If a plan amount is unknown, allocation falls back to the runtime preference and balanced rotation. Manual runtime selections and protected seats remain authoritative. AI assessment receives these operator-declared amounts and provider plan labels as evidence; subscription cost is not a claim about available quota, concurrency, remaining context or model capability.

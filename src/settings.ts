@@ -34,6 +34,8 @@ export const defaults = {
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
   "rig.defaultTeamSize": 2,
+  "rig.claudePlanMonthlyUsd": 200,
+  "rig.codexPlanMonthlyUsd": 100,
   "notifications.desktop": false,
 };
 export type Preferences = typeof defaults;
@@ -61,6 +63,26 @@ export type Setting = {
 const options = (...values: string[]): Option[] =>
   values.map((value) => ({ value, label: value }));
 export const schema: Setting[] = [
+  {
+    key: "rig.claudePlanMonthlyUsd",
+    category: "Connections & rigs",
+    label: "Claude plan budget (USD/month)",
+    description:
+      "Operator-declared plan budget for runtime prioritization, not detected quota. Set 0 for unknown. Change per project when accounts differ.",
+    min: 0,
+    max: 10000,
+    step: 1,
+  },
+  {
+    key: "rig.codexPlanMonthlyUsd",
+    category: "Connections & rigs",
+    label: "Codex plan budget (USD/month)",
+    description:
+      "Operator-declared plan budget for runtime prioritization, not detected quota. Set 0 for unknown. Change per project when accounts differ.",
+    min: 0,
+    max: 10000,
+    step: 1,
+  },
   {
     key: "appearance.theme",
     category: "Appearance",

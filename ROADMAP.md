@@ -227,3 +227,7 @@ Optional project goals with editable suggestions; automatic runtimes selected fr
 ### 0.12.0 - In-app Windows updates and new-version prompts
 
 Packaged startup/six-hour update checks, per-version 24-hour reminders, explicit download and restart/install actions, unsigned consent and preserved dirty-buffer guards. Portable Windows upgrades through per-user setup; signed Windows/macOS retain signature verification. Unsigned macOS and Linux retain native download/package-manager paths. Read-only live Windows installer download verified against the published feed without execution.
+
+### 0.13.0 - Rig bypass and plan-aware recommendations
+
+Added opt-in YOLO/full-bypass to generated rigs, bound to exact preview and native launch confirmation, using builtin:yolo and advertised --non-interruptive support. Added bounded read-only plan-label detection (Claude auth status, Codex account/read), editable project plan amounts and weighted runtime recommendations. Operator-provided Claude $200 / Codex $100 prioritizes Claude while retaining independent Codex review. No existing rigs, native global settings, live agents or billing plans are changed.

@@ -43,6 +43,7 @@ export function Modal({
   closeRef.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
+    const dialog = ref.current;
     (
       ref.current?.querySelector<HTMLElement>("input,select,textarea") ||
       ref.current?.querySelector<HTMLElement>("button")
@@ -71,7 +72,9 @@ export function Modal({
     window.addEventListener("keydown", handler);
     return () => {
       window.removeEventListener("keydown", handler);
-      previous?.focus();
+      const active = document.activeElement;
+      // Respect a destination that an action already focused outside this dialog.
+      if (!active || active === document.body || dialog?.contains(active)) previous?.focus();
     };
   }, [title]);
   return (

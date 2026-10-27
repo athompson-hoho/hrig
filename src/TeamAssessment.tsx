@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Connection, HrigAPI, DesignSeat } from "./types";
 import { ErrorBox } from "./components";
 import HandoffPlan from "./HandoffPlan";
+import { allocateRuntimes } from "../electron/runtime-preferences.mjs";
 import TeamComparison from "./TeamComparison";
 
 type Proposal = NonNullable<
@@ -13,6 +14,7 @@ export default function TeamAssessment({
   goal,
   work,
   currentSeats,
+  accountBudgets = {},
   protectedSeatIds,
   previewSeats,
   onApply,
@@ -22,6 +24,7 @@ export default function TeamAssessment({
   goal: string;
   work: string;
   currentSeats: DesignSeat[];
+  accountBudgets?: Record<string, number>;
   protectedSeatIds: string[];
   previewSeats: (proposal: Proposal) => DesignSeat[];
   onApply: (proposal: Proposal) => void;
@@ -60,6 +63,7 @@ export default function TeamAssessment({
     priority,
     currentSeats,
     protectedSeatIds,
+    accountBudgets,
   });
   const latestKey = useRef(key);
   latestKey.current = key;
@@ -81,7 +85,9 @@ export default function TeamAssessment({
         if (active) {
           setProviders(result.providers || []);
           setProvider(
-            result.providers?.find((p) => p.installed)?.id || "codex",
+            result.providers?.some((p) => p.status === "authenticated")
+              ? allocateRuntimes(result.providers, 1, accountBudgets)[0]
+              : result.providers?.find((p) => p.installed)?.id || "codex",
           );
         }
       })
@@ -108,6 +114,7 @@ export default function TeamAssessment({
         goal,
         work,
         constraints,
+        accountBudgets,
         content: response,
         provider,
         priority,
@@ -186,7 +193,7 @@ export default function TeamAssessment({
         />
       </label>
       <p className="field-note">
-        Collects CPU, available memory, provider executable presence and up to
+        Collects CPU, available memory, provider sign-in/plan labels, your declared plan budgets, and up to
         100 top-level project names and package dependency/script names from the
         selected host. Direct assessment sends this brief to the selected
         provider using its existing sign-in and may consume model usage.

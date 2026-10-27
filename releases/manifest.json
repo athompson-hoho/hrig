@@ -78,5 +78,11 @@
     "title": "In-app Windows updates and new-version prompts",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.13.0",
+    "title": "Rig bypass and plan-aware team recommendations",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

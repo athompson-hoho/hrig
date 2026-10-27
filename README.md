@@ -337,3 +337,13 @@ Packaged HRig checks for new stable versions after startup and every six hours. 
 ## License and code signing
 
 HRig is open source under the [MIT license](LICENSE). See the [privacy statement](PRIVACY.md) and [code signing policy](SIGNING.md). We are applying to SignPath Foundation for free Windows code signing; approval and trusted signing are pending. Current release signatures are described in their release notes. Planned attribution after approval: Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). This is an application, not a claim of current sponsorship.
+
+## Rig bypass and account plans (0.13.0)
+
+The rig wizard can opt into **YOLO / bypass permissions** for both Claude Code and Codex. It saves OpenRig's `builtin:yolo` policy and uses its advertised `--non-interruptive` option. The checkbox starts off; review shows the selected mode, and changing it invalidates the previous launch preview. Existing rigs and global native settings are not changed.
+
+Account checks report provider-exposed plan labels, including Claude Max and Codex Pro Lite. Project-scoped monthly amounts are editable in the wizard and Settings. The initial Claude $200 / Codex $100 values are operator-provided preferences, not detected invoices or remaining quota. Auto favors the higher configured amount for lead work and keeps independent review on another available runtime. Manual choices and protected edits remain authoritative. See [account behavior](docs/ACCOUNTS.md).
+
+![Rig wizard with detected plan labels, editable project plan priorities and opt-in YOLO bypass using demonstration data](docs/screenshots/rig-policy-needs.png)
+
+![Claude-first and Codex-reviewer runtime recommendation using demonstration agents](docs/screenshots/rig-policy-team.png)

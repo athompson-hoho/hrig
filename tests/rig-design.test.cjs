@@ -126,6 +126,9 @@ test(
         "path:" + root + "/implementer",
       );
       assert.equal(preview.spec.summary, draft.goal);
+      assert.equal(preview.spec.permission_policy, undefined);
+      await assert.rejects(()=>features.designRig(connection,{...draft,op:"launch",confirmation:draft.name,previewToken:preview.previewToken,yolo:true}),/Preview this exact design/);
+      await assert.rejects(()=>features.designRig(connection,{...draft,yolo:"yes"}),/boolean/);
       assert.equal(preview.result.preview, true);
       await features.designRig(connection, draft); // an identical preview is safe to retry
       await assert.rejects(
@@ -148,10 +151,15 @@ test(
           }),
         /Preview/,
       );
+      const yoloDesign = await features.designRig(connection,{...draft,yolo:true,previewToken:preview.previewToken});
+      assert.equal(yoloDesign.spec.permission_policy,"builtin:yolo");
+      await assert.rejects(()=>features.designRig(connection,{...draft,op:"launch",confirmation:draft.name,previewToken:yoloDesign.previewToken,yolo:false}),/Preview this exact design/);
+      const restored = await features.designRig(connection,{...draft,yolo:false,previewToken:yoloDesign.previewToken});
+      assert.equal(restored.spec.permission_policy,undefined);
       const revised = await features.designRig(connection, {
         ...draft,
         goal: "Revised goal",
-        previewToken: preview.previewToken,
+        previewToken: restored.previewToken,
       });
       const launch = await features.designRig(connection, {
         ...draft,

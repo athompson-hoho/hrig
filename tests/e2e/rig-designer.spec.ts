@@ -38,7 +38,7 @@ test("guided designer saves, revises and previews before launch; deletion requir
           return JSON.stringify({
             providers: [
               { id: "codex", installed: true, status: "authenticated" },
-              { id: "claude-code", installed: false, status: "missing" },
+              { id: "claude-code", installed: true, status: "authenticated", plan: "Max" },
             ],
           });
         if (request?.op === "run" && request.prompt) {
@@ -126,7 +126,7 @@ test("guided designer saves, revises and previews before launch; deletion requir
     const wizard = page.getByRole("region", { name: "Rig designer" });
     await app.evaluate(({ app }) => {
       const accounts = (process as any).mainModule.require(app.getAppPath() + '/electron/accounts.cjs');
-      accounts.discover = async () => ({providers:[{id:'codex',installed:true,status:'authenticated'},{id:'claude-code',installed:true,status:'authenticated'}],accounts:[{id:'demo',runtime:'codex',label:'QA managed account',scope:'host',hostMatch:false}],checkedAt:Date.now(),scope:'Fixture WSL',warning:'',orcaStatus:'available',contextStatus:'Per-session context usage unavailable'});
+      accounts.discover = async () => ({providers:[{id:'codex',installed:true,status:'authenticated',plan:'Pro Lite'},{id:'claude-code',installed:true,status:'authenticated',plan:'Max'}],accounts:[{id:'demo',runtime:'codex',label:'QA managed account',scope:'host',hostMatch:false}],checkedAt:Date.now(),scope:'Fixture WSL',warning:'',orcaStatus:'available',contextStatus:'Per-session context usage unavailable'});
     });
     await expect(wizard.getByLabel('New rig name',{exact:true})).toBeVisible();
     await page.getByRole('button', {name:/^Accounts:/}).click();
@@ -143,9 +143,15 @@ test("guided designer saves, revises and previews before launch; deletion requir
     await expect(wizard).toContainText('claude-code: authenticated');
     await wizard.getByLabel('New rig name',{exact:true}).fill('new-team');
     await expect(wizard.getByLabel('Rig goal',{exact:true})).toHaveValue('');
+    await wizard.getByLabel('YOLO bypass permissions for Claude and Codex',{exact:true}).check();
+    await expect(wizard.getByLabel('Claude plan monthly USD')).toHaveValue('200');
+    await expect(wizard.getByLabel('Codex plan monthly USD')).toHaveValue('100');
+    await wizard.getByLabel('YOLO bypass permissions for Claude and Codex',{exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:'release/previews/rig-policy-needs.png',animations:'disabled'});
     await wizard.getByRole('button',{name:'Recommend a team',exact:true}).click();
-    await expect(wizard.getByLabel('Seat 1 runtime',{exact:true})).toHaveValue('codex');
-    await expect(wizard.getByLabel('Seat 2 runtime',{exact:true})).toHaveValue('claude-code');
+    await expect(wizard.getByLabel('Seat 1 runtime',{exact:true})).toHaveValue('claude-code');
+    await expect(wizard.getByLabel('Seat 2 runtime',{exact:true})).toHaveValue('codex');
+    await page.screenshot({path:'release/previews/rig-policy-team.png',animations:'disabled'});
     await wizard.getByRole('button',{name:'Back to needs',exact:true}).click();
     await expect(wizard.getByLabel('Rig goal',{exact:true})).toHaveValue(/Implement and review/);
 
@@ -163,6 +169,7 @@ test("guided designer saves, revises and previews before launch; deletion requir
       .getByLabel("Designer project folder", { exact: true })
       .fill(fixture.root);
     await wizard.getByText("Design a team with AI", { exact: true }).click();
+    await expect(wizard.getByLabel("Assessment provider",{exact:true})).toHaveValue("claude-code");
     await wizard
       .getByLabel("Team assessment constraints")
       .fill("Production service; at most two active seats");

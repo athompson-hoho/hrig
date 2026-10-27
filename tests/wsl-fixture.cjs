@@ -22,7 +22,7 @@ import json,sys,os
 root=os.path.dirname(__file__)
 def value(flag,default=''):
  return sys.argv[sys.argv.index(flag)+1] if flag in sys.argv else default
-if '--help' in sys.argv: print('--json --delete --snapshot --cwd --existing --plan --source --destination --summary --body --to')
+if '--help' in sys.argv: print('--json --delete --snapshot --cwd --existing --plan --non-interruptive --source --destination --summary --body --to')
 elif sys.argv[1]=='--version': print('0.6.14-test-fixture')
 elif sys.argv[1]=='ps':
  session=open(root+'/session.txt').read().strip() if os.path.exists(root+'/session.txt') else ${JSON.stringify(session)}

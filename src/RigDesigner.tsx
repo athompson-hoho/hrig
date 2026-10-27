@@ -19,6 +19,7 @@ import type { Connection, Rig, Seat as RigSeat } from "./types";
 import { useSettings } from "./SettingsContext";
 import { ErrorBox, Loading } from "./components";
 import TeamAssessment from "./TeamAssessment";
+import { allocateRuntimes } from "../electron/runtime-preferences.mjs";
 import { useAccounts, AccountDetails } from "./AccountStatus";
 import HandoffPlan, { validHandoff } from "./HandoffPlan";
 import type { DesignSeat } from "./types";
@@ -137,7 +138,12 @@ export default function RigDesigner({
   root: string;
   onChanged: () => void;
 }) {
-  const { effective: preferences } = useSettings();
+  const { effective: preferences, update: updatePreference } = useSettings();
+  const [yolo, setYolo] = useState(false);
+  const accountBudgets = {
+    "claude-code": preferences["rig.claudePlanMonthlyUsd"],
+    codex: preferences["rig.codexPlanMonthlyUsd"],
+  };
   const accountAvailability = useAccounts(connection);
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -147,10 +153,14 @@ export default function RigDesigner({
   const [runtime, setRuntime] = useState<string>("mixed");
   const [folder, setFolder] = useState(root);
   const suggestedGoal = {
-    build: "Implement and review software improvements for this project, preserving existing behavior and verifying changes.",
-    research: "Research this project, compare practical options, and produce an actionable plan with evidence and tradeoffs.",
-    review: "Review this project, investigate defects, and recommend or implement verified fixes.",
-    design: "Design improvements to this project's product and interface, with clear workflows and implementation guidance.",
+    build:
+      "Implement and review software improvements for this project, preserving existing behavior and verifying changes.",
+    research:
+      "Research this project, compare practical options, and produce an actionable plan with evidence and tradeoffs.",
+    review:
+      "Review this project, investigate defects, and recommend or implement verified fixes.",
+    design:
+      "Design improvements to this project's product and interface, with clear workflows and implementation guidance.",
   }[kind];
   const effectiveGoal = goal.trim() || suggestedGoal;
   const [folders, setFolders] = useState<
@@ -206,13 +216,15 @@ export default function RigDesigner({
     if (!goal.trim()) setGoal(suggestedGoal);
     setAssessmentReason("");
     try {
-      const readyRuntimes = accountAvailability.data?.providers
-        .filter((provider) => provider.status === "authenticated")
-        .map((provider) => provider.id) || [];
-      if (runtime === "mixed" && !readyRuntimes.length)
-        throw Error("No authenticated runtime was confirmed on this host. Refresh accounts, or choose a specific runtime to configure its seats manually.");
-      const preferred = preferences["rig.defaultRuntime"];
-      readyRuntimes.sort((a, b) => Number(b === preferred) - Number(a === preferred));
+      const assignments =
+        runtime === "mixed"
+          ? allocateRuntimes(
+              accountAvailability.data?.providers || [],
+              size,
+              accountBudgets,
+              preferences["rig.defaultRuntime"],
+            )
+          : Array(size).fill(runtime);
       setSeats(
         mergeTunedSeats(
           goals[kind].roles.slice(0, size).map((id, index) => {
@@ -220,10 +232,12 @@ export default function RigDesigner({
             const matching = agents.find((a) =>
               a.name.toLowerCase().includes(id),
             );
-            const seatRuntime = runtime === "mixed"
-              ? readyRuntimes[index % readyRuntimes.length]
-              : runtime;
-            return { id, agentId: (exact || matching)?.id || "", runtime: seatRuntime };
+            const seatRuntime = assignments[index];
+            return {
+              id,
+              agentId: (exact || matching)?.id || "",
+              runtime: seatRuntime,
+            };
           }),
           protectedSeats,
         ),
@@ -244,6 +258,7 @@ export default function RigDesigner({
         op,
         name,
         goal: effectiveGoal,
+        yolo,
         root: folder,
         seats,
         confirmation,
@@ -326,7 +341,8 @@ export default function RigDesigner({
                 placeholder="Describe the outcome, or leave blank to use a suggested goal."
               />
               <span className="field-note" id="designer-goal-help">
-                Leave blank to use a default for the selected work type. This suggestion does not run an agent.
+                Leave blank to use a default for the selected work type. This
+                suggestion does not run an agent.
               </span>
               <button
                 type="button"
@@ -441,12 +457,18 @@ export default function RigDesigner({
                 value={runtime}
                 onChange={(e) => setRuntime(e.target.value)}
               >
-                <option value="mixed">Auto — available signed-in runtimes</option>
+                <option value="mixed">
+                  Auto — available signed-in runtimes
+                </option>
                 <option value="codex">Codex</option>
                 <option value="claude-code">Claude Code</option>
               </select>
               <span className="field-note">
-                Auto shares seats across runtimes confirmed signed in on this host, starting with your preference. With only one available runtime, all seats use it. Specific runtimes remain manual overrides.
+                Auto prioritizes authenticated runtimes by configured monthly
+                plan budget. The higher-budget runtime leads, with another
+                available runtime for independent review. This is a preference,
+                not a quota or capability estimate. Manual runtime choices
+                override it.
               </span>
             </label>
             {!!folders.length && (
@@ -479,9 +501,81 @@ export default function RigDesigner({
           </div>
           <details>
             <summary>Available accounts on {connection.name}</summary>
-            <AccountDetails data={accountAvailability.data} error={accountAvailability.error} />
-            <button type="button" className="secondary-button" onClick={accountAvailability.refresh}>Refresh accounts</button>
+            <AccountDetails
+              data={accountAvailability.data}
+              error={accountAvailability.error}
+            />
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={accountAvailability.refresh}
+            >
+              Refresh accounts
+            </button>
           </details>
+          <fieldset className="designer-choice-group">
+            <legend>Account plan priorities</legend>
+            <p className="field-note">
+              Plan labels are detected when the provider exposes them. Monthly
+              amounts below are supplied by you, not inferred from
+              authentication. These project-scoped settings are editable; use 0
+              for unknown.
+            </p>
+            <div className="designer-account-budgets">
+              {(
+                [
+                  ["claude-code", "Claude", "rig.claudePlanMonthlyUsd"],
+                  ["codex", "Codex", "rig.codexPlanMonthlyUsd"],
+                ] as const
+              ).map(([id, label, key]) => (
+                <label className="field-label" key={id}>
+                  {label} plan USD/month
+                  <input
+                    type="number"
+                    aria-label={label + " plan monthly USD"}
+                    min={0}
+                    max={10000}
+                    value={accountBudgets[id]}
+                    onChange={(e) =>
+                      updatePreference(
+                        "project",
+                        key,
+                        Math.max(
+                          0,
+                          Math.min(10000, Number(e.target.value) || 0),
+                        ),
+                      )
+                    }
+                  />
+                  <span className="field-note">
+                    Detected plan:{" "}
+                    {accountAvailability.data?.providers.find(
+                      (p) => p.id === id,
+                    )?.plan || "Unavailable"}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="field-note designer-permission-toggle">
+            <input
+              type="checkbox"
+              aria-label="YOLO bypass permissions for Claude and Codex"
+              checked={yolo}
+              onChange={(e) => {
+                setYolo(e.target.checked);
+                setPreview(null);
+                setConfirmation("");
+              }}
+            />{" "}
+            YOLO / bypass permissions for Claude and Codex
+          </label>
+          <p className="field-note">
+            Uses builtin:yolo and accepts native first-launch notices for this
+            new rig. Agents run without normal approval prompts and with broad
+            filesystem/network access. Existing rigs and global runtime settings
+            are not changed.
+          </p>
           {!agents.length && (
             <p>
               No installed agents were found. Add agent specifications to
@@ -507,10 +601,13 @@ export default function RigDesigner({
             connection={connection}
             root={folder}
             goal={effectiveGoal}
+            accountBudgets={accountBudgets}
             work={goals[kind].label}
             currentSeats={seats}
             protectedSeatIds={protectedSeats.map((p) => p.seat.id)}
-            previewSeats={proposal => mergeTunedSeats(proposal.seats, protectedSeats)}
+            previewSeats={(proposal) =>
+              mergeTunedSeats(proposal.seats, protectedSeats)
+            }
             onApply={(proposal) => {
               const merged = mergeTunedSeats(proposal.seats, protectedSeats);
               setSeats(merged);
@@ -652,6 +749,10 @@ export default function RigDesigner({
               </span>
             </div>
             <p>{effectiveGoal}</p>
+            <p>
+              Permissions:{" "}
+              {yolo ? "YOLO / full bypass for all seats" : "OpenRig defaults"}
+            </p>
             <div className="designer-project-path">
               <FolderOpen size={16} />
               <code>{folder}</code>

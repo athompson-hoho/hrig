@@ -4215,3 +4215,8 @@ button:hover {
 .team-comparison article { margin: 16px 0; }
 .team-comparison-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 .team-comparison-table th, .team-comparison-table td { padding: 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.designer-account-budgets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.designer-body .designer-permission-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.designer-body .designer-permission-toggle input[type="checkbox"] { width: 15px; height: 15px; min-height: 0; flex: 0 0 15px; margin: 0; padding: 0; accent-color: var(--accent); }
+@media (max-width: 700px) { .designer-account-budgets { grid-template-columns: 1fr; } }

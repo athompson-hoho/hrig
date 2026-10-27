@@ -1,18 +1,25 @@
 // Only documented noninteractive adapters are eligible for direct execution.
 // Prompt input travels over stdin, never through shell interpolation.
 const runner = `import os,sys,json,shutil,subprocess,signal
+${require("./account-plan.cjs").PYTHON_CODEX_PLAN}
 a=json.load(sys.stdin)
 commands={'codex':['codex','--ask-for-approval','never','exec','--sandbox','read-only','--ephemeral','--skip-git-repo-check','-'], 'claude-code':['claude','-p','--output-format','json','--tools','','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--no-session-persistence']}
 if a['op']=='providers':
  out=[]
  for key,args in commands.items():
-  installed=bool(shutil.which(args[0])); status='missing'
+  installed=bool(shutil.which(args[0])); status='missing'; plan=None
   if installed:
    try:
     check=subprocess.run([args[0]]+(['login','status'] if key=='codex' else ['auth','status']),capture_output=True,text=True,timeout=8)
     status='authenticated' if check.returncode==0 else 'unverified'
+    if status=='authenticated':
+     if key=='codex': plan=codex_plan()
+     else:
+      try:
+       meta=json.loads(check.stdout);plan=meta.get('subscriptionType') or meta.get('subscription_type') or meta.get('planType')
+      except ValueError: pass
    except (OSError,subprocess.TimeoutExpired): status='unverified'
-  out.append({'id':key,'installed':installed,'status':status})
+  out.append({'id':key,'installed':installed,'status':status,'plan':plan})
  print(json.dumps({'providers':out})); sys.exit(0)
 if a.get('provider') not in commands: raise RuntimeError('Choose Codex or Claude Code for direct assessment')
 root=os.path.realpath(os.path.expanduser(a['root']))

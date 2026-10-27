@@ -1,8 +1,13 @@
 ﻿import { useEffect, useState } from "react";
-import './accounts.css';
+import "./accounts.css";
 import type { Connection } from "./types";
 export interface AccountAvailability {
-  providers: { id: string; installed: boolean; status: string }[];
+  providers: {
+    id: string;
+    installed: boolean;
+    status: string;
+    plan?: string | null;
+  }[];
   accounts: {
     id: string;
     runtime: string;
@@ -72,7 +77,7 @@ export function AccountDetails({
       </p>
       {data.providers.map((p) => (
         <p key={p.id}>
-          {p.id}: {p.status}
+          {p.id}: {p.status} | Plan: {p.plan || "unavailable"}
         </p>
       ))}
       {data.warning && <p>{data.warning}</p>}
@@ -115,7 +120,9 @@ export default function AccountStatus({
           ? `${ready} runtime${ready === 1 ? "" : "s"} ready`
           : error
             ? "unavailable"
-            : open ? "checking" : "view accounts"}
+            : open
+              ? "checking"
+              : "view accounts"}
       </button>
       {open && (
         <div
