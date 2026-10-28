@@ -350,7 +350,9 @@ async function edit(connection, a) {
     return results;
   }
 }
+const relaunchSession = require("./session-relaunch.cjs").createSessionRelaunch({ inventory: c => core.inventory(c), runRig, parseJson: core.parseJson });
 async function rigAction(connection, a) {
+  if (["relaunchPlan", "relaunch"].includes(a.op)) return relaunchSession(connection, a);
   const text = (v) => {
     if (
       typeof v !== "string" ||

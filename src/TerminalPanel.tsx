@@ -3,7 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
 import { FitAddon } from "@xterm/addon-fit";
-import { RotateCcw, Plug, CircleHelp } from "lucide-react";
+import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import type { PanelConfig } from "./types";
 import { useSettings } from "./SettingsContext";
@@ -12,8 +12,10 @@ import { localShellLabel } from "./platform";
 export default function TerminalPanel({
   config,
   onFile,
+  onRelaunch,
 }: {
   config: PanelConfig;
+  onRelaunch?: () => void;
   onFile: (path: string, line?: number) => void;
 }) {
   const { effective: preferences } = useSettings();
@@ -27,6 +29,18 @@ export default function TerminalPanel({
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const retries = useRef(0);
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const { connectionId, seatId } = (event as CustomEvent).detail;
+      if (connectionId === config.connection.id && seatId === config.seat?.id) {
+        retries.current = 0;
+        setAttempt((n) => n + 1);
+      }
+    };
+    window.addEventListener("hrig:session-relaunched", listener);
+    return () =>
+      window.removeEventListener("hrig:session-relaunched", listener);
+  }, [config.connection.id, config.seat?.id]);
   const previousSession = useRef<string | null | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
   const [failure, setFailure] = useState(0);
@@ -277,6 +291,11 @@ export default function TerminalPanel({
         <StatusDot
           status={ended !== null ? "stopped" : ready ? "idle" : "unknown"}
         />
+        {config.seat && onRelaunch && (
+          <IconButton title="Relaunch session" onClick={onRelaunch}>
+            <RotateCw size={13} />
+          </IconButton>
+        )}
         {!config.rigControlToken && (
           <IconButton
             title="Reconnect terminal"

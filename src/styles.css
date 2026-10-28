@@ -4220,3 +4220,10 @@ button:hover {
 .designer-body .designer-permission-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .designer-body .designer-permission-toggle input[type="checkbox"] { width: 15px; height: 15px; min-height: 0; flex: 0 0 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 @media (max-width: 700px) { .designer-account-budgets { grid-template-columns: 1fr; } }
+
+.session-row { display: flex; align-items: center; margin: 3px 9px; gap: 2px; border-radius: 6px; }
+.session-row .seat-row { flex: 1; min-width: 0; width: auto; margin: 0; }
+.session-row > .icon-button { flex-shrink: 0; color: var(--color-707b8e); }
+.session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
+.relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
+.relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }

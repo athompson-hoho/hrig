@@ -5,6 +5,7 @@ import {
   Folder,
   FileCode2,
   RefreshCw,
+  RotateCw,
   FolderOpen,
   Plus,
   GitBranch,
@@ -122,6 +123,7 @@ export default function Sidebar({
   onConnect,
   onManageRigs,
   onSeat,
+  onRelaunch,
   onDrag,
   onFile,
   onDiff,
@@ -140,6 +142,7 @@ export default function Sidebar({
   onConnect: () => void;
   onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
+  onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
   onDiff: (path: string) => void;
@@ -368,29 +371,38 @@ export default function Sidebar({
               </div>
             ) : seats.length ? (
               seats.map((s) => (
-                <button
-                  disabled={!!inventoryError}
-                  draggable={!inventoryError}
-                  onDragStart={(event) => onDrag(event, s)}
-                  onClick={() => onSeat(s)}
-                  className="seat-row"
-                  key={s.id}
-                  title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
-                >
-                  <span
-                    className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
+                <div className="session-row" key={s.id}>
+                  <button
+                    disabled={!!inventoryError}
+                    draggable={!inventoryError}
+                    onDragStart={(event) => onDrag(event, s)}
+                    onClick={() => onSeat(s)}
+                    className="seat-row"
+                    key={s.id}
+                    title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
                   >
-                    <Bot size={16} />
-                  </span>
-                  <span className="seat-details">
-                    <strong>{s.name}</strong>
-                    <small>
-                      {s.rigName} · {s.runtime}
-                    </small>
-                  </span>
-                  <StatusDot status={s.status} />
-                  <GripVertical size={12} className="grip" />
-                </button>
+                    <span
+                      className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
+                    >
+                      <Bot size={16} />
+                    </span>
+                    <span className="seat-details">
+                      <strong>{s.name}</strong>
+                      <small>
+                        {s.rigName} · {s.runtime}
+                      </small>
+                    </span>
+                    <StatusDot status={s.status} />
+                    <GripVertical size={12} className="grip" />
+                  </button>
+                  <IconButton
+                    title={`Relaunch session ${s.name}`}
+                    disabled={!!inventoryError || !s.session}
+                    onClick={() => onRelaunch(s)}
+                  >
+                    <RotateCw size={13} />
+                  </IconButton>
+                </div>
               ))
             ) : (
               <div className="connection-empty">

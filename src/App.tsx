@@ -90,6 +90,7 @@ import {
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
 import TerminalPanel from "./TerminalPanel";
+import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
 import PanelNavigator, { type NavigablePanel } from "./PanelNavigator";
@@ -208,6 +209,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
+  const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const modalRef = useRef(modal);
   modalRef.current = modal;
@@ -1225,6 +1227,7 @@ export default function App() {
       case "terminal":
         return (
           <TerminalPanel
+            onRelaunch={() => { if (config.seat) setRelaunch({seat: config.seat, connection: config.connection}); }}
             onFile={(path, line) => openFile(path, false, line, config)}
             config={{
               ...config,
@@ -1832,6 +1835,10 @@ export default function App() {
   return (
     <SettingsContext.Provider value={settingsContext}>
       <div className="app" inert={updateRestarting || undefined}>
+        {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
+          window.dispatchEvent(new CustomEvent("hrig:session-relaunched", {detail:{connectionId:relaunch.connection.id, seatId:relaunch.seat.id}}));
+          refreshAll(); setRelaunch(null); notify("Fresh session launched. Checking readiness...");
+        }}/> }
         <header className="titlebar">
           <div className="brand">
             <span className="brand-mark">
@@ -1975,6 +1982,7 @@ export default function App() {
                 onProject={openProject}
                 onConnect={openConnect}
                 onSeat={openSeat}
+                onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
                 onFile={(path) => openFile(path)}
                 onDiff={(path) => openFile(path, true)}

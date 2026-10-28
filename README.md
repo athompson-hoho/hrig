@@ -9,6 +9,7 @@ HRig is a cross-platform **OpenRig GUI and agentic development workspace** for A
 - **Multi-agent workspace management:** organize existing coding-agent sessions with graphical layouts, role templates and a searchable workspace.
 - **WSL and SSH remote development:** connect to Linux environments and remote projects while using a desktop GUI.
 - **IDE-style code editing:** open project files in Monaco, search code, inspect Git diffs and review agent changes.
+- **Session relaunch:** preview and confirm a fresh agent from each session row or its terminal toolbar; reconnect remains a separate action.
 - **OpenRig agent coordination:** design rigs, inspect task queues and deliberately send tasks or review feedback through the OpenRig harness.
 - **Developer productivity tools:** terminal search and output export, local task boards, GitHub Issues/Projects and Linear integrations.
 - **Personalized desktop workspace:** configurable settings and community themes including Catppuccin, Nord and Dracula.
