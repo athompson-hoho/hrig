@@ -104,6 +104,7 @@ jobs:
             release/*.rpm
             release/*.blockmap
             release/stable-*.yml
+            release/latest.yml
             release/artifacts-*.json
             release/native-smoke-*.json
             release/distribution-qa-*.json

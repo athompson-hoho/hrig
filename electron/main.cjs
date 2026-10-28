@@ -133,7 +133,7 @@ async function createWindow() {
     frame: false,
     backgroundColor: "#101115",
     icon: path.join(__dirname, "../assets/icon.png"),
-    title: "HRig",
+    title: "hRig",
     ...clampBounds(saved?.windowBounds),
     show: false,
     webPreferences: {
@@ -145,6 +145,7 @@ async function createWindow() {
     },
   });
   Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]):null);
+  mainWindow.on("page-title-updated", (event) => event.preventDefault());
   mainWindow.webContents.on("will-navigate", (event) => event.preventDefault());
   mainWindow.webContents.on("will-prevent-unload", (event) => {
     const choice = dialog.showMessageBoxSync(mainWindow, {
@@ -152,7 +153,7 @@ async function createWindow() {
       buttons: ["Keep editing", "Discard and close"],
       defaultId: 0,
       cancelId: 0,
-      title: "Unsaved changes",
+      title: "hRig",
       message: "Some files have unsaved edits.",
       detail:
         "Keep editing to save your changes, or discard them and close HRig.",
@@ -166,6 +167,7 @@ async function createWindow() {
       ? {
           action: "allow",
           overrideBrowserWindowOptions: {
+            title: "hRig",
             autoHideMenuBar: true,
             backgroundColor: "#101115",
             webPreferences: {
@@ -178,6 +180,8 @@ async function createWindow() {
       : { action: "deny" };
   });
   mainWindow.webContents.on("did-create-window", (child) => {
+    child.setTitle("hRig");
+    child.on("page-title-updated", (event) => event.preventDefault());
     child.webContents.on("will-navigate", (event, url) => {
       if (!isPopoutUrl(url)) event.preventDefault();
     });
@@ -376,6 +380,7 @@ handle("rig:queue", async (_event, connection, rigName) => {
 handle("rig:projects", (_event, connection) => backend.projects(connection));
 handle("files:pick", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
+    title: "hRig",
     properties: ["openDirectory"],
   });
   return result.canceled ? null : result.filePaths[0];

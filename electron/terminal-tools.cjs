@@ -19,7 +19,7 @@ function registerTerminalTools({ handle, dialog, shell, getWindow, fs }) {
     )
       throw new Error("Terminal export exceeds the 32 MiB limit.");
     const result = await dialog.showSaveDialog(getWindow(), {
-      title: "Export terminal output",
+      title: "hRig",
       defaultPath: "terminal-output.txt",
       filters: [{ name: "Plain text", extensions: ["txt"] }],
     });
@@ -31,7 +31,7 @@ function registerTerminalTools({ handle, dialog, shell, getWindow, fs }) {
     const url = externalUrl(value);
     const result = await dialog.showMessageBox(getWindow(), {
       type: "question",
-      title: "Open terminal link?",
+      title: "hRig",
       message: "Open this link in your browser?",
       detail: url,
       buttons: ["Cancel", "Open link"],

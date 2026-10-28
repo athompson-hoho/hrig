@@ -1838,7 +1838,7 @@ export default function App() {
               <Layers3 size={18} />
             </span>
             <strong>
-              hrig<span>.</span>
+              hRig
             </strong>
             <span className="titlebar-divider" />
             <span className="titlebar-label">OPENRIG WORKSPACE</span>
