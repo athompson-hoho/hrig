@@ -62,6 +62,9 @@ function createUpdateService({
   function getUpdater() {
     if (updater) return updater;
     updater = loadUpdater();
+    // Installed builder configs may omit channel. Pin it before resetting
+    // allowDowngrade: electron-updater channel setters enable downgrades.
+    updater.channel = `stable-${platform}-${arch}`;
     updater.autoDownload = false;
     updater.autoInstallOnAppQuit = false;
     updater.allowDowngrade = false;

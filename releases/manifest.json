@@ -84,5 +84,11 @@
     "title": "Rig bypass and plan-aware team recommendations",
     "sourceRef": "HEAD",
     "native": true
+  },
+  {
+    "version": "0.13.1",
+    "title": "Reliable update channels and legacy Windows recovery",
+    "sourceRef": "HEAD",
+    "native": true
   }
 ]

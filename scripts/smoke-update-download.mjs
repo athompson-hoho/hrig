@@ -12,7 +12,6 @@ await fs.writeFile(
   JSON.stringify({
     provider: "generic",
     url: "https://github.com/athompson-hoho/hrig/releases/latest/download",
-    channel: "stable-win32-x64",
     updaterCacheDirName: "hrig-download-qa",
   }),
 );
@@ -47,7 +46,6 @@ try {
     updater.setFeedURL({
       provider: "generic",
       url: "https://github.com/athompson-hoho/hrig/releases/latest/download",
-      channel: "stable-win32-x64",
     });
     updater.logger = null;
     updater.disableDifferentialDownload = true;

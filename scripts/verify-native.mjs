@@ -32,6 +32,14 @@ for (const f of feed.files) {
   if (crypto.createHash("sha512").update(data).digest("base64") !== f.sha512)
     throw new Error("Update feed hash mismatch.");
 }
+if (latest.platform === "win32" && latest.arch === "x64") {
+  const canonical = await fs.readFile(
+    path.join("release", feedName(latest.platform, latest.arch)),
+  );
+  const legacy = await fs.readFile(path.join("release", "latest.yml"));
+  if (!canonical.equals(legacy))
+    throw new Error("Legacy Windows update feed differs from canonical feed.");
+}
 let signatureVerified = false;
 if (manifest.policy.signed) {
   if (latest.platform === "win32") {

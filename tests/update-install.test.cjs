@@ -132,3 +132,35 @@ test("startup and periodic checks never download and skip active updates; develo
     },
   });
 });
+
+test("missing or stale configured channels use the native feed without enabling downgrades", async () => {
+  for (const [platform, arch] of [
+    ["win32", "x64"],
+    ["darwin", "x64"],
+    ["darwin", "arm64"],
+  ]) {
+    const updater = new EventEmitter();
+    let channel = "latest";
+    Object.defineProperty(updater, "channel", {
+      get: () => channel,
+      set: (value) => {
+        channel = value;
+        updater.allowDowngrade = true;
+      },
+    });
+    updater.checkForUpdates = async () => {
+      assert.equal(channel, `stable-${platform}-${arch}`);
+      assert.equal(updater.allowDowngrade, false);
+      return { updateInfo: { version: "0.13.0" } };
+    };
+    const service = createUpdateService({
+      version: "0.12.0",
+      platform,
+      arch,
+      packaged: true,
+      policy: { signed: true, publisherName: "HRig", channel: "latest" },
+      loadUpdater: () => updater,
+    });
+    assert.equal((await service.operation({ op: "check" })).phase, "available");
+  }
+});

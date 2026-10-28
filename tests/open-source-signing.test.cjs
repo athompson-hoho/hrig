@@ -71,6 +71,10 @@ test("native signature verification covers the app, installer and portable wrapp
       path.join(release, "stable-win32-x64.yml"),
       `version: 1.0.0\nfiles:\n  - url: ${setup}\n    sha512: ${crypto.createHash("sha512").update(data).digest("base64")}\n`,
     );
+    await fs.copyFile(
+      path.join(release, "stable-win32-x64.yml"),
+      path.join(release, "latest.yml"),
+    );
     await fs.writeFile(
       path.join(release, "latest.json"),
       JSON.stringify({
@@ -115,9 +119,14 @@ import(${JSON.stringify(moduleUrl)}).catch(e=>{console.error(e.message);process.
       ),
     );
     // macOS resolves /var temp directories to /private/var in child-process cwd.
-    const portableArgs = calls.flatMap(c => c.args).filter(a => typeof a === "string" && a.endsWith("-portable.exe"));
+    const portableArgs = calls
+      .flatMap((c) => c.args)
+      .filter((a) => typeof a === "string" && a.endsWith("-portable.exe"));
     assert.equal(portableArgs.length, 1);
-    assert.equal(await fs.realpath(portableArgs[0]), await fs.realpath(path.join(release, portable)));
+    assert.equal(
+      await fs.realpath(portableArgs[0]),
+      await fs.realpath(path.join(release, portable)),
+    );
     const evidence = path.join(release, "distribution-qa-win32-x64.json");
     await fs.unlink(evidence);
     assert.throws(() => run(true), /Portable signature rejected/);

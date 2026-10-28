@@ -57,7 +57,10 @@ for (const [platform, arch] of targets) {
     !evidence.passed
   )
     throw new Error("Artifact or native QA source mismatch.");
-  const expected = downloads(version, platform, arch);
+  const expected = [
+    ...downloads(version, platform, arch),
+    ...(platform === "win32" && arch === "x64" ? ["latest.yml"] : []),
+  ];
   if (
     expected.some((name) => !manifest.files.some((f) => f.name === name)) ||
     !manifest.files.some((f) => f.name === feedName(platform, arch))

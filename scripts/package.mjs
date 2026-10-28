@@ -82,11 +82,18 @@ const code = await new Promise((resolve) => {
 });
 if (code !== 0) process.exit(Number(code) || 1);
 await fs.mkdir("release", { recursive: true });
+// Older Windows clients use electron-updater's default latest channel.
+if (platform === "win32" && arch === "x64")
+  await fs.copyFile(
+    path.join(output, feedName(platform, arch)),
+    path.join(output, "latest.yml"),
+  );
 const files = [];
 for (const name of await fs.readdir(output)) {
   if (
     !/\.(exe|dmg|zip|AppImage|tar\.gz|deb|rpm|blockmap)$/.test(name) &&
-    name !== feedName(platform, arch)
+    name !== feedName(platform, arch) &&
+    !(platform === "win32" && arch === "x64" && name === "latest.yml")
   )
     continue;
   const normalized = name;
@@ -106,6 +113,7 @@ for (const name of await fs.readdir(output)) {
 }
 if (!files.length) throw new Error("No distributable artifacts were produced.");
 for (const name of [
+  ...(platform === "win32" && arch === "x64" ? ["latest.yml"] : []),
   ...downloads(version, platform, arch),
   feedName(platform, arch),
 ])
