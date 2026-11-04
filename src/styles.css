@@ -4241,6 +4241,18 @@ button:hover {
   flex-direction: column;
   gap: 4px;
   padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-status-overlay small {
+  color: var(--color-7f8ca2);
+}
 .terminal-stage {
   position: relative;
   flex: 1;
@@ -4274,11 +4286,6 @@ button:hover {
   border: 1px solid var(--color-3b414e);
   border-radius: 8px;
   box-shadow: 0 8px 30px var(--color-0007);
-  pointer-events: none;
-  z-index: 5;
-}
-.terminal-status-overlay small {
-  color: var(--color-7f8ca2);
 }
 .terminal-jump:hover {
   background: var(--color-303944);
@@ -4290,6 +4297,7 @@ button:hover {
 .terminal-overlay-notice button {
   color: inherit;
   display: inline-flex;
+}
 .terminal-context-menu {
   position: fixed;
   min-width: 160px;
