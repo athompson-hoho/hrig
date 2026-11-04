@@ -30,6 +30,11 @@ test("zoom offsets stay within font bounds relative to the Settings size", () =>
   assert.equal(zoom.nextOffset(13, -5, "out"), -5);
   assert.equal(zoom.nextOffset(13, 6, "reset"), 0);
 });
+test("an out-of-bounds offset steps from the visible size", () => {
+  assert.equal(zoom.effectiveFontSize(30, 5), 32);
+  assert.equal(zoom.nextOffset(30, 5, "out"), 1);
+  assert.equal(zoom.nextOffset(10, -5, "in"), -1);
+});
 test("wheel notches accumulate: up zooms in, down zooms out", () => {
   assert.deepEqual(zoom.wheelSteps(0, -100), { steps: 1, remainder: 0 });
   assert.deepEqual(zoom.wheelSteps(0, 100), { steps: -1, remainder: 0 });

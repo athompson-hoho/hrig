@@ -25,8 +25,10 @@ export function nextOffset(
   action: ZoomAction,
 ): number {
   if (action === "reset") return 0;
-  const size = effectiveFontSize(base, offset + (action === "in" ? 1 : -1));
-  return size - base;
+  // Step from the size actually shown, so an offset left beyond the bounds
+  // (Settings size changed since) cannot swallow the first press.
+  const shown = effectiveFontSize(base, offset);
+  return effectiveFontSize(base, shown - base + (action === "in" ? 1 : -1)) - base;
 }
 /** One wheel notch = one point; small trackpad deltas accumulate. */
 export function wheelSteps(accumulated: number, deltaY: number) {
