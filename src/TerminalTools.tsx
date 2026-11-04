@@ -8,9 +8,11 @@ import { terminalText } from "./terminal-output";
 export default function TerminalTools({
   terminal,
   generation,
+  findRequest = 0,
 }: {
   terminal: RefObject<Terminal | null>;
   generation: number;
+  findRequest?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -30,6 +32,7 @@ export default function TerminalTools({
       field.current?.select();
     });
   };
+  useEffect(() => { if (findRequest) show(); }, [findRequest]);
   const close = () => {
     setOpen(false);
     search.current?.clearDecorations();

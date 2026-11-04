@@ -90,6 +90,8 @@ import {
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
 import TerminalPanel from "./TerminalPanel";
+import TerminalSnippets from "./TerminalSnippets";
+import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
@@ -1548,6 +1550,7 @@ export default function App() {
         );
     }
   };
+  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string} | null>(null);
   const openPalette = () => {
     projectIntent.current++;
     setSearch("");
@@ -1563,7 +1566,25 @@ export default function App() {
     window.focus();
     setModal("panels");
   };
+  const terminalCommands = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken).flatMap(t => {
+    const config = t.config as PanelConfig;
+    const target = {id: config.terminalId!, name: t.name || "Terminal"};
+    return [
+      ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
+        name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
+        hint: `${target.name} · ${config.connection.name} · ${target.id}`,
+        icon: <Columns2 size={16} />,
+        action: () => {
+          model.doAction(Actions.selectTab(t.id!));
+          requestAnimationFrame(() => sendTerminalCommand(target.id, command));
+        },
+      })),
+      {name: "Terminal: Saved snippets", hint: `${target.name} · ${config.connection.name} · ${target.id}`, icon: <Columns2 size={16} />,
+        action: () => {model.doAction(Actions.selectTab(t.id!));setSnippetTarget(target);}},
+    ];
+  });
   const commands = [
+    ...terminalCommands,
     {
       name: "Quick Open project file",
       hint: "Ctrl P",
@@ -2790,6 +2811,11 @@ export default function App() {
             </div>
           </Modal>
         )}
+        {snippetTarget && <TerminalSnippets name={snippetTarget.name}
+          snippets={state.terminalSnippets || []}
+          onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
+          onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}
+          onClose={() => setSnippetTarget(null)} />}
         {modal === "palette" && (
           <Modal title="Command center" onClose={() => setModal(null)} wide>
             <div className="palette-input">

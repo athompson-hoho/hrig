@@ -60,6 +60,7 @@ export interface RoleTemplate {
   model: IJsonModel;
 }
 export interface WorkspaceState {
+  terminalSnippets?: import("./terminal-commands").TerminalSnippet[];
   preferences?: import("./settings").Overrides;
   projectPreferences?: Record<string, import("./settings").Overrides>;
   version: 1;
