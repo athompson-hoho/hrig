@@ -73,6 +73,10 @@ async function setup() {
 async function quick(page: Page, query: string, name: string) {
   await page.keyboard.press("Control+p");
   await page.getByLabel("Quick Open file search").fill(query);
+  // Results are retained while refining; wait for the refinement to settle.
+  await expect(
+    page.getByRole("listbox", { name: "Matching project files" }),
+  ).toHaveAttribute("aria-busy", "false");
   await expect(
     page
       .getByRole("listbox", { name: "Matching project files" })
@@ -256,6 +260,9 @@ test("panel navigator focuses existing tabs and native popouts, and named moves 
       .waitFor();
     await page.keyboard.press("Control+p");
     await page.getByLabel("Quick Open file search").fill("qop");
+    await expect(
+      page.getByRole("listbox", { name: "Matching project files" }),
+    ).toHaveAttribute("aria-busy", "false");
     await expect(
       page
         .getByRole("listbox", { name: "Matching project files" })
