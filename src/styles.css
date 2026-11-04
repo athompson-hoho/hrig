@@ -4227,3 +4227,28 @@ button:hover {
 .session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
 .relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
+
+.terminal-panel {
+  position: relative;
+}
+.terminal-status-overlay {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-status-overlay small {
+  color: var(--color-7f8ca2);
+}

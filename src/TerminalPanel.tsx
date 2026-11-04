@@ -2,6 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import TerminalReconnect from "./TerminalReconnect";
+import {
+  reconnectReason,
+  restoreLine,
+  retryDelay,
+  scrollOffset,
+} from "./terminal-reconnect";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -57,6 +64,11 @@ export default function TerminalPanel({
   }, [config.connection.id, config.seat?.id]);
   const previousSession = useRef<string | null | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
+  const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
+  const [inputDropped, setInputDropped] = useState(false);
+  // Distance from the live bottom when the last view was torn down, restored
+  // only if the session replays its retained buffer on re-attach.
+  const savedScroll = useRef(0);
   const [failure, setFailure] = useState(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -77,7 +89,8 @@ export default function TerminalPanel({
       retries.current >= 6
     )
       return;
-    const delay = Math.min(15000, 1000 * 2 ** retries.current++);
+    const delay = retryDelay(retries.current++);
+    setNextRetryAt(Date.now() + delay);
     setRetrying(true);
     const timer = setTimeout(() => {
       retryTimer.current = undefined;
@@ -201,7 +214,10 @@ export default function TerminalPanel({
       }
     });
     const input = term.onData((data) => {
+      // Input while disconnected is dropped, never queued: after an uncertain
+      // disconnect, replaying keystrokes could run commands unseen.
       if (connected) window.hrig.writeTerminal(id, data);
+      else setInputDropped(true);
     });
     const start = async () => {
       if (
@@ -232,8 +248,16 @@ export default function TerminalPanel({
           if (!disposed && connected) retries.current = 0;
         }, 30000);
         setEnded(null);
+        setInputDropped(false);
         setReady(true);
-        if (result.buffer) term.write(result.buffer);
+        if (result.buffer) {
+          const offset = savedScroll.current;
+          savedScroll.current = 0;
+          term.write(result.buffer, () => {
+            if (!disposed && offset > 0)
+              term.scrollToLine(restoreLine(term.buffer.active.baseY, offset));
+          });
+        }
         else pending.forEach((data) => term.write(data));
         resize();
       })
@@ -251,6 +275,10 @@ export default function TerminalPanel({
       observer.disconnect();
       unsubscribe();
       input.dispose();
+      savedScroll.current = scrollOffset(
+        term.buffer.active.baseY,
+        term.buffer.active.viewportY,
+      );
       term.dispose();
       if (terminalRef.current === term) {
         terminalRef.current = null;
@@ -336,16 +364,15 @@ export default function TerminalPanel({
         </div>
       )}
       {error && <ErrorBox error={error} />}
-      {config.seat && retries.current >= 6 && (error || ended !== null) && (
-        <div className="editor-notice">
-          Automatic retries paused. Use Reconnect when the host is ready.
-        </div>
-      )}
-      {retrying && (
-        <div className="editor-notice">
-          Reconnecting to the existing seat… retry {retries.current} of 6
-        </div>
-      )}
+      <TerminalReconnect
+        seat={!!config.seat}
+        retrying={retrying}
+        retries={retries.current}
+        failed={!!error || ended !== null}
+        nextAt={nextRetryAt}
+        reason={reconnectReason(error, ended)}
+        inputDropped={inputDropped}
+      />
       <TerminalTools
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
