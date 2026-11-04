@@ -4227,3 +4227,49 @@ button:hover {
 .session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
 .relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
+
+.terminal-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.terminal-overlay {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-overlay > * {
+  pointer-events: auto;
+}
+.terminal-jump,
+.terminal-overlay-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+}
+.terminal-jump:hover {
+  background: var(--color-303944);
+}
+.terminal-overlay-notice {
+  max-width: 320px;
+  color: var(--color-dfc28e, var(--color-c3ccda));
+}
+.terminal-overlay-notice button {
+  color: inherit;
+  display: inline-flex;
+}

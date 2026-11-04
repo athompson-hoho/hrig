@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import TerminalScrollback from "./TerminalScrollback";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -336,7 +337,14 @@ export default function TerminalPanel({
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
       />
-      <div className="terminal-host" ref={host} />
+      <div className="terminal-stage">
+        <div className="terminal-host" ref={host} />
+        <TerminalScrollback
+          terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+          scrollback={preferences["terminal.scrollback"]}
+        />
+      </div>
       {ended !== null && (
         <div className="terminal-ended">
           {config.rigControlToken ? (
