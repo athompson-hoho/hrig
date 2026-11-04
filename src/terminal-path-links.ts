@@ -24,7 +24,10 @@ export function matchTerminalPaths(text: string): PathMatch[] {
       quoted = true;
       start = ++cursor;
       const close = text.indexOf(quote, cursor);
-      if (close < 0) break;
+      if (close < 0) {
+        while (cursor < text.length && !/\s/.test(text[cursor])) cursor++;
+        continue;
+      }
       value = text.slice(cursor, close);
       cursor = close + 1;
       const suffix = text.slice(cursor).match(/^:\d+(?::\d+)?/);
@@ -40,17 +43,25 @@ export function matchTerminalPaths(text: string): PathMatch[] {
       tokens.lastIndex = cursor;
       const token = tokens.exec(text);
       if (!token) break;
-      value = token[0].replace(/[)\]},;]+$/, "");
+      value = token[0].replace(/[.\]},;:]+$/, "");
+      if (!/\(\d+(?:,\d+)?\)$/.test(value)) value = value.replace(/\)+$/, "");
       cursor = token.index + token[0].length;
     }
-    const parsed = value.match(/^(.*?)(?::(\d+)(?::\d+)?)?$/);
+    const parsed = value.match(/^(.*?)(?::(\d+)(?::\d+)?|\((\d+)(?:,\d+)?\))?$/);
     if (!parsed) continue;
     const file = parsed[1];
     const valid = quoted
       ? /^(?:[A-Za-z]:[\\/]|\/)?[\w@. -]+(?:[\\/][\w@. -]+)*\.[A-Za-z0-9]{1,12}$/
       : /^(?:[A-Za-z]:[\\/]|\/)?[\w@.\-]+(?:[\\/][\w@.\-]+)*\.[A-Za-z0-9]{1,12}$/;
     if (!valid.test(file) || file.trim() !== file) continue;
-    const line = parsed[2] ? Number(parsed[2]) : undefined;
+    // A space-containing basename alone is indistinguishable from quoted prose.
+    // Require a path separator before its first space (use ./ for a root file).
+    if (quoted && file.includes(" ")) {
+      const separator = file.search(/[\\/]/);
+      if (separator < 0 || separator > file.indexOf(" ")) continue;
+    }
+    const location = parsed[2] || parsed[3];
+    const line = location ? Number(location) : undefined;
     if (line !== undefined && (!Number.isSafeInteger(line) || line < 1))
       continue;
     // Include the location suffix in the underline (and the closing quote when

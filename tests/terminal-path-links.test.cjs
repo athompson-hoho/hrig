@@ -9,11 +9,11 @@ const {matchTerminalPaths, terminalPathLinks} = exportsForTest;
 const plain = value => JSON.parse(JSON.stringify(value));
 
 test('matches conventional paths and unambiguous quoted paths with location suffixes', () => {
-  const text = `at (src/main.ts:12:3), "src/my file.ts":42:2 'other file.js:7' C:\\work\\index.ts`;
+  const text = `at (src/main.ts:12:3), "src/my file.ts":42:2 './other file.js:7' C:\\work\\index.ts`;
   const matches = plain(matchTerminalPaths(text));
   assert.deepEqual(matches.map(({file,line}) => ({file,line})), [
     {file:'src/main.ts',line:12}, {file:'src/my file.ts',line:42},
-    {file:'other file.js',line:7}, {file:'C:\\work\\index.ts',line:undefined},
+    {file:'./other file.js',line:7}, {file:'C:\\work\\index.ts',line:undefined},
   ]);
   for (const match of matches) assert.ok(text.slice(match.start,match.end).startsWith(match.file));
 });
@@ -22,7 +22,7 @@ test('does not turn URL fragments, shell syntax or malformed quotes into paths',
   for (const text of [
     'https://user:secret@example.com/a.ts', 'https://example.com/a.ts',
     'file:///etc/passwd.txt', 'vscode://file/a.ts', '$(secret.txt)',
-    '"missing end.ts', '"good file.ts"junk', '"escaped\\"file.ts"',
+    '"good file.ts"junk', '"escaped\\"file.ts"',
     '"$HOME/file.ts"', '"src/file.ts":0', 'src/file.ts:9007199254740993',
   ]) assert.deepEqual(plain(matchTerminalPaths(text)), [], text);
 });
@@ -60,4 +60,17 @@ test('quoted paths preserve spaces at wrap boundaries and ranges use cell column
 test('hard breaks never join paths and very long logical lines are bounded', () => {
   assert.equal(terminalPathLinks(buffer([['src/long/',false],['file.ts',false]]),2)[0].file,'file.ts');
   assert.deepEqual(plain(terminalPathLinks(buffer(Array.from({length:202},(_,i)=>['a',i>0])),1)),[]);
+});
+test('compiler locations and sentence punctuation retain file links', () => {
+  for (const [text,line] of [['src/a.ts:12:3: error',12],['src/a.ts:12:',12],['src/a.ts(12,3): error',12],['see src/a.ts.',undefined]]) {
+    const links = plain(matchTerminalPaths(text));
+    assert.equal(links[0]?.file,'src/a.ts',text);
+    assert.equal(links[0]?.line,line,text);
+  }
+});
+test('quoted prose is not treated as a whitespace-containing filename', () => {
+  assert.equal(matchTerminalPaths('Error: "Cannot read file foo.ts"').some(m => m.file === 'Cannot read file foo.ts'),false);
+});
+test('unmatched opening quote does not hide later paths', () => {
+  assert.ok(matchTerminalPaths('"unterminated x then src/a.ts').some(m => m.file === 'src/a.ts'));
 });
