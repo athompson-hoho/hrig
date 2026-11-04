@@ -123,6 +123,7 @@ export default function Sidebar({
   onConnect,
   onManageRigs,
   onSeat,
+  onSeatBeside,
   onRelaunch,
   onDrag,
   onFile,
@@ -142,6 +143,7 @@ export default function Sidebar({
   onConnect: () => void;
   onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
+  onSeatBeside?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -395,6 +397,7 @@ export default function Sidebar({
                     <StatusDot status={s.status} />
                     <GripVertical size={12} className="grip" />
                   </button>
+                  {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
                   <IconButton
                     title={`Relaunch session ${s.name}`}
                     disabled={!!inventoryError || !s.session}
