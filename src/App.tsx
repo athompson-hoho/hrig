@@ -1227,6 +1227,7 @@ export default function App() {
       case "terminal":
         return (
           <TerminalPanel
+            seatActivityAvailable={!!config.seat && freshSeats(config.connection).some((s) => s.id === config.seat?.id)}
             onRelaunch={() => { if (config.seat) setRelaunch({seat: config.seat, connection: config.connection}); }}
             onFile={(path, line) => openFile(path, false, line, config)}
             config={{

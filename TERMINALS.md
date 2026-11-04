@@ -11,3 +11,5 @@ HTTP/HTTPS links require native confirmation before opening the system browser. 
 These controls do not recreate the PTY or change OpenRig sessions. Reconnect remains a separate explicit control.
 
 Search and output notices appear as overlays so opening/closing tools does not resize the PTY or trigger a full-screen program repaint.
+
+Seat terminals show the seat name, runtime and current inventory activity (Working, Idle or Needs input). Needs input uses the existing attention dot. Activity reuses inventory refresh without additional polling and becomes unavailable when inventory fails, the seat disappears, or another host is selected. Plain shells retain their shell header. The separate connection dot describes the terminal transport.
