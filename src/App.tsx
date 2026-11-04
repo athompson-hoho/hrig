@@ -91,8 +91,8 @@ import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
 import {
   CHECKING_SNAPSHOT,
+  failureOutcome,
   pollDelay,
-  shouldReport,
 } from "./inventory-health";
 import TerminalPanel from "./TerminalPanel";
 import RelaunchSession from "./RelaunchSession";
@@ -230,7 +230,8 @@ export default function App() {
     key: string;
     failures: number;
     lastSuccessAt: number | null;
-  }>({ key: "", failures: 0, lastSuccessAt: null });
+    verified: boolean;
+  }>({ key: "", failures: 0, lastSuccessAt: null, verified: false });
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -555,14 +556,19 @@ export default function App() {
       connection.distro,
       connection.rigBinary,
     ]);
-    setInventory(inventoryCache.current.get(inventoryKey) || null);
-    // A switched-to connection shows its cached snapshot with a gentle
-    // "checking" note (actions stay guarded until it is confirmed fresh).
-    setInventoryError(
-      inventoryCache.current.has(inventoryKey) ? CHECKING_SNAPSHOT : "",
-    );
-    if (inventoryHealth.current.key !== inventoryKey)
-      inventoryHealth.current = { key: inventoryKey, failures: 0, lastSuccessAt: null };
+    if (inventoryHealth.current.key !== inventoryKey) {
+      // A switched-to connection shows its cached snapshot, unverified: the
+      // guard stays on (with a gentle "checking" note) until a poll succeeds.
+      const cached = inventoryCache.current.get(inventoryKey);
+      inventoryHealth.current = {
+        key: inventoryKey,
+        failures: 0,
+        lastSuccessAt: cached ? Date.parse(cached.sampledAt) || null : null,
+        verified: false,
+      };
+      setInventory(cached || null);
+      setInventoryError(cached ? CHECKING_SNAPSHOT : "");
+    }
     if (connection.kind === "local" && isWindows) {
       setBusy(false);
       return;
@@ -589,6 +595,7 @@ export default function App() {
         if (active) {
           health.failures = 0;
           health.lastSuccessAt = Date.now();
+          health.verified = true;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
           setInventoryError("");
@@ -596,21 +603,16 @@ export default function App() {
       } catch (e) {
         if (active) {
           health.failures++;
-          if (
-            shouldReport({
-              failures: health.failures,
-              lastSuccessAt: health.lastSuccessAt,
-              now: Date.now(),
-              intervalSeconds: interval,
-            })
-          )
-            setInventoryError((e as Error).message);
-          // Fewer failures than the threshold: keep serving the last good
-          // snapshot without surfacing anything.
-          else if (inventoryCache.current.has(inventoryKey))
-            setInventoryError((current) =>
-              current === CHECKING_SNAPSHOT ? "" : current,
-            );
+          const outcome = failureOutcome({
+            verified: health.verified,
+            failures: health.failures,
+            lastSuccessAt: health.lastSuccessAt,
+            now: Date.now(),
+            intervalSeconds: interval,
+          });
+          // "quiet": keep serving the verified snapshot; "checking": leave the
+          // unverified-snapshot guard on without calling it an error.
+          if (outcome === "report") setInventoryError((e as Error).message);
         }
       } finally {
         inFlight = false;

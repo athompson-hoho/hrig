@@ -41,3 +41,21 @@ export function formatAge(ms: number): string {
   const h = Math.round(m / 60);
   return h < 48 ? `${h} h ago` : `${Math.round(h / 24)} days ago`;
 }
+
+/**
+ * What a failed poll means for the connection:
+ * - "report": surface the error (and keep seat actions guarded);
+ * - "checking": a switched-to cached snapshot has never been verified, so the
+ *   guard stays on without calling it an error;
+ * - "quiet": a verified connection with a brief failure keeps serving.
+ */
+export function failureOutcome(input: {
+  verified: boolean;
+  failures: number;
+  lastSuccessAt: number | null;
+  now: number;
+  intervalSeconds: number;
+}): "report" | "checking" | "quiet" {
+  if (shouldReport(input)) return "report";
+  return input.verified ? "quiet" : "checking";
+}

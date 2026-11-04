@@ -5,7 +5,7 @@ const Module = require("node:module");
 const built = buildSync({ entryPoints: ["src/inventory-health.ts"], bundle: true, platform: "node", format: "cjs", write: false });
 const mod = new Module("inventory-health", module);
 mod._compile(built.outputFiles[0].text, "inventory-health");
-const { shouldReport, pollDelay, formatAge, CHECKING_SNAPSHOT } = mod.exports;
+const { shouldReport, pollDelay, formatAge, CHECKING_SNAPSHOT, failureOutcome } = mod.exports;
 const base = { lastSuccessAt: 1000, now: 2000, intervalSeconds: 15 };
 test("one or two failed polls are not reported; the third is", () => {
   assert.equal(shouldReport({ ...base, failures: 0 }), false);
@@ -41,4 +41,14 @@ test("age reads as relative time", () => {
   assert.equal(formatAge(2 * 3600000), "2 h ago");
   assert.equal(formatAge(-5), "just now");
   assert.match(CHECKING_SNAPSHOT, /last successful snapshot/);
+});
+test("an unverified cached snapshot keeps its guard through brief failures", () => {
+  const b = { lastSuccessAt: 1000, now: 2000, intervalSeconds: 15 };
+  assert.equal(failureOutcome({ ...b, verified: false, failures: 1 }), "checking");
+  assert.equal(failureOutcome({ ...b, verified: false, failures: 2 }), "checking");
+  assert.equal(failureOutcome({ ...b, verified: false, failures: 3 }), "report");
+  assert.equal(failureOutcome({ ...b, verified: true, failures: 1 }), "quiet");
+  assert.equal(failureOutcome({ ...b, verified: true, failures: 3 }), "report");
+  // an old cached snapshot is reported by age even on the first failure
+  assert.equal(failureOutcome({ verified: false, failures: 1, lastSuccessAt: 0, now: 61000, intervalSeconds: 15 }), "report");
 });
