@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import { terminalPathLinks } from "./terminal-path-links";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -122,36 +123,26 @@ export default function TerminalPanel({
     );
     term.registerLinkProvider({
       provideLinks(y, callback) {
-        const text =
-          term.buffer.active.getLine(y - 1)?.translateToString(true) || "";
-        const links = [
-          ...text.matchAll(
-            /(?:^|[\s("'])((?:[A-Za-z]:[\\/]|\/|\.\.?[\\/])?[\w@.\-]+(?:[\\/][\w@.\-]+)*\.[A-Za-z0-9]{1,12})(?::(\d+)(?::\d+)?)?/g,
-          ),
-        ].map((match) => {
-          const file = match[1],
-            line = match[2] ? Number(match[2]) : undefined;
-          const start = match.index! + match[0].indexOf(file);
-          return {
-            range: {
-              start: { x: start + 1, y },
-              end: { x: match.index! + match[0].length, y },
-            },
-            text: file,
-            activate: () => {
-              window.hrig
-                .edit(config.connection, {
-                  op: "read",
-                  root: config.root,
-                  path: file,
-                })
-                .then(() => {
-                  if (!disposed) onFile(file, line);
-                })
-                .catch((e) => setError(e.message));
-            },
-          };
-        });
+        const links = terminalPathLinks(term.buffer.active, y).map(
+          ({ file, line, range }) => {
+            return {
+              range,
+              text: file,
+              activate: () => {
+                window.hrig
+                  .edit(config.connection, {
+                    op: "read",
+                    root: config.root,
+                    path: file,
+                  })
+                  .then(() => {
+                    if (!disposed) onFile(file, line);
+                  })
+                  .catch((e) => setError(e.message));
+              },
+            };
+          },
+        );
         callback(links);
       },
     });
