@@ -4,6 +4,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { ArrowDown, ArrowUp, Copy, Download, Search, X } from "lucide-react";
 import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
+import { pasteClipboard } from "./terminal-paste";
 import { classifyTerminalKey } from "./terminal-keys";
 
 export default function TerminalTools({
@@ -42,9 +43,7 @@ export default function TerminalTools({
   const pasteImage=async()=>{try{const text=await window.hrig.pasteClipboardImage(terminalId);if(text)terminal.current?.paste(text);}catch(e){setNotice((e as Error).message);}terminal.current?.focus();};
   const paste = async () => {
     try {
-      if(await window.hrig.clipboardHasImage()){await pasteImage();return;}
-      const text = await window.hrig.readClipboardText();
-      if (text) terminal.current?.paste(text);
+      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>terminal.current?.paste(text),pasteImage});
     } catch (e) {
       setNotice((e as Error).message);
     }
