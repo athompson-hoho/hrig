@@ -34,6 +34,8 @@ function FileTree({
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     window.hrig
@@ -42,6 +44,7 @@ function FileTree({
         if (active) {
           setFiles(data);
           setError("");
+          setLoaded(true);
         }
       })
       .catch((e) => {
@@ -50,8 +53,29 @@ function FileTree({
     return () => {
       active = false;
     };
-  }, [connection.id, root, path, refresh]);
-  if (error) return <div className="tree-error">{error}</div>;
+  }, [connection.id, root, path, refresh, attempt]);
+  const indent = { paddingLeft: 14 + depth * 13 };
+  if (error)
+    return (
+      <div className="tree-error" style={depth ? indent : undefined}>
+        {error}{" "}
+        <button
+          className="text-button"
+          onClick={() => {
+            setError("");
+            setAttempt((n) => n + 1);
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  if (!loaded)
+    return (
+      <div className="sidebar-empty" role="status" style={depth ? indent : undefined}>
+        Loading…
+      </div>
+    );
   return (
     <>
       {files.map((file) => (
@@ -103,9 +127,14 @@ function FileTree({
           )}
         </div>
       ))}
-      {!files.length && depth === 0 && (
-        <div className="sidebar-empty">This folder is empty.</div>
-      )}
+      {!files.length &&
+        (depth === 0 ? (
+          <div className="sidebar-empty">This folder is empty.</div>
+        ) : (
+          <div className="sidebar-empty" style={indent}>
+            (empty)
+          </div>
+        ))}
     </>
   );
 }
