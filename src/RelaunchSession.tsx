@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RotateCw } from "lucide-react";
 import { ErrorBox, Modal } from "./components";
 import type { Connection, Seat } from "./types";
@@ -20,6 +20,10 @@ export default function RelaunchSession({
   const [confirmation, setConfirmation] = useState("");
   const [reason, setReason] = useState("Relaunch requested from hRig");
   const [revision, setRevision] = useState(0);
+  const confirmField = useRef<HTMLInputElement>(null);
+  // Modal focuses its first field (the reason); the confirmation is what the
+  // person must act on, and it runs after Modal's own focus effect.
+  useEffect(() => confirmField.current?.focus(), []);
   useEffect(() => {
     let active = true;
     setChecking(true);
@@ -40,6 +44,8 @@ export default function RelaunchSession({
       active = false;
     };
   }, [connection, seat.id, revision]);
+  const ready =
+    !busy && !checking && !!token && confirmation === seat.name && !!reason.trim();
   const run = async () => {
     if (busy || !token) return;
     setBusy(true);
@@ -107,9 +113,17 @@ export default function RelaunchSession({
         <input
           aria-label="Confirm session name"
           autoComplete="off"
+          ref={confirmField}
           value={confirmation}
           disabled={busy}
           onChange={(e) => setConfirmation(e.target.value)}
+          onKeyDown={(e) => {
+            // Same gates as the button: reviewed plan token, exact typed name.
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && ready) {
+              e.preventDefault();
+              void run();
+            }
+          }}
         />
       </label>
       <div className="modal-actions">
@@ -127,13 +141,7 @@ export default function RelaunchSession({
         )}
         <button
           className="primary-button"
-          disabled={
-            busy ||
-            checking ||
-            !token ||
-            confirmation !== seat.name ||
-            !reason.trim()
-          }
+          disabled={!ready}
           onClick={run}
         >
           <RotateCw size={14} />

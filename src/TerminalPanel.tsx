@@ -5,6 +5,13 @@ import TerminalTools from "./TerminalTools";
 import { terminalPathLinks } from "./terminal-path-links";
 import { terminalSeatActivity } from "./terminal-seat-activity";
 import { snippetError } from "./terminal-commands";
+import TerminalReconnect from "./TerminalReconnect";
+import {
+  reconnectReason,
+  restoreLine,
+  retryDelay,
+  scrollOffset,
+} from "./terminal-reconnect";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -61,6 +68,20 @@ export default function TerminalPanel({
     window.addEventListener("hrig:terminal-command",listener);
     return () => window.removeEventListener("hrig:terminal-command",listener);
   }, [config.terminalId,config.rigControlToken,ready,ended,error]);
+  const reconnectButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    // The PTY is gone, so keystrokes in this terminal go nowhere. Move focus
+    // from the dead terminal (or nowhere) to Reconnect so Enter/Space works;
+    // leave focus alone if the person is in another panel or field.
+    const active = document.activeElement;
+    if (
+      ended !== null &&
+      (!active ||
+        active === document.body ||
+        host.current?.contains(active))
+    )
+      reconnectButton.current?.focus();
+  }, [ended]);
   useEffect(() => {
     const listener = (event: Event) => {
       const { connectionId, seatId } = (event as CustomEvent).detail;
@@ -75,6 +96,11 @@ export default function TerminalPanel({
   }, [config.connection.id, config.seat?.id]);
   const previousSession = useRef<string | null | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
+  const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
+  const [inputDropped, setInputDropped] = useState(false);
+  // Distance from the live bottom when the last view was torn down, restored
+  // only if the session replays its retained buffer on re-attach.
+  const savedScroll = useRef(0);
   const [failure, setFailure] = useState(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -95,7 +121,8 @@ export default function TerminalPanel({
       retries.current >= 6
     )
       return;
-    const delay = Math.min(15000, 1000 * 2 ** retries.current++);
+    const delay = retryDelay(retries.current++);
+    setNextRetryAt(Date.now() + delay);
     setRetrying(true);
     const timer = setTimeout(() => {
       retryTimer.current = undefined;
@@ -111,7 +138,8 @@ export default function TerminalPanel({
   useEffect(() => {
     if (!host.current) return;
     let disposed = false,
-      connected = false;
+      connected = false,
+      attached = false;
     let stableTimer: ReturnType<typeof setTimeout> | undefined;
     clearTimeout(retryTimer.current);
     setRetrying(false);
@@ -209,7 +237,10 @@ export default function TerminalPanel({
       }
     });
     const input = term.onData((data) => {
+      // Input while disconnected is dropped, never queued: after an uncertain
+      // disconnect, replaying keystrokes could run commands unseen.
       if (connected) window.hrig.writeTerminal(id, data);
+      else setInputDropped(true);
     });
     const start = async () => {
       if (
@@ -236,13 +267,26 @@ export default function TerminalPanel({
       .then((result) => {
         if (disposed || !result) return;
         connected = true;
+        attached = true;
         stableTimer = setTimeout(() => {
           if (!disposed && connected) retries.current = 0;
         }, 30000);
         setEnded(null);
+        setInputDropped(false);
         setReady(true);
-        if (result.buffer) term.write(result.buffer);
-        else pending.forEach((data) => term.write(data));
+        if (result.buffer) {
+          const offset = savedScroll.current;
+          savedScroll.current = 0;
+          term.write(result.buffer, () => {
+            if (!disposed && offset > 0)
+              term.scrollToLine(restoreLine(term.buffer.active.baseY, offset));
+          });
+        }
+        else {
+          // No retained buffer: the old position no longer refers to anything.
+          savedScroll.current = 0;
+          pending.forEach((data) => term.write(data));
+        }
         resize();
       })
       .catch((e) => {
@@ -259,6 +303,13 @@ export default function TerminalPanel({
       observer.disconnect();
       unsubscribe();
       input.dispose();
+      // Only a view that actually attached holds the scroll position worth
+      // keeping; a failed blank attempt must not overwrite it with zero.
+      if (attached)
+        savedScroll.current = scrollOffset(
+          term.buffer.active.baseY,
+          term.buffer.active.viewportY,
+        );
       term.dispose();
       if (terminalRef.current === term) {
         terminalRef.current = null;
@@ -352,16 +403,15 @@ export default function TerminalPanel({
       )}
       {error && <ErrorBox error={error} />}
       {commandNotice && <div className="editor-notice" role="status">{commandNotice}</div>}
-      {config.seat && retries.current >= 6 && (error || ended !== null) && (
-        <div className="editor-notice">
-          Automatic retries paused. Use Reconnect when the host is ready.
-        </div>
-      )}
-      {retrying && (
-        <div className="editor-notice">
-          Reconnecting to the existing seat… retry {retries.current} of 6
-        </div>
-      )}
+      <TerminalReconnect
+        seat={!!config.seat}
+        retrying={retrying}
+        retries={retries.current}
+        failed={!!error || ended !== null}
+        nextAt={nextRetryAt}
+        reason={reconnectReason(error, ended)}
+        inputDropped={inputDropped}
+      />
       <TerminalTools
         findRequest={findRequest}
         terminal={terminalRef}
@@ -375,7 +425,13 @@ export default function TerminalPanel({
           ) : (
             <>
               Connection ended (exit {ended}).{" "}
-              <button onClick={() => setAttempt((n) => n + 1)}>
+              <button
+                ref={reconnectButton}
+                onClick={() => {
+                  retries.current = 0;
+                  setAttempt((n) => n + 1);
+                }}
+              >
                 Reconnect
               </button>
             </>

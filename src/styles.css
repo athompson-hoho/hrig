@@ -4229,3 +4229,27 @@ button:hover {
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
 
 .terminal-seat-activity { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-6e7e95); white-space: nowrap; }
+.terminal-panel {
+  position: relative;
+}
+.terminal-status-overlay {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-status-overlay small {
+  color: var(--color-7f8ca2);
+}

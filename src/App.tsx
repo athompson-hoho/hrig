@@ -2917,7 +2917,7 @@ export default function App() {
                 {
                   icon: <Keyboard />,
                   title: "A few useful shortcuts",
-                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
+                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
                 },
               ].map((item) => (
                 <div key={item.title}>

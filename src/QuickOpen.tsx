@@ -27,6 +27,9 @@ export default function QuickOpen({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const list = useRef<HTMLDivElement>(null);
+  // Enter pressed while a refinement is in flight opens the fresh top match,
+  // never a row from the superseded list.
+  const openWhenReady = useRef(false);
   const requests = useRef<Promise<void>>(Promise.resolve());
   const suffix = query.match(/:(\d+)$/);
   const term = suffix ? query.slice(0, -suffix[0].length) : query;
@@ -37,8 +40,7 @@ export default function QuickOpen({
     let active = true;
     setBusy(true);
     setError("");
-    setResults(null);
-    setSelected(0);
+    openWhenReady.current = false;
     const timer = setTimeout(() => {
       requests.current = requests.current
         .catch(() => {})
@@ -50,9 +52,20 @@ export default function QuickOpen({
               root,
               query: term,
             });
-            if (active) setResults(value);
+            if (active) {
+              setResults(value);
+              setSelected(0);
+              if (openWhenReady.current) {
+                openWhenReady.current = false;
+                const first = value.files[0];
+                if (first) onOpen(first.path, lineRef.current);
+              }
+            }
           } catch (e) {
-            if (active) setError((e as Error).message);
+            if (active) {
+              setResults(null);
+              setError((e as Error).message);
+            }
           } finally {
             if (active) setBusy(false);
           }
@@ -76,7 +89,13 @@ export default function QuickOpen({
       ?.querySelector('[aria-selected="true"]')
       ?.scrollIntoView({ block: "nearest" });
   }, [selected]);
-  const choose = (index: number) => {
+  const lineRef = useRef(line);
+  lineRef.current = line;
+  const choose = (index: number, fromKeyboard = false) => {
+    if (busy && fromKeyboard) {
+      openWhenReady.current = true;
+      return;
+    }
     const file = results?.files[index];
     if (file) onOpen(file.path, line);
   };
@@ -114,7 +133,7 @@ export default function QuickOpen({
             }
             if (e.key === "Enter") {
               e.preventDefault();
-              choose(selected);
+              choose(selected, true);
             }
           }}
         />
@@ -132,6 +151,8 @@ export default function QuickOpen({
         ref={list}
         id="quick-open-results"
         className="navigation-results"
+        aria-busy={busy}
+        style={busy && results ? { opacity: 0.6 } : undefined}
         role="listbox"
         aria-label="Matching project files"
       >
