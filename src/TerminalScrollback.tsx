@@ -1,10 +1,10 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { ArrowDownToLine, X } from "lucide-react";
 import {
   discardNotice,
   isScrolledUp,
-  scrollbackFull,
+  watchScrollbackLoss,
 } from "./terminal-scrollback";
 
 /**
@@ -23,9 +23,16 @@ export default function TerminalScrollback({
   const [up, setUp] = useState(false);
   const [dropped, setDropped] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const watched = useRef<Terminal | null>(null);
   useEffect(() => {
     const term = terminal.current;
     if (!term) return;
+    if (watched.current !== term) {
+      // A new terminal instance starts with a full, undiscarded history.
+      watched.current = term;
+      setDropped(false);
+      setDismissed(false);
+    }
     const sync = () => {
       const buffer = term.buffer.active;
       setUp(isScrolledUp(buffer.viewportY, buffer.baseY));
@@ -34,15 +41,7 @@ export default function TerminalScrollback({
       term.onScroll(sync),
       term.onWriteParsed(sync),
       term.onResize(sync),
-      // A line feed in a full normal buffer pushes the oldest line out.
-      term.onLineFeed(() => {
-        const buffer = term.buffer.active;
-        if (
-          buffer.type === "normal" &&
-          scrollbackFull(buffer.length, term.rows, term.options.scrollback ?? 0)
-        )
-          setDropped(true);
-      }),
+      watchScrollbackLoss(term, () => setDropped(true)),
     ];
     sync();
     return () => subscriptions.forEach((s) => s.dispose());
