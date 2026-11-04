@@ -333,6 +333,7 @@ export default function TerminalPanel({
         </div>
       )}
       <TerminalTools
+        terminalId={config.terminalId!}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
       />

@@ -1,0 +1,9 @@
+# Terminal image paste
+
+Clipboard images live on the desktop; a CLI running through SSH cannot read that clipboard. Use a private PNG file on the terminal's existing connection, then insert its quoted path without Enter. This works without installing a remote clipboard bridge, changing terminal protocols, or forwarding desktop credentials. The user still submits their prompt explicitly.
+
+Claude Code documents image paths as supported input: [Work with images](https://code.claude.com/docs/en/common-workflows#work-with-images). Codex exposes a local-path image tool: [Codex prompting guide](https://developers.openai.com/cookbook/examples/gpt-5/codex_prompting_guide). These establish file-path access, not automatic attachment by every CLI version. A path can be referenced in a prompt asking the agent to inspect the image; actual attachment/preview behavior requires testing with the installed CLI.
+
+Plan: Electron reads the clipboard image and encodes PNG with a 10 MiB limit. A native confirmation names the target host and generated path before any upload. The backend uses the terminal's captured connection and existing noninteractive transport; PNG bytes go through stdin rather than command arguments or terminal output. Remote/WSL targets require Python 3 and create a 0700 random temp directory and 0600 image. Local desktop storage uses native filesystem calls. Old owned image directories are removed after 24 hours on the next paste; files are retained long enough for a delayed prompt. Copying/saving an image never submits the CLI prompt. Errors are visible.
+
+Real-display/host checks: clipboard format detection and right-click/keyboard paste; confirmation/cancel; private remote permissions and cleanup; WSL Linux path; same-name terminals on different hosts; Claude Code/Codex recognizing the inserted path; no trailing Enter, upload payload or image contents in terminal logs.

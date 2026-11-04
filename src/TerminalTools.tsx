@@ -9,9 +9,11 @@ import { classifyTerminalKey } from "./terminal-keys";
 export default function TerminalTools({
   terminal,
   generation,
+  terminalId,
 }: {
   terminal: RefObject<Terminal | null>;
   generation: number;
+  terminalId: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -36,8 +38,11 @@ export default function TerminalTools({
   };
   // term.paste honors bracketed-paste mode and normalizes newlines; the text
   // reaches the shell only through the terminal's normal input path.
+  const [hasImage,setHasImage]=useState(false);
+  const pasteImage=async()=>{try{const text=await window.hrig.pasteClipboardImage(terminalId);if(text)terminal.current?.paste(text);}catch(e){setNotice((e as Error).message);}terminal.current?.focus();};
   const paste = async () => {
     try {
+      if(await window.hrig.clipboardHasImage()){await pasteImage();return;}
       const text = await window.hrig.readClipboardText();
       if (text) terminal.current?.paste(text);
     } catch (e) {
@@ -88,6 +93,8 @@ export default function TerminalTools({
     const host = term.element?.parentElement;
     const contextmenu = (event: MouseEvent) => {
       event.preventDefault();
+      setHasImage(false);
+      void window.hrig.clipboardHasImage().then(setHasImage).catch(e=>setNotice(e.message));
       setMenu({ x: event.clientX, y: event.clientY, selection: term.hasSelection() });
     };
     host?.addEventListener("contextmenu", contextmenu);
@@ -199,6 +206,7 @@ export default function TerminalTools({
           <button role="menuitem" onClick={choose(paste)}>
             <span>Paste</span>
           </button>
+          {hasImage&&<button role="menuitem" onClick={choose(pasteImage)}><span>Paste image…</span></button>}
           <div className="menu-separator" />
           <button role="menuitem" onClick={choose(() => terminal.current?.selectAll())}>
             <span>Select all</span>
