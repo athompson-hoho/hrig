@@ -11,7 +11,11 @@ function externalUrl(value) {
     );
   return url.href;
 }
-function registerTerminalTools({ handle, dialog, shell, getWindow, fs }) {
+function registerTerminalTools({ handle, dialog, shell, getWindow, fs, clipboard }) {
+  handle("terminal:read-clipboard", async () => {
+    const text = clipboard ? clipboard.readText() : "";
+    return typeof text === "string" ? text : "";
+  });
   handle("terminal:export", async (_event, text) => {
     if (
       typeof text !== "string" ||

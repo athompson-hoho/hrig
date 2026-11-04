@@ -91,3 +91,15 @@ test("plain text export rejoins soft wraps, preserves interior blank lines and t
     "hello world\n\nlast row",
   );
 });
+
+test("clipboard text is read in the main process and non-text is empty", async () => {
+  const handlers = {};
+  registerTerminalTools({
+    handle: (name, fn) => (handlers[name] = fn),
+    getWindow: () => null,
+    clipboard: { readText: () => "pasted\ntext" },
+  });
+  assert.equal(await handlers["terminal:read-clipboard"]({}), "pasted\ntext");
+  registerTerminalTools({ handle: (n, f) => (handlers[n] = f), getWindow: () => null });
+  assert.equal(await handlers["terminal:read-clipboard"]({}), "");
+});

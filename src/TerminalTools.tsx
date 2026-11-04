@@ -4,6 +4,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { ArrowDown, ArrowUp, Copy, Download, Search, X } from "lucide-react";
 import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
+import { classifyTerminalKey } from "./terminal-keys";
 
 export default function TerminalTools({
   terminal,
@@ -22,6 +23,28 @@ export default function TerminalTools({
   const search = useRef<SearchAddon | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const viewport = useRef<number | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; selection: boolean } | null>(null);
+  const copySelection = async () => {
+    const text = terminal.current?.getSelection();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice("Selection copied.");
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  };
+  // term.paste honors bracketed-paste mode and normalizes newlines; the text
+  // reaches the shell only through the terminal's normal input path.
+  const paste = async () => {
+    try {
+      const text = await window.hrig.readClipboardText();
+      if (text) terminal.current?.paste(text);
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+    terminal.current?.focus();
+  };
   const show = () => {
     viewport.current ??= terminal.current?.buffer.active.viewportY ?? 0;
     setOpen(true);
@@ -46,20 +69,30 @@ export default function TerminalTools({
     term.loadAddon(addon);
     const listener = addon.onDidChangeResults(setResult);
     term.attachCustomKeyEventHandler((event) => {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        !event.altKey &&
-        event.key.toLowerCase() === "f"
-      ) {
-        if (event.type === "keydown") {
-          event.preventDefault();
-          show();
-        }
-        return false;
+      const action = classifyTerminalKey(
+        event,
+        window.hrig.platform,
+        term.hasSelection(),
+      );
+      if (action === "pass") return true;
+      // Handle on keydown only; swallow the matching keypress/keyup so xterm
+      // never also sends the control character (e.g. ^V) to the shell.
+      if (event.type === "keydown") {
+        event.preventDefault();
+        if (action === "find") show();
+        else if (action === "paste") void paste();
+        else void copySelection();
       }
-      return true;
+      return false;
     });
+    const host = term.element?.parentElement;
+    const contextmenu = (event: MouseEvent) => {
+      event.preventDefault();
+      setMenu({ x: event.clientX, y: event.clientY, selection: term.hasSelection() });
+    };
+    host?.addEventListener("contextmenu", contextmenu);
     return () => {
+      host?.removeEventListener("contextmenu", contextmenu);
       listener.dispose();
       addon.dispose();
       search.current = null;
@@ -130,7 +163,48 @@ export default function TerminalTools({
       setNotice((e as Error).message);
     }
   };
+  useEffect(() => {
+    if (!menu) return;
+    const dismiss = () => setMenu(null);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && dismiss();
+    window.addEventListener("mousedown", dismiss);
+    window.addEventListener("blur", dismiss);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("mousedown", dismiss);
+      window.removeEventListener("blur", dismiss);
+      window.removeEventListener("keydown", key);
+    };
+  }, [menu]);
+  const choose = (action: () => void | Promise<void>) => () => {
+    setMenu(null);
+    void action();
+    terminal.current?.focus();
+  };
   return (
+    <>
+      {menu && (
+        <div
+          className="dropdown terminal-context-menu"
+          role="menu"
+          style={{
+            left: Math.min(menu.x, window.innerWidth - 180),
+            top: Math.min(menu.y, window.innerHeight - 150),
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button role="menuitem" disabled={!menu.selection} onClick={choose(copySelection)}>
+            <span>Copy</span>
+          </button>
+          <button role="menuitem" onClick={choose(paste)}>
+            <span>Paste</span>
+          </button>
+          <div className="menu-separator" />
+          <button role="menuitem" onClick={choose(() => terminal.current?.selectAll())}>
+            <span>Select all</span>
+          </button>
+        </div>
+      )}
     <div
       className="terminal-tools"
       onKeyDown={(e) => {
@@ -238,5 +312,6 @@ export default function TerminalTools({
         )}
       </div>
     </div>
+    </>
   );
 }
