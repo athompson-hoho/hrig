@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import TerminalSessionTools from "./TerminalSessionTools";
 import { terminalPathLinks } from "./terminal-path-links";
 import { terminalSeatActivity } from "./terminal-seat-activity";
 import { snippetError } from "./terminal-commands";
@@ -362,6 +363,7 @@ export default function TerminalPanel({
           Reconnecting to the existing seat… retry {retries.current} of 6
         </div>
       )}
+      <TerminalSessionTools terminal={terminalRef} id={config.terminalId!} generation={attempt * 2 + (ready ? 1 : 0)} />
       <TerminalTools
         findRequest={findRequest}
         terminal={terminalRef}
