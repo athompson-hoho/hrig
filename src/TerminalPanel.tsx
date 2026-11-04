@@ -29,6 +29,20 @@ export default function TerminalPanel({
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const retries = useRef(0);
+  const reconnectButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    // The PTY is gone, so keystrokes in this terminal go nowhere. Move focus
+    // from the dead terminal (or nowhere) to Reconnect so Enter/Space works;
+    // leave focus alone if the person is in another panel or field.
+    const active = document.activeElement;
+    if (
+      ended !== null &&
+      (!active ||
+        active === document.body ||
+        host.current?.contains(active))
+    )
+      reconnectButton.current?.focus();
+  }, [ended]);
   useEffect(() => {
     const listener = (event: Event) => {
       const { connectionId, seatId } = (event as CustomEvent).detail;
@@ -344,7 +358,13 @@ export default function TerminalPanel({
           ) : (
             <>
               Connection ended (exit {ended}).{" "}
-              <button onClick={() => setAttempt((n) => n + 1)}>
+              <button
+                ref={reconnectButton}
+                onClick={() => {
+                  retries.current = 0;
+                  setAttempt((n) => n + 1);
+                }}
+              >
                 Reconnect
               </button>
             </>
