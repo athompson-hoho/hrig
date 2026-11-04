@@ -9,7 +9,7 @@ export const discardNotice = (scrollback: number) =>
 /**
  * Report when output has really been trimmed out of the terminal's buffer.
  *
- * A marker is anchored to a retained line. xterm disposes a marker when its
+ * A marker is anchored to the oldest retained line. xterm disposes a marker when its
  * line leaves the buffer, whatever caused it: line feeds, automatic wrapping
  * or a lowered scrollback setting. Clearing the screen/scrollback disposes it
  * too, but then the buffer is no longer full, so that is re-armed instead of
@@ -25,7 +25,11 @@ export function watchScrollbackLoss(
   let stopped = false;
   const arm = () => {
     marker?.dispose();
-    const next = term.registerMarker(0);
+    // Anchor to the oldest retained line (absolute line 0) so a watcher started
+    // on an already-populated buffer reports its first genuine loss at once.
+    const buffer = term.buffer.active;
+    const next = term.registerMarker(-(buffer.baseY + buffer.cursorY));
+    if (!next) return;
     marker = next;
     next.onDispose(() => {
       if (marker === next && !stopped) pending = true;

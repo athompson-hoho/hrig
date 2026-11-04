@@ -49,6 +49,30 @@ test("clearing the screen and scrollback is not reported as loss, later loss sti
 test("alternate-screen output does not report loss", async () => {
   assert.equal((await lost(["a\r\n\x1b[?1049h", "x\r\ny\r\nz\r\nw\r\nv\r\n", "\x1b[?1049l"])).count, 0);
 });
+test("a watcher started on an already-populated buffer reports the first real loss", async () => {
+  const term = new Terminal({ rows: 2, cols: 20, scrollback: 2, allowProposedApi: true });
+  await write(term, "a\r\nb\r\nc\r\n");
+  let count = 0;
+  const watch = watchScrollbackLoss(term, () => count++);
+  await write(term, "");
+  assert.equal(count, 0);
+  await write(term, "d\r\n");
+  assert.equal(count, 1);
+  watch.dispose();
+  term.dispose();
+});
+test("re-armed watcher after a clear still anchors to retained history", async () => {
+  const term = new Terminal({ rows: 2, cols: 20, scrollback: 2, allowProposedApi: true });
+  let count = 0;
+  const watch = watchScrollbackLoss(term, () => count++);
+  await write(term, "a\r\nb\r\nc\r\n\x1b[3J\x1b[H\x1b[2J");
+  await write(term, "1\r\n2\r\n3\r\n");
+  assert.equal(count, 0);
+  await write(term, "4\r\n");
+  assert.equal(count, 1);
+  watch.dispose();
+  term.dispose();
+});
 test("notice states the retained line count without terminal text", () => {
   assert.match(discardNotice(10000), /10,000 lines/);
 });
