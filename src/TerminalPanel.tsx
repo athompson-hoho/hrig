@@ -4,6 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
 import { terminalPathLinks } from "./terminal-path-links";
 import { terminalSeatActivity } from "./terminal-seat-activity";
+import { snippetError } from "./terminal-commands";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -33,6 +34,33 @@ export default function TerminalPanel({
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const retries = useRef(0);
+  const [findRequest, setFindRequest] = useState(0);
+  const [commandNotice, setCommandNotice] = useState("");
+  useEffect(() => { setCommandNotice(""); }, [attempt, ready]);
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const {id, command, text} = (event as CustomEvent).detail;
+      if (id !== config.terminalId || config.rigControlToken) return;
+      const term = terminalRef.current;
+      if (!term) return;
+      if (command === "focus") term.focus();
+      if (command === "clear") {term.clear();term.focus();}
+      if (command === "find") setFindRequest(n => n + 1);
+      if (command === "reconnect") {
+        void window.hrig.closeTerminal(id).then(() => {retries.current=0;setAttempt(n=>n+1);}).catch(e=>setError(e.message));
+      }
+      if (command === "insert" || command === "run") {
+        const problem = typeof text === "string" ? snippetError(text) : "Invalid snippet.";
+        if (problem || !ready || ended !== null) {setCommandNotice(problem || "Terminal is not connected. Nothing was sent.");return;}
+        setCommandNotice("");
+        term.paste(text);
+        if (command === "run") window.hrig.writeTerminal(id,"\r");
+        term.focus();
+      }
+    };
+    window.addEventListener("hrig:terminal-command",listener);
+    return () => window.removeEventListener("hrig:terminal-command",listener);
+  }, [config.terminalId,config.rigControlToken,ready,ended,error]);
   useEffect(() => {
     const listener = (event: Event) => {
       const { connectionId, seatId } = (event as CustomEvent).detail;
@@ -323,6 +351,7 @@ export default function TerminalPanel({
         </div>
       )}
       {error && <ErrorBox error={error} />}
+      {commandNotice && <div className="editor-notice" role="status">{commandNotice}</div>}
       {config.seat && retries.current >= 6 && (error || ended !== null) && (
         <div className="editor-notice">
           Automatic retries paused. Use Reconnect when the host is ready.
@@ -334,6 +363,7 @@ export default function TerminalPanel({
         </div>
       )}
       <TerminalTools
+        findRequest={findRequest}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
       />
