@@ -117,6 +117,7 @@ export interface HrigAPI {
   openWorkLink(url: string): Promise<void>;
   exportTerminal(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
+  readClipboardText(): Promise<string>;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};
   assessTeam(
     connection: Connection,

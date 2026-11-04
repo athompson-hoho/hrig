@@ -9,6 +9,7 @@ const {
   Notification,
   safeStorage,
   shell,
+  clipboard,
 } = require("electron");
 const path = require("node:path");
 if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').homedir(),'.local','bin'),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH || '/usr/bin:/bin'].join(path.delimiter);
@@ -38,7 +39,7 @@ function handle(channel, fn) {
   });
 }
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
-require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs});
+require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});

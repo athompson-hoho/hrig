@@ -4290,4 +4290,8 @@ button:hover {
 .terminal-overlay-notice button {
   color: inherit;
   display: inline-flex;
+.terminal-context-menu {
+  position: fixed;
+  min-width: 160px;
+  z-index: 200;
 }

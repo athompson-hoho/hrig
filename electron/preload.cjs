@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("hrig", {
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
   exportTerminal: invoke('terminal:export'),
   openTerminalLink: invoke('terminal:open-link'),
+  readClipboardText: invoke('terminal:read-clipboard'),
   platform: process.platform,
   mobile: invoke('mobile:operation'),
   integrate: invoke('integrations:operation'),
