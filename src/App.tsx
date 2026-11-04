@@ -89,6 +89,11 @@ import {
 } from "./settings";
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
+import {
+  CHECKING_SNAPSHOT,
+  pollDelay,
+  shouldReport,
+} from "./inventory-health";
 import TerminalPanel from "./TerminalPanel";
 import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
@@ -221,6 +226,11 @@ export default function App() {
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const inventoryHealth = useRef<{
+    key: string;
+    failures: number;
+    lastSuccessAt: number | null;
+  }>({ key: "", failures: 0, lastSuccessAt: null });
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -546,43 +556,82 @@ export default function App() {
       connection.rigBinary,
     ]);
     setInventory(inventoryCache.current.get(inventoryKey) || null);
+    // A switched-to connection shows its cached snapshot with a gentle
+    // "checking" note (actions stay guarded until it is confirmed fresh).
     setInventoryError(
-      inventoryCache.current.has(inventoryKey)
-        ? "Checking the last successful snapshot…"
-        : "",
+      inventoryCache.current.has(inventoryKey) ? CHECKING_SNAPSHOT : "",
     );
+    if (inventoryHealth.current.key !== inventoryKey)
+      inventoryHealth.current = { key: inventoryKey, failures: 0, lastSuccessAt: null };
     if (connection.kind === "local" && isWindows) {
       setBusy(false);
       return;
     }
+    const interval = preferences["workspace.refreshInterval"];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!active) return;
+      timer = setTimeout(
+        load,
+        pollDelay(interval, inventoryHealth.current.failures),
+      );
+    };
     const load = async () => {
+      // Never overlap polls, and don't poll a hidden window; it refreshes the
+      // moment the window is visible again.
       if (inFlight) return;
+      if (document.hidden) return schedule();
       inFlight = true;
       setBusy(true);
+      const health = inventoryHealth.current;
       try {
         const result = await window.hrig.inventory(connection);
         if (active) {
+          health.failures = 0;
+          health.lastSuccessAt = Date.now();
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
           setInventoryError("");
         }
       } catch (e) {
         if (active) {
-          setInventoryError((e as Error).message);
+          health.failures++;
+          if (
+            shouldReport({
+              failures: health.failures,
+              lastSuccessAt: health.lastSuccessAt,
+              now: Date.now(),
+              intervalSeconds: interval,
+            })
+          )
+            setInventoryError((e as Error).message);
+          // Fewer failures than the threshold: keep serving the last good
+          // snapshot without surfacing anything.
+          else if (inventoryCache.current.has(inventoryKey))
+            setInventoryError((current) =>
+              current === CHECKING_SNAPSHOT ? "" : current,
+            );
         }
       } finally {
         inFlight = false;
-        if (active) setBusy(false);
+        if (active) {
+          setBusy(false);
+          schedule();
+        }
       }
     };
-    load();
-    const timer = setInterval(
-      load,
-      preferences["workspace.refreshInterval"] * 1000,
-    );
+    const visible = () => {
+      if (!document.hidden && !inFlight) {
+        clearTimeout(timer);
+        void load();
+      }
+    };
+    document.addEventListener("visibilitychange", visible);
+    void load();
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visible);
     };
   }, [
     loaded,
@@ -2047,20 +2096,20 @@ export default function App() {
                   {currentRig?.name || "Workspace"}
                 </span>
                 <span
-                  className={`connection-state ${inventoryError ? "error" : ""}`}
+                  className={`connection-state ${inventoryError && inventoryError !== CHECKING_SNAPSHOT ? "error" : ""}`}
                 >
                   <StatusDot
                     status={
-                      busy
+                      busy && !inventory
                         ? "unknown"
                         : connection.kind === "local" || inventory
                           ? "running"
                           : "unknown"
                     }
                   />
-                  {busy
+                  {busy && !inventory
                     ? "Connecting"
-                    : inventoryError
+                    : inventoryError && inventoryError !== CHECKING_SNAPSHOT
                       ? "Unavailable"
                       : connection.kind === "local"
                         ? "Local"
