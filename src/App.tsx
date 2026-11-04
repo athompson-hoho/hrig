@@ -1550,7 +1550,7 @@ export default function App() {
         );
     }
   };
-  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string} | null>(null);
+  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string; connection: string} | null>(null);
   const openPalette = () => {
     projectIntent.current++;
     setSearch("");
@@ -1568,7 +1568,7 @@ export default function App() {
   };
   const terminalCommands = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken).flatMap(t => {
     const config = t.config as PanelConfig;
-    const target = {id: config.terminalId!, name: t.name || "Terminal"};
+    const target = {id: config.terminalId!, name: t.name || "Terminal", connection: config.connection.name};
     return [
       ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
         name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
@@ -1584,7 +1584,6 @@ export default function App() {
     ];
   });
   const commands = [
-    ...terminalCommands,
     {
       name: "Quick Open project file",
       hint: "Ctrl P",
@@ -1721,6 +1720,7 @@ export default function App() {
       icon: <TerminalSquare size={16} />,
       action: () => openSeat(seat),
     })),
+    ...terminalCommands,
   ];
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -2811,7 +2811,7 @@ export default function App() {
             </div>
           </Modal>
         )}
-        {snippetTarget && <TerminalSnippets name={snippetTarget.name}
+        {snippetTarget && <TerminalSnippets name={snippetTarget.name} connection={snippetTarget.connection} terminalId={snippetTarget.id}
           snippets={state.terminalSnippets || []}
           onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
           onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}

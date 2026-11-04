@@ -32,6 +32,7 @@ export default function TerminalPanel({
   const retries = useRef(0);
   const [findRequest, setFindRequest] = useState(0);
   const [commandNotice, setCommandNotice] = useState("");
+  useEffect(() => { setCommandNotice(""); }, [attempt, ready]);
   useEffect(() => {
     const listener = (event: Event) => {
       const {id, command, text} = (event as CustomEvent).detail;

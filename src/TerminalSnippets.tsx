@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ErrorBox, Modal } from "./components";
 import { snippetError, type TerminalSnippet } from "./terminal-commands";
-export default function TerminalSnippets({ name, snippets, onChange, onInsert, onClose }: {
-  name: string; snippets: TerminalSnippet[]; onChange: (value: TerminalSnippet[]) => void;
+export default function TerminalSnippets({ name, connection, terminalId, snippets, onChange, onInsert, onClose }: {
+  name: string; connection: string; terminalId: string; snippets: TerminalSnippet[]; onChange: (value: TerminalSnippet[]) => void;
   onInsert: (text: string, run: boolean) => void; onClose: () => void;
 }) {
   const [label, setLabel] = useState("");
@@ -16,11 +16,11 @@ export default function TerminalSnippets({ name, snippets, onChange, onInsert, o
     if (run) setReview(text);
     else { onInsert(text, false); onClose(); }
   }
-  return <Modal title="Terminal snippets" subtitle={name} onClose={onClose}>
+  return <Modal title="Terminal snippets" subtitle={`${name} · ${connection} · ${terminalId}`} onClose={onClose}>
     <p className="field-note">Saved locally in workspace settings. Single-line commands only. Insert adds text at the terminal cursor without pressing Enter; check any existing input first.</p>
     {error && <ErrorBox error={error} />}
     {review !== null ? <>
-      <p>Send this exact text followed by Enter to {name}? Existing input at the cursor will also be submitted.</p>
+      <p>Send this exact text followed by Enter to {name} on {connection} (terminal {terminalId})? Existing input at the cursor will also be submitted.</p>
       <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{review}</pre>
       <div className="modal-actions"><button onClick={() => setReview(null)}>Back</button><button className="primary-button" onClick={() => {onInsert(review,true);onClose();}}>Insert and run</button></div>
     </> : <>
