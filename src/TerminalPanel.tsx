@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
 import { terminalPathLinks } from "./terminal-path-links";
+import { terminalSeatActivity } from "./terminal-seat-activity";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -14,8 +15,10 @@ export default function TerminalPanel({
   config,
   onFile,
   onRelaunch,
+  seatActivityAvailable = false,
 }: {
   config: PanelConfig;
+  seatActivityAvailable?: boolean;
   onRelaunch?: () => void;
   onFile: (path: string, line?: number) => void;
 }) {
@@ -253,6 +256,7 @@ export default function TerminalPanel({
       window.hrig.resizeTerminal(config.terminalId!, term.cols, term.rows);
     } catch {}
   }, [preferences, colorTheme, attempt, config.seat?.session]);
+  const activity = terminalSeatActivity(config.seat, seatActivityAvailable);
   return (
     <div className="terminal-panel">
       <div className="session-toolbar">
@@ -275,6 +279,12 @@ export default function TerminalPanel({
                   : "Bash"}
           </span>
         </div>
+        {activity && (
+          <span className="terminal-seat-activity" title={activity.detail} role="status">
+            <StatusDot status={activity.status} />
+            {activity.label}
+          </span>
+        )}
         <span className="session-connection">
           <Plug size={11} />
           {config.connection.name}
