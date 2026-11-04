@@ -17,3 +17,8 @@ test('unavailable inventory never presents saved activity as current', () => {
   assert.equal(activity({status:'working'},false).label,'Activity unavailable');
   assert.equal(activity({status:'new-state'},true).label,'Activity unknown');
 });
+test('exited seats use the existing stopped-dot style', () => {
+  const result = activity({status:'exited'},true);
+  assert.equal(result.label,'Stopped');
+  assert.equal(result.status,'stopped');
+});

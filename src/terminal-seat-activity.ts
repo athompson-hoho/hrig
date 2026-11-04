@@ -9,5 +9,5 @@ export function terminalSeatActivity(seat: Seat | undefined, available: boolean)
     : seat.status === "running" ? "Running"
     : ["stopped", "exited", "failed"].includes(seat.status) ? "Stopped"
     : "Activity unknown";
-  return { status: seat.status, label, detail: seat.activity || seat.error || label };
+  return { status: seat.status === "exited" ? "stopped" : seat.status, label, detail: seat.activity || seat.error || label };
 }
