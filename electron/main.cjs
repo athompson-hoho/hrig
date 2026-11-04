@@ -66,7 +66,8 @@ let logShutdown = false;
 app.on('before-quit', event => {
   if (logShutdown) return;
   event.preventDefault();
-  terminalLogs.stopAll().finally(() => {logShutdown = true; app.quit();});
+  let timer;
+  Promise.race([terminalLogs.stopAll(),new Promise(resolve=>{timer=setTimeout(resolve,4000);})]).finally(() => {clearTimeout(timer);logShutdown = true; app.quit();});
 });
 
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});

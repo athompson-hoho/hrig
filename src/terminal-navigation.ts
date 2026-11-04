@@ -5,3 +5,6 @@ export function errorLine(buffer: IBuffer, from: number, direction: -1 | 1): num
   }
   return null;
 }
+export function errorSearchOrigin(viewport: number, previous: {line:number;viewport:number}|null): number {
+  return previous && previous.viewport === viewport ? previous.line : viewport;
+}

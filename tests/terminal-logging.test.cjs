@@ -25,3 +25,9 @@ test('slow disk queue is bounded and closes after draining accepted data',async(
  const logs=createTerminalLogs({maxPending:4,io:{open:async()=>({stat:async()=>({isFile:()=>true,size:0}),writeFile:async value=>{await gate;text+=value;},close:async()=>{}})}});
  await logs.start('a','chosen');logs.append('a','1234');logs.append('a','5');assert.equal(logs.state('a').active,false);assert.match(logs.state('a').error,/keep up/);release();await logs.stop('a');assert.equal(text,'1234');
 });
+test('malformed control strings recover without silently discarding later output',()=>{
+ const strip=plainTerminalStream();strip('a\x1b]0;'+ 'x'.repeat(4097));assert.equal(strip('\nline2\n'),'\nline2\n');
+ const again=plainTerminalStream();assert.equal(again('a\x1b\nb'),'a\nb');
+ const nested=plainTerminalStream();assert.equal(nested('x\x1b[\x1b[31mred'),'xred');
+ const restart=plainTerminalStream();restart('\x1b]bad');assert.equal(restart('\x1b[31mred'),'red');
+});

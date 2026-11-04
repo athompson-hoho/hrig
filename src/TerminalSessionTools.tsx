@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState, type RefObject} from 'react';
 import type {Terminal, IMarker} from '@xterm/xterm';
 import type {TerminalLogState} from './types';
-import {errorLine} from './terminal-navigation';
+import {errorLine,errorSearchOrigin} from './terminal-navigation';
 export default function TerminalSessionTools({terminal,id,generation}:{terminal:RefObject<Terminal|null>;id:string;generation:number}) {
   const [log,setLog]=useState<TerminalLogState>({id,active:false,path:'',bytes:0,error:''});
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState('');
@@ -21,10 +21,12 @@ export default function TerminalSessionTools({terminal,id,generation}:{terminal:
     if(term.buffer.active.type!=='normal'){setNotice('Marks are available in the normal terminal buffer.');return;}
     if(marks.length>=100){setNotice('Limit of 100 marks reached. Clear marks first.');return;}
     const b=term.buffer.active, marker=term.registerMarker(b.viewportY-(b.baseY+b.cursorY));
-    if(marker){ownedMarks.current.push(marker);marker.onDispose(()=>setMarks(old=>old.filter(m=>m!==marker)));setMarks(old=>[...old,marker]);}
+    if(marker){ownedMarks.current.push(marker);marker.onDispose(()=>{ownedMarks.current=ownedMarks.current.filter(m=>m!==marker);setMarks(old=>old.filter(m=>m!==marker));});setMarks(old=>[...old,marker]);}
   }
   function jump(line:number){terminal.current?.scrollToLine(line);terminal.current?.focus();}
-  function error(direction:-1|1){const term=terminal.current;if(!term)return;const found=errorLine(term.buffer.active,term.buffer.active.viewportY,direction);if(found===null)setNotice('No more error-like lines in retained output.');else{setNotice('');jump(found);}}
+  const lastError=useRef<{line:number;viewport:number}|null>(null);
+  useEffect(()=>{lastError.current=null;},[generation]);
+  function error(direction:-1|1){const term=terminal.current;if(!term)return;const viewport=term.buffer.active.viewportY;const previous=lastError.current;const from=errorSearchOrigin(viewport,previous);const found=errorLine(term.buffer.active,from,direction);if(found===null)setNotice('No more error-like lines in retained output.');else{setNotice(`Error-like line ${found+1}`);jump(found);term.select(0,found,term.cols);lastError.current={line:found,viewport:term.buffer.active.viewportY};}}
   return <div className="terminal-tools-actions" aria-label="Terminal recording and navigation">
     <button disabled={busy} onClick={()=>void toggle()} title={log.path || 'Choose a local file; appends output from now on'}>{log.active?'● Logging · Stop':'Start log…'}</button>
     <button onClick={mark}>Mark view</button>
