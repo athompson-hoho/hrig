@@ -37,6 +37,8 @@ export const defaults = {
   "rig.claudePlanMonthlyUsd": 200,
   "rig.codexPlanMonthlyUsd": 100,
   "notifications.desktop": false,
+  "notifications.terminalBell": false,
+  "notifications.terminalQuiet": false,
 };
 export type Preferences = typeof defaults;
 export type SettingKey = keyof Preferences;
@@ -359,6 +361,20 @@ export const schema: Setting[] = [
     label: "Desktop attention notifications",
     description:
       "Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply.",
+  },
+  {
+    key: "notifications.terminalBell",
+    category: "Notifications",
+    label: "Terminal bell alerts",
+    description:
+      "Also notify when a terminal you are not looking at rings the bell. Requires desktop notifications. Notifications name the seat and host only, never terminal text.",
+  },
+  {
+    key: "notifications.terminalQuiet",
+    category: "Notifications",
+    label: "Terminal quiet alerts",
+    description:
+      "Also notify when a terminal you are not looking at goes quiet after a burst of output, such as a finished build. Requires desktop notifications. No terminal text is included.",
   },
 ];
 export function validateOverrides(value: unknown): Overrides {

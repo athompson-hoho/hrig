@@ -66,6 +66,10 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `rig.defaultRuntime` | `codex` | Initial runtime when opening a new rig designer. OpenRig manages authentication and launch policy. |
 | `rig.defaultTeamSize` | `2` | Initial recommendation size for new rig designs. Does not resize existing rigs. |
 | `notifications.desktop` | `false` | Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply. |
+| `notifications.terminalBell` | `false` | Also notify when an unwatched terminal rings the bell (needs `notifications.desktop`). Seat/host name only, no terminal text. |
+| `notifications.terminalQuiet` | `false` | Also notify when an unwatched terminal goes quiet after a burst of output (needs `notifications.desktop`). No terminal text. |
+
+Terminal zoom: Ctrl/Cmd `+`, `-`, `0` and Ctrl+wheel change the font size of one terminal only (8-32 pt, remembered until the app restarts); `terminal.fontSize` stays the default for every terminal.
 
 ## Follow-up ideas
 

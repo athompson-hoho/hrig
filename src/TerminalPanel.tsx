@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import TerminalAlerts from "./TerminalAlerts";
+import { useTerminalZoom } from "./useTerminalZoom";
+import { effectiveFontSize } from "./terminal-zoom";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -24,6 +27,12 @@ export default function TerminalPanel({
   const fitRef = useRef<FitAddon | null>(null);
   const localShell = useRef(preferences["terminal.localShell"]).current;
   const host = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const zoom = useTerminalZoom(
+    panel,
+    config.terminalId!,
+    preferences["terminal.fontSize"],
+  );
   const [error, setError] = useState("");
   const [ended, setEnded] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -248,7 +257,10 @@ export default function TerminalPanel({
     const term = terminalRef.current;
     if (!term) return;
     term.options.fontFamily = preferences["terminal.fontFamily"];
-    term.options.fontSize = preferences["terminal.fontSize"];
+    term.options.fontSize = effectiveFontSize(
+      preferences["terminal.fontSize"],
+      zoom,
+    );
     term.options.lineHeight = preferences["terminal.lineHeight"];
     term.options.cursorStyle = preferences["terminal.cursorStyle"] as
       "bar" | "block" | "underline";
@@ -261,9 +273,9 @@ export default function TerminalPanel({
       fitRef.current?.fit();
       window.hrig.resizeTerminal(config.terminalId!, term.cols, term.rows);
     } catch {}
-  }, [preferences, colorTheme, attempt, config.seat?.session]);
+  }, [preferences, colorTheme, attempt, config.seat?.session, zoom]);
   return (
-    <div className="terminal-panel">
+    <div className="terminal-panel" ref={panel}>
       <div className="session-toolbar">
         <span className="session-avatar">
           {config.seat ? config.seat.name.slice(0, 2).toUpperCase() : ">_"}
@@ -332,6 +344,21 @@ export default function TerminalPanel({
           Reconnecting to the existing seat… retry {retries.current} of 6
         </div>
       )}
+      <TerminalAlerts
+        terminal={terminalRef}
+        panel={panel}
+        generation={attempt * 2 + (ready ? 1 : 0)}
+        bell={
+          preferences["notifications.desktop"] &&
+          preferences["notifications.terminalBell"]
+        }
+        quiet={
+          preferences["notifications.desktop"] &&
+          preferences["notifications.terminalQuiet"]
+        }
+        label={config.seat?.name || "Shell"}
+        host={config.connection.name}
+      />
       <TerminalTools
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
