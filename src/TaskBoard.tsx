@@ -124,6 +124,11 @@ export default function TaskBoard({
             setCreate(true);
           }}
           disabled={!addresses.length}
+          title={
+            addresses.length
+              ? undefined
+              : "No seats available to assign work to. Refresh rigs in the sidebar."
+          }
         >
           <Plus size={13} />
           Assign work
@@ -168,6 +173,24 @@ export default function TaskBoard({
           <p>Assign work to a seat or wait for your team’s tasks.</p>
         </div>
       ) : (
+        <>
+          {!visible.length && (
+            <div className="panel-empty" role="status">
+              <ListTodo size={28} />
+              <h3>No tasks match these filters</h3>
+              <p>Clear the filter, owner or state to see all {items.length} active items.</p>
+              <button
+                className="small-button"
+                onClick={() => {
+                  setFilter("");
+                  setOwner("");
+                  setStateFilter("");
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
         <div className="task-board">
           {["pending", "in-progress", "blocked", "other"].map((state) => (
             <section className="task-column" key={state}>
@@ -205,6 +228,7 @@ export default function TaskBoard({
             </section>
           ))}
         </div>
+        </>
       )}
       {(create || selected) && (
         <Modal
