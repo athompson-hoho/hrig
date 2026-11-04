@@ -106,7 +106,8 @@ export default function TerminalPanel({
   useEffect(() => {
     if (!host.current) return;
     let disposed = false,
-      connected = false;
+      connected = false,
+      attached = false;
     let stableTimer: ReturnType<typeof setTimeout> | undefined;
     clearTimeout(retryTimer.current);
     setRetrying(false);
@@ -244,6 +245,7 @@ export default function TerminalPanel({
       .then((result) => {
         if (disposed || !result) return;
         connected = true;
+        attached = true;
         stableTimer = setTimeout(() => {
           if (!disposed && connected) retries.current = 0;
         }, 30000);
@@ -258,7 +260,11 @@ export default function TerminalPanel({
               term.scrollToLine(restoreLine(term.buffer.active.baseY, offset));
           });
         }
-        else pending.forEach((data) => term.write(data));
+        else {
+          // No retained buffer: the old position no longer refers to anything.
+          savedScroll.current = 0;
+          pending.forEach((data) => term.write(data));
+        }
         resize();
       })
       .catch((e) => {
@@ -275,10 +281,13 @@ export default function TerminalPanel({
       observer.disconnect();
       unsubscribe();
       input.dispose();
-      savedScroll.current = scrollOffset(
-        term.buffer.active.baseY,
-        term.buffer.active.viewportY,
-      );
+      // Only a view that actually attached holds the scroll position worth
+      // keeping; a failed blank attempt must not overwrite it with zero.
+      if (attached)
+        savedScroll.current = scrollOffset(
+          term.buffer.active.baseY,
+          term.buffer.active.viewportY,
+        );
       term.dispose();
       if (terminalRef.current === term) {
         terminalRef.current = null;
