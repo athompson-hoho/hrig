@@ -505,6 +505,8 @@ export default function SettingsPage({ project }: { project: string }) {
                 ["Ctrl ,", "Open settings"],
                 ["Ctrl K", "Open command center"],
                 ["Ctrl O", "Choose project folder"],
+                ["Ctrl P", "Quick Open project file"],
+                ["Ctrl Shift P", "Find open panels"],
                 ["Ctrl B", "Toggle sidebar"],
                 ["Ctrl Shift T", "New shell"],
                 ["Ctrl S", "Save editor file"],
