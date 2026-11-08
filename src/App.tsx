@@ -1660,6 +1660,7 @@ export default function App() {
             connectionName={connection.name}
             seatCount={seats.filter((s) => s.session).length}
             recents={welcomeRecents(projectHistory)}
+            connections={state.connections}
             onOpenRecent={openRecentProject}
           />
         );
