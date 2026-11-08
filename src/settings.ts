@@ -1,5 +1,6 @@
 import { themes } from "./theme-catalog";
 import { isWindows } from "./platform";
+import type { SeatSort } from "./seat-sort";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -33,6 +34,7 @@ export const defaults = {
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
+  "rig.seatSort": "name" as SeatSort,
   "rig.defaultTeamSize": 2,
   "rig.claudePlanMonthlyUsd": 200,
   "rig.codexPlanMonthlyUsd": 100,
@@ -65,6 +67,18 @@ export type Setting = {
 const options = (...values: string[]): Option[] =>
   values.map((value) => ({ value, label: value }));
 export const schema: Setting[] = [
+  {
+    key: "rig.seatSort",
+    category: "Connections & rigs",
+    label: "Seat sort order",
+    description:
+      "Choose the default sidebar seat order. Activity puts working seats first; it does not use an activity timestamp.",
+    options: [
+      { value: "name", label: "Name" },
+      { value: "activity", label: "Activity (working first)" },
+      { value: "attention-first", label: "Attention first" },
+    ],
+  },
   {
     key: "rig.claudePlanMonthlyUsd",
     category: "Connections & rigs",

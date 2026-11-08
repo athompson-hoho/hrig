@@ -25,6 +25,8 @@ User preferences apply globally. Project preferences override them for the activ
 
 Settings are saved automatically through the existing atomic workspace persistence. Numeric and font inputs commit on blur or Enter; toggles and selections apply immediately. Resetting a project row removes its override and restores the user value. Resetting a user row restores the default. Reset scope asks for confirmation.
 
+Seat sort order (`rig.seatSort`) also controls the sidebar's Sort sessions selection. An existing project override wins, including an explicit `name` overriding a user `activity` value. Changing the sidebar selection updates that project override when the project owns the key; otherwise it updates the user preference. Reset the project row to inherit the user order, or reset the user row to restore Name. The enum uses the same automatic workspace.json save/load lifecycle and validated imports as other preferences. Sorting preserves the current search/status filters and never opens, sends input to or relaunches a seat.
+
 Changing terminal appearance updates the existing xterm view, without replacing its PTY. Selecting a different local shell affects newly created local terminals; remote sessions continue to use their existing harness. Reconnection remains bounded to six attempts and never launches agents. Decreasing scrollback can remove older visible history.
 
 The Settings JSON view exports preferences only, including any configured default-root preference; it excludes saved connections, credentials, current project bindings, layouts and terminal output. Imports replace only the selected scope after full key/type/range validation. Unknown keys, invalid values, oversized files and malformed JSON are rejected before any preference is applied.
@@ -65,6 +67,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `connections.defaultRoot` | `~` | Default project directory for new WSL/SSH connections. Does not change existing connections. |
 | `rig.defaultRuntime` | `codex` | Initial runtime when opening a new rig designer. OpenRig manages authentication and launch policy. |
 | `rig.defaultTeamSize` | `2` | Initial recommendation size for new rig designs. Does not resize existing rigs. |
+| `rig.seatSort` | `name` | Seat sort order: `name` (Name), `activity` (Activity (working first)), or `attention-first` (Attention first). Activity uses current normalized status priority, not timestamps or recency; see [navigation](NAVIGATION.md). Unsupported imported values are rejected. |
 | `notifications.desktop` | `false` | Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply. |
 | `notifications.terminalBell` | `false` | Also notify when an unwatched terminal rings the bell (needs `notifications.desktop`). Seat/host name only, no terminal text. |
 | `notifications.terminalQuiet` | `false` | Also notify when an unwatched terminal goes quiet after a burst of output (needs `notifications.desktop`). No terminal text. |
