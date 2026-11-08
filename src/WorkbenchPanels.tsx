@@ -22,6 +22,7 @@ import { ErrorBox, Loading, StatusDot, Empty } from "./components";
 import { attentionSeats, attentionJumpEligibility } from "./attention-inbox";
 import { pinConnectionIdentity } from "./seat-pins";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
+import { VirtualList } from "./VirtualList";
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const { effective } = useSettings();
   // Keep full raw identity internal. No display normalization grants authority.
@@ -261,6 +262,8 @@ export function ProjectTools({
 }) {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<any[]>([]);
+  const [searchResult, setSearchResult] = useState({ scope: "", generation: 0 });
+  const searchScope = JSON.stringify([pinConnectionIdentity(connection), root]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
@@ -270,7 +273,10 @@ export function ProjectTools({
     setBusy(true);
     try {
       const result = await window.hrig.edit(connection, { ...request, root });
-      if (request.op === "searchText") setMatches(result);
+      if (request.op === "searchText") {
+        setMatches(result);
+        setSearchResult(previous => ({ scope: searchScope, generation: previous.generation + 1 }));
+      }
       else {
         onChanged();
         if (request.op === "create") onFile(request.path);
@@ -318,16 +324,20 @@ export function ProjectTools({
         dependencies and binaries are excluded.
       </p>
       {error && <ErrorBox error={error} />}
-      <div className="search-results">
-        {matches.map((m, i) => (
-          <button key={i} onClick={() => onFile(m.path, m.line)}>
+      {searchResult.scope === searchScope && matches.length === 0 && !busy && !error &&
+        <p>No matching text found. Try another search.</p>}
+      <VirtualList className="search-results" label="Project search results"
+        scopeKey={JSON.stringify([searchScope, searchResult.generation])}
+        rows={searchResult.scope === searchScope ? matches : []}
+        itemKey={(m, i) => JSON.stringify(["match", searchScope, searchResult.generation, m.path, m.line, i])}
+        renderRow={m => (
+          <button onClick={() => onFile(m.path, m.line)}>
             <strong>
               {m.path}:{m.line}
             </strong>
             <code>{m.text}</code>
           </button>
-        ))}
-      </div>
+        )} />
       <div className="tool-panel-heading">
         <FilePlus size={18} />
         <div>
