@@ -559,6 +559,21 @@ export function RigManager({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [operation, setOperation] = useState<"start" | "stop">("start");
+  type TopologyRow =
+    | { kind: "heading"; rig: Inventory["rigs"][number] }
+    | { kind: "delete"; rig: Inventory["rigs"][number] }
+    | { kind: "seat"; rig: Inventory["rigs"][number]; seat: Seat; first: boolean; last: boolean };
+  const topologyRows: TopologyRow[] = (inventory?.rigs || []).flatMap(rig => {
+    const seats = inventory!.seats.filter(seat => seat.rigId === rig.id);
+    return [
+      { kind: "heading", rig } as TopologyRow,
+      { kind: "delete", rig } as TopologyRow,
+      ...seats.map((seat, index): TopologyRow => ({
+        kind: "seat", rig, seat, first: index === 0, last: index === seats.length - 1,
+      })),
+    ];
+  });
+  const topologyScope = pinConnectionIdentity(connection);
   useEffect(() => {
     let active = true;
     window.hrig
@@ -647,9 +662,16 @@ export function RigManager({
           }}
         />
       )}
-      <div className="topology-list">
-        {inventory?.rigs.map((r) => (
-          <div key={r.id}>
+      <VirtualList
+        rows={topologyRows}
+        scopeKey={topologyScope}
+        itemKey={row => JSON.stringify([topologyScope, row.kind, row.rig.id, row.kind === "seat" ? row.seat.id : null])}
+        label="Rig topology"
+        maxHeight={360}
+        className="topology-list topology-viewport"
+        renderRow={row => {
+          const r = row.rig;
+          if (row.kind === "heading") return (
             <button
               className="rig-topology-heading"
               onClick={() => change(r.name, true)}
@@ -660,6 +682,8 @@ export function RigManager({
                 {r.status} · {r.nodeCount} seats
               </span>
             </button>
+          );
+          if (row.kind === "delete") return (
             <button
               className="small-button danger"
               disabled={!!deleting}
@@ -670,23 +694,23 @@ export function RigManager({
             >
               Delete {r.name}
             </button>
-            <div className="topology-seats">
-              {inventory.seats
-                .filter((s) => s.rigId === r.id)
-                .map((s) => (
-                  <button key={s.id} onClick={() => onSeat(s)}>
-                    <StatusDot status={s.status} />
-                    <span>
-                      {s.pod ? s.pod + " / " : ""}
-                      {s.name}
-                    </span>
-                    <small>{s.runtime}</small>
-                  </button>
-                ))}
+          );
+          // Each measured segment is one original seat, including edge spacing.
+          const s = row.seat;
+          return (
+            <div className="topology-seats" data-first={row.first} data-last={row.last}>
+              <button onClick={() => onSeat(s)}>
+                <StatusDot status={s.status} />
+                <span>
+                  {s.pod ? s.pod + " / " : ""}
+                  {s.name}
+                </span>
+                <small>{s.runtime}</small>
+              </button>
             </div>
-          </div>
-        ))}
-      </div>
+          );
+        }}
+      />
       <label className="field-label">
         LIBRARY RIG SPEC
         <select
