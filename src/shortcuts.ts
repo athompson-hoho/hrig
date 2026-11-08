@@ -151,6 +151,15 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
       title: "Editor",
       shortcuts: [
         { id: "editor.save", label: "Save the file", keys: [`${mod}+S`] },
+        // Monaco's own action editor.action.gotoLine, bound only while an editor
+        // has focus: Ctrl+G, and the Control key on macOS where Cmd+G finds next.
+        {
+          id: "editor.gotoLine",
+          label: mac
+            ? "Go to a line and column (the Control key; Cmd+G finds the next match)"
+            : "Go to a line and column",
+          keys: ["Ctrl+G"],
+        },
       ],
     },
   ];

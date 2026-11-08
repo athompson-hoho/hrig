@@ -147,6 +147,7 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.shortcuts",
       "terminal.clear",
       "editor.save",
+      "editor.gotoLine",
     ]) {
       assert.ok(seen.has(id), platform + " is missing " + id);
     }
@@ -175,6 +176,7 @@ test("shortcuts labels follow the platform", () => {
     "terminal.zoomOut": ["Cmd+minus"],
     "terminal.zoomReset": ["Cmd+0"],
     "editor.save": ["Cmd+S"],
+    "editor.gotoLine": ["Ctrl+G"],
   });
   const linux = {
     "workspace.palette": ["Ctrl+K"],
@@ -197,6 +199,7 @@ test("shortcuts labels follow the platform", () => {
     "terminal.zoomOut": ["Ctrl+minus"],
     "terminal.zoomReset": ["Ctrl+0"],
     "editor.save": ["Ctrl+S"],
+    "editor.gotoLine": ["Ctrl+G"],
   };
   assert.deepEqual(byId("linux"), linux);
   for (const platform of ["win32", "freebsd", ""]) {
@@ -949,4 +952,47 @@ test("shortcuts focus mode chord is claimed by no terminal, zoom, help, editor, 
     core[0].includes("256 /* KeyMod.WinCtrl */ | 34 /* KeyCode.KeyD */"),
     "macOS Control+D (delete right) is the only other D binding",
   );
+});
+
+test("shortcuts go to line is Monaco's Ctrl+G, listed once after Save in the Editor group, and no terminal, zoom, help or app chord claims it", () => {
+  for (const platform of [...PLATFORMS, "freebsd", ""]) {
+    const group = shortcutGroups(platform).find((g) => g.id === "editor");
+    assert.deepEqual(
+      group.shortcuts.map((s) => s.id),
+      ["editor.save", "editor.gotoLine"],
+      platform,
+    );
+    assert.deepEqual(byId(platform)["editor.gotoLine"], ["Ctrl+G"], platform);
+    const all = [];
+    for (const entry of shortcutGroups(platform).flatMap((g) => g.shortcuts))
+      for (const key of entry.keys) all.push([entry.id, key]);
+    assert.deepEqual(
+      all.filter(([, key]) => key.toLowerCase() === "ctrl+g"),
+      [["editor.gotoLine", "Ctrl+G"]],
+      platform + " the chord is listed once",
+    );
+    for (const text of ["Ctrl+G", "Cmd+G", "Ctrl+Shift+G", "Cmd+Shift+G"]) {
+      for (const selected of [false, true])
+        assert.equal(
+          classifyTerminalKey(chord(text), platform, selected),
+          "pass",
+          platform + " " + text,
+        );
+      assert.equal(zoomAction(chord(text)), null, platform + " " + text);
+      assert.equal(isHelpKey(chord(text), element("BODY"), false), false);
+      assert.equal(isReopenPanelKey(chord(text), platform), false);
+      assert.equal(isMaximizePanelKey(chord(text), platform), false);
+      assert.equal(isFocusModeKey(chord(text), platform), false);
+    }
+  }
+  assert.match(
+    labelOf("darwin", "editor.gotoLine"),
+    /^Go to a line and column \(the Control key; Cmd\+G finds the next match\)$/,
+  );
+  for (const platform of ["win32", "linux", "freebsd", ""])
+    assert.equal(
+      labelOf(platform, "editor.gotoLine"),
+      "Go to a line and column",
+      platform,
+    );
 });

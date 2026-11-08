@@ -533,3 +533,81 @@ test("goto-line adds nothing of its own: the app claims no Ctrl+G, so a terminal
     ),
   );
 });
+
+test("goto-line shortcut: the Editor group lists Ctrl+G once on every platform, the command center hint agrees with it, and NAVIGATION.md documents the prompt after the sidebar paragraph", () => {
+  // The catalog row, found by what it says rather than by its position.
+  for (const platform of ["darwin", "win32", "linux", "freebsd", ""]) {
+    const rows = shortcuts
+      .shortcutGroups(platform)
+      .flatMap((group) =>
+        group.shortcuts.map((s) => ({ ...s, group: group.id })),
+      );
+    assert.deepEqual(
+      rows
+        .filter((row) => /go to a line/i.test(row.label))
+        .map((row) => [row.group, row.id, row.keys]),
+      [["editor", "editor.gotoLine", ["Ctrl+G"]]],
+      platform,
+    );
+    assert.equal(
+      rows.filter((row) => row.keys.some((k) => /^(ctrl|cmd)\+g$/i.test(k)))
+        .length,
+      1,
+      platform + " lists the chord once",
+    );
+  }
+
+  // The command center entry shows the same chord, spelled as its hints are.
+  const app = appText();
+  const chord = "Ctrl+G";
+  assert.ok(
+    has(app, 'hint: "' + chord.split("+").join(" ") + ' in the editor",'),
+  );
+  assert.ok(has(app, 'setToast("Click an editor first");'));
+
+  // NAVIGATION.md: one new paragraph, after the sidebar and focus mode ones.
+  const nav = read("NAVIGATION.md");
+  assert.equal(nav.charCodeAt(0), 0xfeff, "the byte order mark is kept");
+  assert.ok(nav.endsWith(".\n") && !nav.endsWith("\n\n"));
+  const lines = nav.split("\n");
+  const mine = lines.filter((line) =>
+    line.startsWith("Ctrl+G opens the go-to-line prompt in the code editor"),
+  );
+  assert.equal(mine.length, 1);
+  const paragraph = mine[0];
+  assert.ok(/^[\x20-\x7e]+$/.test(paragraph), "plain ASCII only");
+  const at = lines.indexOf(paragraph);
+  assert.ok(lines[at - 1] === "" && at > 0);
+  assert.ok(
+    at >
+      lines.findIndex((l) =>
+        l.startsWith("The sidebar shows and hides with Ctrl+B"),
+      ),
+  );
+  assert.ok(
+    at >
+      lines.findIndex((l) =>
+        l.startsWith("The command center entry Toggle focus mode"),
+      ),
+  );
+  for (const fragment of [
+    "in a diff view too, while that editor has focus",
+    "(Control+G on macOS, where Cmd+G finds the next match)",
+    "the shortcut is listed in the Keyboard shortcuts sheet",
+    "The command center entry Go to line opens the same prompt in the editor that had focus when you opened the command center",
+    "shows Click an editor first when none did",
+    "optionally followed by a colon and a column such as 12:5",
+    "(a comma or # also separates them)",
+    "a negative number counts from the end of the file",
+    "a number past the end goes to the last line",
+    "Enter jumps and Escape cancels",
+    "The shortcut belongs to the editor only, so in a terminal Ctrl+G stays the shell's own key and a text field keeps it",
+    "separate from the :line suffix in Quick Open, which opens a file at a line",
+    "there is no setting, nothing is saved, and nothing is typed or sent",
+  ])
+    assert.ok(paragraph.includes(fragment), "missing: " + fragment);
+  assert.ok(
+    nav.includes("The command center entry Toggle focus mode"),
+    "earlier paragraphs are still there",
+  );
+});
