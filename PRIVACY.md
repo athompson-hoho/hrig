@@ -32,3 +32,7 @@ Community theme palettes are bundled locally. Selecting a bundled theme does not
 ## Support and control
 
 Disable or disconnect optional integrations, close configured connections/panels, and revoke mobile devices when they should no longer exchange information. Agent processes and remote services can continue independently of the HRig window; stop them through their own controls when appropriate. For privacy questions, contact the maintainer through the [project repository](https://github.com/athompson-hoho/hrig). Public issues must not contain credentials, private source code or personal information.
+
+## Optional terminal logs
+
+Continuous terminal recording is off by default. Start log requires choosing a local desktop file and visibly indicates when recording is active. Output from local or remote terminals is appended there until stopped or disconnected, with control sequences stripped and bounded file/queue sizes. Logs may contain sensitive output, including text a program later erases; stripping terminal controls does not redact secrets. HRig does not upload or automatically delete these user-chosen files. Terminal bookmarks remain in memory and expire when their retained output is discarded.

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("hrig", {
   updates: invoke('updates:operation'),
   onUpdates: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('updates:state',listener);return ()=>ipcRenderer.removeListener('updates:state',listener); },
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
+  terminalLog: invoke('terminal:log'),
+  onTerminalLog: callback => { const listener = (_event,state) => callback(state); ipcRenderer.on('terminal:log-state',listener); return () => ipcRenderer.removeListener('terminal:log-state',listener); },
   exportTerminal: invoke('terminal:export'),
   openTerminalLink: invoke('terminal:open-link'),
   readClipboardText: invoke('terminal:read-clipboard'),
