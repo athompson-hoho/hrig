@@ -4333,3 +4333,8 @@ button:hover {
   min-width: 160px;
   z-index: 200;
 }
+.attention-inbox-row { flex-wrap: wrap; }
+.attention-inbox-row section { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
+.attention-inbox-row .small-button { white-space: normal; color: var(--color-a3c1ae); }
+.attention-inbox p { overflow-wrap: anywhere; }
+.attention-inbox h4 { font-size: 12px; font-weight: 500; }

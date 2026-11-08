@@ -16,6 +16,7 @@ if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').hom
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const core = require("./core.cjs");
+const { seatTerminalReuse } = require("./terminal-reuse.cjs");
 const features = require("./features.cjs");
 const rigControl = require("./rig-control.cjs").createRigControl(features.runRig, (connection,args,timeout,root) => features.runRig(connection,args,timeout,root,true));
 const backend=require("./backend.cjs").createBackend();
@@ -443,17 +444,19 @@ handle("terminal:create", async (event, options) => {
   if (typeof id !== "string" || id.length > 1000)
     throw new Error("Invalid panel ID.");
   core.validateConnection(connection);
-  const existing = terminals.get(id);
-  if (existing) return { id, buffer: existing.buffer, reused: true };
-  if (options.seatId && (connection.kind !== "local" || process.platform!=='win32')) {
+  let existing = terminals.get(id);
+  if (options.seatId) {
     const latest = await backend.inventory(connection);
-    const seat = latest.seats.find((s) => s.id === options.seatId);
-    if (!seat?.session)
-      throw new Error(
-        "This seat has no attachable session yet. HRig will retry without relaunching it.",
-      );
-    session = seat.session;
+    const matches = latest.seats.filter((s) => s.id === options.seatId);
+    if (!session || !matches.length || matches.some((seat) => seat.session !== session))
+      throw new Error("Seat session changed or is unavailable. Existing terminal preserved; inspect readiness in OpenRig.");
+    existing = terminals.get(id);
+    if (existing && !seatTerminalReuse(existing, options, matches[0]))
+      throw new Error("Retained terminal ownership is unknown or conflicts. Existing terminal preserved; use existing connection controls to inspect it.");
+  } else if (existing?.seatId || existing && id.startsWith("seat:")) {
+    throw new Error("Seat terminal requires verified seat provenance. Existing terminal preserved.");
   }
+  if (existing) return { id, buffer: existing.buffer, reused: true };
   let file, args;
   if (options.rigControlToken) {
     const planned = rigControl.consumeTerminal(connection, options.rigControlToken, options.rigControlConfirmation);
@@ -502,7 +505,7 @@ handle("terminal:create", async (event, options) => {
     env,
     useConpty: true,
   });
-  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell };
+  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell, seatId: options.seatId, session };
   terminals.set(id, item);
   terminal.onData((data) => {
     if (terminals.get(id) !== item) return;
