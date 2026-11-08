@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
+import { VirtualList } from "./VirtualList";
+import { pinConnectionIdentity } from "./seat-pins";
 export default function TaskBoard({
   connection,
   rigName,
@@ -99,6 +101,13 @@ export default function TaskBoard({
       (!owner || i.destination === owner) &&
       (!filter || String(i.title).toLowerCase().includes(filter.toLowerCase())),
   );
+  const taskScope = JSON.stringify([pinConnectionIdentity(connection), rigName]);
+  const columns = ["pending", "in-progress", "blocked", "other"].map(state => ({
+    state,
+    items: visible.filter(i => state === "other"
+      ? !["pending", "in-progress", "blocked"].includes(i.status)
+      : i.status === state),
+  }));
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -192,29 +201,22 @@ export default function TaskBoard({
             </div>
           )}
         <div className="task-board">
-          {["pending", "in-progress", "blocked", "other"].map((state) => (
+          {columns.map(({ state, items: columnItems }) => (
             <section className="task-column" key={state}>
               <h4>
                 {state === "other" ? "Other states" : state}
                 <span>
-                  {
-                    visible.filter((i) =>
-                      state === "other"
-                        ? !["pending", "in-progress", "blocked"].includes(
-                            i.status,
-                          )
-                        : i.status === state,
-                    ).length
-                  }
+                  {columnItems.length}
                 </span>
               </h4>
-              {visible
-                .filter((i) =>
-                  state === "other"
-                    ? !["pending", "in-progress", "blocked"].includes(i.status)
-                    : i.status === state,
-                )
-                .map((item) => (
+              <VirtualList
+                rows={columnItems}
+                scopeKey={JSON.stringify([taskScope, state, filter, owner, stateFilter])}
+                itemKey={item => JSON.stringify([taskScope, "task", item.id])}
+                label={state === "other" ? "Other-state tasks" : `${state[0].toUpperCase()}${state.slice(1)} tasks`}
+                maxHeight={360}
+                className="task-card-viewport"
+                renderRow={item => (
                   <button
                     className="task-card"
                     key={item.id}
@@ -224,7 +226,8 @@ export default function TaskBoard({
                     <span>{item.destination}</span>
                     <small className="badge">{item.status}</small>
                   </button>
-                ))}
+                )}
+              />
             </section>
           ))}
         </div>

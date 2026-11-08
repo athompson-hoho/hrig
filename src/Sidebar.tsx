@@ -1,3 +1,4 @@
+import { VirtualList } from "./VirtualList";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -21,7 +22,7 @@ import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 import { sortSeats } from "./seat-sort";
-import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity } from "./seat-pins";
+import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity, pinConnectionIdentity } from "./seat-pins";
 import { groupSeatPods, normalizeCollapsedPods } from "./seat-pods";
 import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
@@ -300,6 +301,46 @@ export default function Sidebar({
       </IconButton>
     </div>
   );
+  type SessionRow = { key: string; seat: Seat; group?: typeof groups[number] }
+    | { key: string; group: typeof groups[number]; seat?: undefined };
+  const owner = pinConnectionIdentity(connection);
+  const sessionRows: SessionRow[] = favorites.map(seat => ({ key: JSON.stringify([owner, "favorite", seat.id]), seat }));
+  for (const group of groups) {
+    sessionRows.push({ key: JSON.stringify([owner, "pod", group.identity]), group });
+    if (!collapsed.has(group.identity)) for (const seat of group.seats)
+      sessionRows.push({ key: JSON.stringify([owner, "seat", group.identity, seat.id]), group, seat });
+  }
+  const renderSession = (row: SessionRow) => {
+    if (row.seat) return row.group
+      ? <div className="pod-content" aria-label={`${row.group.podLabel} · ${row.group.rigLabel}`}>{renderSeat(row.seat)}</div>
+      : renderSeat(row.seat);
+    const group = row.group;
+    if (!podTokens.current.has(group.identity))
+      podTokens.current.set(group.identity, podTokens.current.size);
+    const id = `${podNamespace}-pod-${podTokens.current.get(group.identity)}`;
+    const expanded = !collapsed.has(group.identity);
+    const attention = group.seats.filter(seat => seat.status === "attention").length;
+    const label = `${expanded ? "Collapse" : "Expand"} pod ${group.podLabel} in rig ${group.rigLabel}`;
+    return (
+      <div className="pod-group">
+        <button type="button" className="pod-disclosure" disabled={!podsAvailable}
+          aria-expanded={expanded} aria-controls={id} aria-describedby={`${id}-description`}
+          aria-label={label} title={label}
+          onClick={() => { if (podsAvailable) onTogglePod(group.seats[0]); }}>
+          {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+          <span className="pod-label">{group.podLabel} · {group.rigLabel}</span>
+          <span className="count">{group.seats.length}</span>
+          {!expanded && attention > 0 && <span className="pod-attention"><span className="status-dot attention" aria-hidden="true" />{attention} need input</span>}
+        </button>
+        <span className="sr-only" id={`${id}-description`}>
+          {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
+          {!expanded && attention > 0 && ` ${attention} need input.`}
+          {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
+        </span>
+        <div className="pod-content" id={id} aria-label={`${group.podLabel} · ${group.rigLabel}`}>{false}</div>
+      </div>
+    );
+  };
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -475,7 +516,9 @@ export default function Sidebar({
               <span>All rigs</span>
               <span className="count">{rigs.length}</span>
             </button>
-            {rigs.map((r) => (
+            {rigs.length > 0 && <VirtualList rows={rigs} itemKey={r => JSON.stringify([owner, "rig", r.id])}
+              scopeKey={owner} label="Rig list" maxHeight={136} estimateHeight={34}
+              className="sidebar-rig-viewport" renderRow={r => (
               <button
                 className={`rig-row ${r.id === selectedRig ? "selected" : ""}`}
                 key={r.id}
@@ -485,13 +528,13 @@ export default function Sidebar({
                 <span>{r.name}</span>
                 <span className="count">{r.nodeCount}</span>
               </button>
-            ))}
+            )} />}
           </div>
           <div className="section-label">
             <span title="Matching sessions, including favorites and sessions in collapsed pods.">SESSIONS</span>
             <span className="count">{seats.length}</span>
           </div>
-          <div className="sidebar-scroll">
+          <div className="sidebar-scroll sidebar-session-container">
             {inventoryError === CHECKING_SNAPSHOT && inventory && (
               <div className="sidebar-empty" role="status">
                 Refreshing · showing the last known snapshot…
@@ -523,45 +566,8 @@ export default function Sidebar({
                 <p>Try another search or clear the filters.</p>
               </div>
             ) : seats.length ? (
-              <>
-                {favorites.map(renderSeat)}
-                {groups.map((group) => {
-                  if (!podTokens.current.has(group.identity))
-                    podTokens.current.set(group.identity, podTokens.current.size);
-                  const id = `${podNamespace}-pod-${podTokens.current.get(group.identity)}`;
-                  const expanded = !collapsed.has(group.identity);
-                  const attention = group.seats.filter((seat) => seat.status === "attention").length;
-                  const label = `${expanded ? "Collapse" : "Expand"} pod ${group.podLabel} in rig ${group.rigLabel}`;
-                  return (
-                    <div className="pod-group" key={group.identity}>
-                      <button
-                        type="button"
-                        className="pod-disclosure"
-                        disabled={!podsAvailable}
-                        aria-expanded={expanded}
-                        aria-controls={id}
-                        aria-describedby={`${id}-description`}
-                        aria-label={label}
-                        title={label}
-                        onClick={() => { if (podsAvailable) onTogglePod(group.seats[0]); }}
-                      >
-                        {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
-                        <span className="pod-label">{group.podLabel} · {group.rigLabel}</span>
-                        <span className="count">{group.seats.length}</span>
-                        {!expanded && attention > 0 && <span className="pod-attention"><span className="status-dot attention" aria-hidden="true" />{attention} need input</span>}
-                      </button>
-                      <span className="sr-only" id={`${id}-description`}>
-                        {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
-                        {!expanded && attention > 0 && ` ${attention} need input.`}
-                        {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
-                      </span>
-                      <div className="pod-content" id={id}>
-                        {expanded && group.seats.map(renderSeat)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
+              <VirtualList rows={sessionRows} itemKey={row => row.key} renderRow={renderSession}
+                label="Sessions" scopeKey={owner} className="sidebar-session-viewport" />
             ) : (
               <div className="connection-empty">
                 <Bot size={26} />
