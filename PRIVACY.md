@@ -36,3 +36,7 @@ Disable or disconnect optional integrations, close configured connections/panels
 ## Optional terminal logs
 
 Continuous terminal recording is off by default. Start log requires choosing a local desktop file and visibly indicates when recording is active. Output from local or remote terminals is appended there until stopped or disconnected, with control sequences stripped and bounded file/queue sizes. Logs may contain sensitive output, including text a program later erases; stripping terminal controls does not redact secrets. HRig does not upload or automatically delete these user-chosen files. Terminal bookmarks remain in memory and expire when their retained output is discarded.
+
+## Snippet export and import
+
+Saved terminal snippets are stored locally in the workspace settings. Export shows them as JSON text with only each snippet's name and text, exactly as saved; HRig does not write that text to a file, copy it or send it anywhere, so where it goes is up to you. Snippet text can contain anything you typed, including secrets, so keep passwords and tokens out of snippets. Import reads only text you paste into the dialog, checks it, shows what it would add and adds nothing until you confirm; it never sends anything to a terminal.

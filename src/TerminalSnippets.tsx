@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ErrorBox, Modal } from "./components";
 import { snippetError, type TerminalSnippet } from "./terminal-commands";
 import { expand, type SnippetContext } from "./snippet-vars";
+import { SnippetExport, SnippetImport } from "./SnippetTransfer";
 const PLACEHOLDER_NOTE = "Placeholders {host}, {seat} and {project} are filled in from this terminal when you insert, and the preview shows the exact text. Write {{host}} to keep the braces as they are.";
 export default function TerminalSnippets({ name, connection, terminalId, snippets, context, onChange, onInsert, onClose }: {
   name: string; connection: string; terminalId: string; snippets: TerminalSnippet[]; context: SnippetContext; onChange: (value: TerminalSnippet[]) => void;
@@ -11,6 +12,7 @@ export default function TerminalSnippets({ name, connection, terminalId, snippet
   const [text, setText] = useState("");
   const [review, setReview] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [view, setView] = useState<"list" | "export" | "import">("list");
   function insert(run: boolean) {
     const problem = snippetError(text);
     setError(problem);
@@ -24,7 +26,7 @@ export default function TerminalSnippets({ name, connection, terminalId, snippet
   return <Modal title="Terminal snippets" subtitle={`${name} · ${connection} · ${terminalId}`} onClose={onClose}>
     <p className="field-note">Saved locally in workspace settings. Single-line commands only. Insert adds text at the terminal cursor without pressing Enter; check any existing input first.</p>
     {error && <ErrorBox error={error} />}
-    {review !== null ? <>
+    {view === "export" ? <SnippetExport snippets={snippets} onBack={() => setView("list")} /> : view === "import" ? <SnippetImport snippets={snippets} onChange={onChange} onBack={() => setView("list")} /> : review !== null ? <>
       <p>Send this exact text followed by Enter to {name} on {connection} (terminal {terminalId})? Existing input at the cursor will also be submitted.</p>
       <pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{review}</pre>
       <div className="modal-actions"><button onClick={() => setReview(null)}>Back</button><button className="primary-button" onClick={() => {onInsert(review,true);onClose();}}>Insert and run</button></div>
@@ -43,6 +45,7 @@ export default function TerminalSnippets({ name, connection, terminalId, snippet
         <button onClick={() => {const problem=snippetError(text);setError(problem || (!label.trim() ? "Name this snippet first." : ""));if (!problem && label.trim()) onChange([...snippets.filter(s => s.name !== label.trim()), {id:crypto.randomUUID(),name:label.trim(),text}]);}}>Save snippet</button>
         <button onClick={() => insert(false)}>Insert</button><button onClick={() => insert(true)}>Review insert and run…</button>
       </div>
+      <div className="modal-actions"><button onClick={() => {setError("");setView("export");}}>Export snippets</button><button onClick={() => {setError("");setView("import");}}>Import snippets</button></div>
     </>}
   </Modal>;
 }
