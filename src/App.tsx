@@ -77,6 +77,7 @@ import {
   StatusDot,
 } from "./components";
 import Sidebar from "./Sidebar";
+import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
 import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
@@ -269,6 +270,7 @@ export default function App() {
   const pinOwner = pinConnectionIdentity(connection);
   // Ownership is captured at render time, independently of snapshot freshness.
   const pinsAvailable = inventoryHealth.current.key === pinOwner;
+  const podsAvailable = pinsAvailable;
   const projectHistory = useMemo(
     () => normalizeHistory(state.projectHistory),
     [state.projectHistory],
@@ -479,6 +481,7 @@ export default function App() {
           ...base,
           projectHistory: normalizeHistory(base.projectHistory),
           pinnedSeats: normalizePinnedSeats(base.pinnedSeats),
+          collapsedPods: normalizeCollapsedPods(base.collapsedPods),
           connections,
           preferences:
             base.preferences ??
@@ -2069,6 +2072,20 @@ export default function App() {
                 selectedRig={state.activeRig}
                 pinnedSeats={state.pinnedSeats || []}
                 pinsAvailable={pinsAvailable}
+                collapsedPods={state.collapsedPods || []}
+                podsAvailable={podsAvailable}
+                onTogglePod={(seat) => {
+                  if (!podsAvailable) return;
+                  setState((s) => {
+                    const current = s.connections.find((c) => c.id === s.activeConnection) ||
+                      s.connections[0] || local;
+                    if (pinConnectionIdentity(current) !== pinOwner) return s;
+                    return {
+                      ...s,
+                      collapsedPods: togglePodCollapsed(s.collapsedPods, podIdentity(current, seat)),
+                    };
+                  });
+                }}
                 onToggleSeatPin={(seat) => {
                   if (!pinsAvailable) return;
                   setState((s) => {
