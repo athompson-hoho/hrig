@@ -16,7 +16,7 @@ const seats = Object.freeze(statuses.map((status, id) => Object.freeze({
 })));
 
 test('specific filters match exact normalized statuses and all retains unclassified values', () => {
-  const expected = { all: seats.map(s => s.id), working: ['0'], idle: ['1'],
+  const expected = { all: seats.map(s => s.id), working: ['0', '6'], idle: ['1'],
     attention: ['2'], stopped: ['3', '4', '5'] };
   for (const choice of choices) {
     const result = filterSeatsByStatus(seats, choice);

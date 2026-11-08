@@ -530,6 +530,7 @@ export default function Sidebar({
                     podTokens.current.set(group.identity, podTokens.current.size);
                   const id = `${podNamespace}-pod-${podTokens.current.get(group.identity)}`;
                   const expanded = !collapsed.has(group.identity);
+                  const attention = group.seats.filter((seat) => seat.status === "attention").length;
                   const label = `${expanded ? "Collapse" : "Expand"} pod ${group.podLabel} in rig ${group.rigLabel}`;
                   return (
                     <div className="pod-group" key={group.identity}>
@@ -547,9 +548,11 @@ export default function Sidebar({
                         {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
                         <span className="pod-label">{group.podLabel} · {group.rigLabel}</span>
                         <span className="count">{group.seats.length}</span>
+                        {!expanded && attention > 0 && <span className="pod-attention"><span className="status-dot attention" aria-hidden="true" />{attention} need input</span>}
                       </button>
                       <span className="sr-only" id={`${id}-description`}>
                         {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
+                        {!expanded && attention > 0 && ` ${attention} need input.`}
                         {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
                       </span>
                       <div className="pod-content" id={id}>

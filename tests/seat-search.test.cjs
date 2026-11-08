@@ -132,6 +132,29 @@ function sidebar(overrides = {}, context = preferences()) {
   };
 }
 
+test('collapsed pod attention is derived only from current filtered unpinned rows', () => {
+  const pins = load('../src/seat-pins.ts');
+  const pods = load('../src/seat-pods.ts', { './seat-pins': pins });
+  const a = seat('a', { name: 'Alpha', status: 'attention' });
+  const b = seat('b', { name: 'Beta', status: 'attention' });
+  const idle = seat('idle', { status: 'idle' });
+  const other = seat('other', { rigId: 'r2', status: 'attention' });
+  const view = sidebar({ inventory: { rigs: [], seats: [a, b, idle, other] } });
+  const cues = () => view.nodes().filter(n => n.props?.className === 'pod-attention');
+  assert.equal(cues().length, 0, 'expanded rows carry their own statuses');
+  view.props.collapsedPods = [pods.podIdentity(view.props.connection, a)]; view.render();
+  assert.equal(textOf(cues()[0]), '2 need input');
+  const disclosure = view.nodes().find(n => n.props?.className === 'pod-disclosure');
+  assert.match(textOf(view.nodes().find(n => n.props?.id === disclosure.props['aria-describedby'])), /2 need input/);
+  view.query('Alpha'); assert.equal(textOf(cues()[0]), '1 need input');
+  view.query(''); view.props.pinnedSeats = [pins.seatPinIdentity(view.props.connection, a.id)]; view.render();
+  assert.equal(textOf(cues()[0]), '1 need input');
+  view.status('working'); assert.equal(cues().length, 0);
+  view.status('all'); view.props.inventory = { rigs: [], seats: [idle, other] }; view.render();
+  assert.equal(cues().length, 0, 'rerender removes attention no longer represented');
+  assert.deepEqual(view.calls, []);
+});
+
 test('pod disclosure toggles actual owner state without hiding favorites', () => {
   const pins = load('../src/seat-pins.ts');
   const connection = { id: 'host', kind: 'ssh', name: 'Host' };
@@ -565,7 +588,7 @@ test('Sidebar status select offers five ordered choices and reversibly filters a
     ['attention', 'Needs input'], ['stopped', 'Stopped'],
   ]);
   for (const [value, expected] of [
-    ['working', ['working']], ['idle', ['idle']], ['attention', ['attention']],
+    ['working', ['working', 'running']], ['idle', ['idle']], ['attention', ['attention']],
     ['stopped', ['stopped', 'exited', 'failed']], ['all', inventorySeats.map(item => item.id)],
   ]) {
     view.status(value);
@@ -632,8 +655,8 @@ test('Sidebar sorting composes rig query and status and preserves controls throu
     assert.equal(view.props.selectedRig, 'r1');
     assert.equal(view.statusSelect().props.value, 'all');
     view.status('working');
-    assert.deepEqual(view.rows().map(row => row.key), ['working']);
-    assert.equal(view.count(), 1);
+    assert.deepEqual(view.rows().map(row => row.key), mode === 'activity' ? ['working', 'running'] : ['running', 'working']);
+    assert.equal(view.count(), 2);
     view.status('all');
   }
   view.status('working');

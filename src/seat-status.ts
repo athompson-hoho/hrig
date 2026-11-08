@@ -10,6 +10,8 @@ export function filterSeatsByStatus(
     statusFilter === "all" ||
     (statusFilter === "stopped"
       ? ["stopped", "exited", "failed"].includes(seat.status)
-      : seat.status === statusFilter),
+      : statusFilter === "working"
+        ? seat.status === "working" || seat.status === "running"
+        : seat.status === statusFilter),
   );
 }
