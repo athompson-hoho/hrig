@@ -81,8 +81,10 @@ export default function TerminalTools({
   // An unmounted dialog must not leave a paste pending.
   useEffect(() => () => pendingAnswer.current?.(false), []);
   const paste = async () => {
+    // Bind the paste to the terminal that asked: a reconnect swaps terminal.current while the dialog is open.
+    const target = terminal.current;
     try {
-      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>terminal.current?.paste(text),pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
+      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>{ if (terminal.current === target) target?.paste(text); },pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
     } catch (e) {
       setNotice((e as Error).message);
     }
@@ -156,6 +158,8 @@ export default function TerminalTools({
       listener.dispose();
       addon.dispose();
       search.current = null;
+      // A confirmation asked of the old terminal must never paste into its replacement.
+      pendingAnswer.current?.(false);
     };
   }, [generation]);
   const find = (backwards = false, incremental = false) => {
