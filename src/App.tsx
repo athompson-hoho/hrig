@@ -129,6 +129,7 @@ import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import { filterCommands, pickFirst } from "./palette";
+import { recentKey, recentsFor, recordRecent } from "./recent-files";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -950,6 +951,15 @@ export default function App() {
     const fileConnection = source?.connection || connection;
     const fileRoot = source?.root || root;
     const id = `${diff ? "diff" : "file"}:${fileConnection.id}:${fileRoot}:${path}`;
+    if (!diff)
+      setState((s) => ({
+        ...s,
+        recentFiles: recordRecent(
+          s.recentFiles,
+          recentKey(fileConnection.id, fileRoot),
+          path,
+        ),
+      }));
     pendingFileFocus.current = id;
     const existing = model.getNodeById(id) as TabNode | undefined;
     if (existing && line)
@@ -2763,6 +2773,7 @@ export default function App() {
           <QuickOpen
             connection={connection}
             root={root}
+            recent={recentsFor(state.recentFiles, recentKey(connection.id, root))}
             onClose={() => setModal(null)}
             onOpen={(path, line) => {
               setModal(null);

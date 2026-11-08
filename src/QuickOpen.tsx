@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FileCode2, Search, ArrowUpRight } from "lucide-react";
 import { ErrorBox, Modal } from "./components";
 import type { Connection, FileEntry } from "./types";
+import { recentRows, scanResetsSelection } from "./recent-files";
 interface Results {
   files: (FileEntry & { score: number })[];
   matches: number;
@@ -13,11 +14,13 @@ interface Results {
 export default function QuickOpen({
   connection,
   root,
+  recent,
   onOpen,
   onClose,
 }: {
   connection: Connection;
   root: string;
+  recent: string[];
   onOpen: (path: string, line?: number) => void;
   onClose: () => void;
 }) {
@@ -36,6 +39,18 @@ export default function QuickOpen({
   const line = suffix
     ? Math.min(10000000, Math.max(1, Number(suffix[1])))
     : undefined;
+  // An empty query lists the recent files while the project scan keeps running
+  // behind them, so typing needs no extra round trip.
+  const recents = recentRows(query, recent);
+  const showingRecent = recents !== null;
+  const loading = busy && !showingRecent;
+  const rows: { name: string; path: string }[] =
+    recents ?? results?.files ?? [];
+  // A scan that finishes while the recents show must not undo the user's
+  // ArrowDown or hover selection; a ref because the scan callback outlives
+  // renders, the same pattern as the line ref.
+  const scanResets = useRef(true);
+  scanResets.current = scanResetsSelection(query, recent);
   useEffect(() => {
     let active = true;
     setBusy(true);
@@ -54,7 +69,7 @@ export default function QuickOpen({
             });
             if (active) {
               setResults(value);
-              setSelected(0);
+              if (scanResets.current) setSelected(0);
               if (openWhenReady.current) {
                 openWhenReady.current = false;
                 const first = value.files[0];
@@ -85,6 +100,13 @@ export default function QuickOpen({
     root,
   ]);
   useEffect(() => {
+    // Whatever Enter was waiting for belonged to a query that is gone; without
+    // this a pending Enter from a line-suffix query would open the first
+    // scanned file once the scan returns.
+    setSelected(0);
+    if (showingRecent) openWhenReady.current = false;
+  }, [showingRecent]);
+  useEffect(() => {
     list.current
       ?.querySelector('[aria-selected="true"]')
       ?.scrollIntoView({ block: "nearest" });
@@ -92,11 +114,11 @@ export default function QuickOpen({
   const lineRef = useRef(line);
   lineRef.current = line;
   const choose = (index: number, fromKeyboard = false) => {
-    if (busy && fromKeyboard) {
+    if (loading && fromKeyboard) {
       openWhenReady.current = true;
       return;
     }
-    const file = results?.files[index];
+    const file = rows[index];
     if (file) onOpen(file.path, line);
   };
   return (
@@ -119,13 +141,13 @@ export default function QuickOpen({
           onChange={(e) => setQuery(e.target.value)}
           aria-controls="quick-open-results"
           aria-activedescendant={
-            results?.files.length ? "quick-file-" + selected : undefined
+            rows.length ? "quick-file-" + selected : undefined
           }
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();
-              const count = results?.files.length || 0;
+              const count = rows.length;
               if (count)
                 setSelected(
                   (i) => (i + (e.key === "ArrowDown" ? 1 : -1) + count) % count,
@@ -141,22 +163,24 @@ export default function QuickOpen({
       </label>
       {error && <ErrorBox error={error} />}
       <div className="navigation-status" role="status">
-        {busy
-          ? "Searching project files…"
-          : results
-            ? `${results.files.length} shown · ${results.matches} matches · ${results.scannedFiles} files scanned${results.partial ? " · Partial scan: some folders were skipped or the scan limit was reached." : ""}${results.limited ? " · Best 100 matches shown." : ""}`
-            : ""}
+        {showingRecent
+          ? "Recent files · most recent first · type to search the project"
+          : loading
+            ? "Searching project files…"
+            : results
+              ? `${results.files.length} shown · ${results.matches} matches · ${results.scannedFiles} files scanned${results.partial ? " · Partial scan: some folders were skipped or the scan limit was reached." : ""}${results.limited ? " · Best 100 matches shown." : ""}`
+              : ""}
       </div>
       <div
         ref={list}
         id="quick-open-results"
         className="navigation-results"
-        aria-busy={busy}
-        style={busy && results ? { opacity: 0.6 } : undefined}
+        aria-busy={loading}
+        style={loading && results ? { opacity: 0.6 } : undefined}
         role="listbox"
-        aria-label="Matching project files"
+        aria-label={showingRecent ? "Recent files" : "Matching project files"}
       >
-        {results?.files.map((file, index) => (
+        {rows.map((file, index) => (
           <button
             id={"quick-file-" + index}
             key={file.path}
@@ -173,13 +197,17 @@ export default function QuickOpen({
             <ArrowUpRight size={13} />
           </button>
         ))}
-        {!busy && !error && results && !results.files.length && (
-          <div className="navigation-empty">
-            <FileCode2 size={25} />
-            <strong>No matching files</strong>
-            <p>Try fewer characters or a different part of the path.</p>
-          </div>
-        )}
+        {!busy &&
+          !error &&
+          !showingRecent &&
+          results &&
+          !results.files.length && (
+            <div className="navigation-empty">
+              <FileCode2 size={25} />
+              <strong>No matching files</strong>
+              <p>Try fewer characters or a different part of the path.</p>
+            </div>
+          )}
       </div>
       <p className="navigation-hint">
         ↑ ↓ choose · Enter opens · Escape cancels. Generated/dependency folders
