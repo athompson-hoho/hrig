@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const invoke =
   (channel) =>
   (...args) =>
@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld("hrig", {
   clipboardHasImage: invoke('terminal:clipboard-image'),
   pasteClipboardImage: invoke('terminal:paste-image'),
   readClipboardText: invoke('terminal:read-clipboard'),
+  pathForFile: (file) => {
+    try {
+      const path = webUtils.getPathForFile(file);
+      return typeof path === "string" ? path : "";
+    } catch {
+      return "";
+    }
+  },
   platform: process.platform,
   mobile: invoke('mobile:operation'),
   integrate: invoke('integrations:operation'),

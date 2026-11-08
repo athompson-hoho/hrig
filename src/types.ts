@@ -125,6 +125,7 @@ export interface HrigAPI {
   exportTerminal(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
   readClipboardText(): Promise<string>;
+  pathForFile(file: File): string;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};
   assessTeam(
     connection: Connection,

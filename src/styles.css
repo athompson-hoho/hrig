@@ -2501,6 +2501,10 @@ button:hover {
 .terminal-host .xterm {
   height: 100%;
 }
+.terminal-host.file-drop-active {
+  outline: 2px dashed var(--color-86cdb0);
+  outline-offset: -3px;
+}
 .terminal-ended {
   padding: 10px 14px;
   background: var(--color-34262c);

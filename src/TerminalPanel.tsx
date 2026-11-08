@@ -30,6 +30,7 @@ import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
 import { isDropped, publishTerminalDropped } from "./terminal-dropped";
 import { HostTintLabel, hostTintStyle, useHostTint } from "./HostTint";
+import TerminalFileDrop from "./TerminalFileDrop";
 export default function TerminalPanel({
   config,
   onFile,
@@ -451,6 +452,15 @@ export default function TerminalPanel({
       )}
       {error && <ErrorBox error={error} />}
       {commandNotice && <div className="editor-notice" role="status">{commandNotice}</div>}
+      <TerminalFileDrop
+        host={host}
+        terminal={terminalRef}
+        connection={config.connection}
+        rigControl={!!config.rigControlToken}
+        ready={ready}
+        ended={ended}
+        localShell={localShell}
+      />
       <TerminalReconnect
         seat={!!config.seat}
         retrying={retrying}
