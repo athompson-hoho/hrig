@@ -73,6 +73,7 @@ export interface WorkspaceState {
   projectHistory?: import("./project-history").RecentProject[];
   recentFiles?: import("./recent-files").RecentFiles;
   sidebarWidth?: number;
+  hostTints?: import("./host-tint").HostTints;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;
   windowBounds?: { x: number; y: number; width: number; height: number };

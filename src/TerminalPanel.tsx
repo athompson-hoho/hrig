@@ -29,6 +29,7 @@ import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
 import { isDropped, publishTerminalDropped } from "./terminal-dropped";
+import { HostTintLabel, hostTintStyle, useHostTint } from "./HostTint";
 export default function TerminalPanel({
   config,
   onFile,
@@ -42,6 +43,7 @@ export default function TerminalPanel({
 }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
+  const hostTint = useHostTint(config.connection);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const localShell = useRef(preferences["terminal.localShell"]).current;
@@ -380,7 +382,10 @@ export default function TerminalPanel({
   const activity = terminalSeatActivity(config.seat, seatActivityAvailable);
   return (
     <div className="terminal-panel" ref={panel}>
-      <div className="session-toolbar">
+      <div
+        className={hostTint?.color ? "session-toolbar host-tinted" : "session-toolbar"}
+        style={hostTintStyle(hostTint)}
+      >
         <span className="session-avatar">
           {config.seat ? config.seat.name.slice(0, 2).toUpperCase() : ">_"}
         </span>
@@ -409,6 +414,7 @@ export default function TerminalPanel({
         <span className="session-connection">
           <Plug size={11} />
           {config.connection.name}
+          <HostTintLabel tint={hostTint} />
         </span>
         <StatusDot
           status={ended !== null ? "stopped" : ready ? "idle" : "unknown"}

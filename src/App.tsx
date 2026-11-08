@@ -82,6 +82,8 @@ import {
 import Sidebar from "./Sidebar";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
+import { HostTintContext } from "./HostTint";
+import { normalizeHostTints } from "./host-tint";
 import {
   safeOverrides,
   validateOverrides,
@@ -317,6 +319,10 @@ export default function App() {
   const projectHistory = useMemo(
     () => normalizeHistory(state.projectHistory),
     [state.projectHistory],
+  );
+  const hostTints = useMemo(
+    () => normalizeHostTints(state.hostTints),
+    [state.hostTints],
   );
   const endpoint = connectionIdentity(
     connection,
@@ -2222,6 +2228,7 @@ export default function App() {
   void revision;
   return (
     <SettingsContext.Provider value={settingsContext}>
+      <HostTintContext.Provider value={hostTints}>
       <div className="app" inert={updateRestarting || undefined}>
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
           window.dispatchEvent(new CustomEvent("hrig:session-relaunched", {detail:{connectionId:relaunch.connection.id, seatId:relaunch.seat.id}}));
@@ -3358,6 +3365,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </HostTintContext.Provider>
     </SettingsContext.Provider>
   );
 }
