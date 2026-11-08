@@ -133,6 +133,13 @@ import ShortcutSheet from "./ShortcutSheet";
 import { hasOpenDialog, isHelpKey } from "./shortcuts";
 import { filterCommands, pickFirst } from "./palette";
 import {
+  describeClosedPanel,
+  planReopen,
+  popLatest,
+  pushClosed,
+  type ClosedPanel,
+} from "./closed-panels";
+import {
   recentKey,
   recentsFor,
   recordRecent,
@@ -239,6 +246,8 @@ export default function App() {
   const [projectOpening, setProjectOpening] = useState(false);
   const [recentPanels, setRecentPanels] = useState<string[]>([]);
   const modelOwners = useRef(new WeakMap<Model, string>());
+  // In memory only: closed panels are forgotten when the app restarts.
+  const closedPanels = useRef<ClosedPanel[]>([]);
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
@@ -1204,6 +1213,22 @@ export default function App() {
     modelChanged(next);
     notify("Rig sessions arranged");
   };
+  // Keeps only the kind and identifiers needed to reopen; call before the delete.
+  const rememberClosed = (id: string) => {
+    const node = model.getNodeById(id);
+    if (!(node instanceof TabNode)) return;
+    closedPanels.current = pushClosed(
+      closedPanels.current,
+      describeClosedPanel(
+        {
+          component: node.getComponent(),
+          name: node.getName(),
+          config: node.getConfig(),
+        },
+        workspace,
+      ),
+    );
+  };
   const closeTab = (id: string) => {
     history.current = { past: [], future: [] };
     const node = model.getNodeById(id) as TabNode | undefined;
@@ -1211,6 +1236,7 @@ export default function App() {
     if (config?.terminalId) void window.hrig.closeTerminal(config.terminalId);
     clearBuffer(id);
     dirtyTabs.current.delete(id);
+    rememberClosed(id);
     model.doAction(Actions.deleteTab(id));
     modelChanged(model);
   };
@@ -1243,6 +1269,7 @@ export default function App() {
       const config = node?.getConfig() as PanelConfig | undefined;
       if (config?.terminalId) void window.hrig.closeTerminal(config.terminalId);
       clearBuffer(id);
+      rememberClosed(id);
     }
     return action;
   };
@@ -1714,6 +1741,33 @@ export default function App() {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
     if (count > 0) notify(reconnectNotice(count));
   };
+  // Reopens only through openFile and openSeat, the same paths the sidebar uses.
+  const reopenClosedPanel = () => {
+    const { entry, stack } = popLatest(closedPanels.current, workspace);
+    if (!entry) {
+      setToast("Nothing to reopen");
+      return;
+    }
+    const plan = planReopen(entry, {
+      connectionIds: state.connections.map((c) => c.id),
+      activeConnectionId: connection.id,
+      inventoryReady: !!inventory && !inventoryError,
+      seats: seats.map((s) => ({ id: s.id, session: s.session })),
+    });
+    closedPanels.current =
+      plan.action === "skip" && plan.keep ? pushClosed(stack, entry) : stack;
+    if (plan.action === "openFile") {
+      const target = state.connections.find((c) => c.id === plan.connectionId);
+      if (target)
+        openFile(plan.path, plan.diff, plan.line, {
+          connection: target,
+          root: plan.root,
+        });
+    } else if (plan.action === "openSeat") {
+      const seat = seats.find((s) => s.id === plan.seatId);
+      if (seat) openSeat(seat);
+    } else setToast(plan.message);
+  };
   const commands = [
     {
       name: "Quick Open project file",
@@ -1824,6 +1878,12 @@ export default function App() {
       hint: "Ctrl Shift T",
       icon: <TerminalSquare size={16} />,
       action: openShell,
+    },
+    {
+      name: "Reopen closed panel",
+      hint: "Latest closed file or seat",
+      icon: <PanelTop size={16} />,
+      action: reopenClosedPanel,
     },
     {
       name: "Open all rig sessions",
