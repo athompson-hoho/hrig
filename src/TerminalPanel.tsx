@@ -24,6 +24,7 @@ import type { PanelConfig } from "./types";
 import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
+import { isDropped, publishTerminalDropped } from "./terminal-dropped";
 export default function TerminalPanel({
   config,
   onFile,
@@ -59,6 +60,14 @@ export default function TerminalPanel({
     const listener = (event: Event) => {
       const {id, command, text} = (event as CustomEvent).detail;
       if (id !== config.terminalId || config.rigControlToken) return;
+      if (command === "reconnect-dropped") {
+        // Re-check our own state: a healthy panel keeps its session. No close, no write.
+        if (isDropped({ rigControl: !!config.rigControlToken, ended, error, ready })) {
+          retries.current = 0;
+          setAttempt(n => n + 1);
+        }
+        return;
+      }
       const term = terminalRef.current;
       if (!term) return;
       if (command === "focus") term.focus();
@@ -79,6 +88,14 @@ export default function TerminalPanel({
     window.addEventListener("hrig:terminal-command",listener);
     return () => window.removeEventListener("hrig:terminal-command",listener);
   }, [config.terminalId,config.rigControlToken,ready,ended,error]);
+  useEffect(() => {
+    if (config.rigControlToken || !config.terminalId) return;
+    publishTerminalDropped(config.terminalId, isDropped({ rigControl: false, ended, error, ready }));
+  }, [config.terminalId,config.rigControlToken,ended,error,ready]);
+  useEffect(() => {
+    const id = config.terminalId;
+    return () => { if (id && !config.rigControlToken) publishTerminalDropped(id, false); };
+  }, [config.terminalId,config.rigControlToken]);
   const reconnectButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     // The PTY is gone, so keystrokes in this terminal go nowhere. Move focus

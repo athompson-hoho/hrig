@@ -97,6 +97,7 @@ import {
 import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
+import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
@@ -240,6 +241,7 @@ export default function App() {
   const [fileRevision, setFileRevision] = useState(0);
   const [events, setEvents] = useState<ActivityEntry[]>([]);
   const [toast, setToast] = useState("");
+  const [droppedTerminals, setDroppedTerminals] = useState<ReadonlySet<string>>(() => new Set());
   const [saveName, setSaveName] = useState("");
   const [search, setSearch] = useState("");
   const [fileMatches, setFileMatches] = useState<FileEntry[]>([]);
@@ -453,6 +455,7 @@ export default function App() {
     const timer = setTimeout(() => setToast(""), 4500);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => onTerminalDropped((id, dropped) => setDroppedTerminals(prev => markDropped(prev, id, dropped))), []);
   useEffect(() => {
     if (!window.hrig) {
       setBootError(
@@ -1629,7 +1632,8 @@ export default function App() {
     window.focus();
     setModal("panels");
   };
-  const terminalCommands = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken).flatMap(t => {
+  const terminalTabs = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken);
+  const terminalCommands = terminalTabs.flatMap(t => {
     const config = t.config as PanelConfig;
     const target = {id: config.terminalId!, name: t.name || "Terminal", connection: config.connection.name};
     return [
@@ -1646,6 +1650,10 @@ export default function App() {
         action: () => {model.doAction(Actions.selectTab(t.id!));setSnippetTarget(target);}},
     ];
   });
+  const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
+  const reconnectDropped = () => {
+    reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
+  };
   const commands = [
     {
       name: "Quick Open project file",
@@ -1785,6 +1793,9 @@ export default function App() {
     })),
     ...seats.map(seat => ({name: `Open ${seat.name} beside current`, hint: `${seat.rigName} · ${connection.name}`, icon: <Columns2 size={16}/>, action: () => openSeatBeside(seat)})),
     ...terminalCommands,
+    ...(droppedNow.length > 0
+      ? [{name: "Terminal: " + droppedLabel(droppedNow.length), hint: "Re-attach ended or errored terminals · others untouched", icon: <RefreshCw size={16} />, action: reconnectDropped}]
+      : []),
   ];
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
