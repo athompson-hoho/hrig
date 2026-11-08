@@ -77,7 +77,7 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
     const generation = current.current.generation;
     const isCurrent = () => current.current.mounted && current.current.owner === owner && current.current.generation === generation;
     setExportState({ owner, generation, busy: true, notice: 'Preparing diagnostics export…' });
-    let notice = 'Could not save diagnostics. Try again with a new file name in a writable folder.';
+    let notice = 'Could not save diagnostics. The destination may already exist, or the filesystem may not support this export. Try a new file name on a supported, writable filesystem.';
     try {
       const request = projectDiagnosticsRequest(report, effective, eligible);
       const result = await window.hrig.exportDiagnostics(request);

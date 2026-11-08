@@ -65,7 +65,7 @@ test('diagnostics export preserves finite projection and explicit local authorit
     const expectedSettings = { ...preferences }; delete expectedSettings['connections.defaultRoot'];
     assert.deepEqual(request.settings, expectedSettings, 'all nine useful finite settings survive');
     const expectedStatus = options.canceled ? 'Export canceled. No file was saved.' : options.fail
-      ? 'Could not save diagnostics. Try again with a new file name in a writable folder.' : 'Diagnostics saved.';
+      ? 'Could not save diagnostics. The destination may already exist, or the filesystem may not support this export. Try a new file name on a supported, writable filesystem.' : 'Diagnostics saved.';
     assert.deepEqual(observed.notices, ['Preparing diagnostics export…', expectedStatus]);
     const effectNames = observed.effects.map(e => e[0]);
     if (options.canceled) {

@@ -4344,6 +4344,7 @@ button:hover {
 .attention-inbox .attention-row section { min-width: 0; overflow-wrap: anywhere; }
 /* Doctor export uses the existing panel and button tokens, with local reflow. */
 .doctor-panel .tool-panel-heading { flex-wrap: wrap; }
+.doctor-panel .tool-panel-heading h3 { line-height: 1.2; }
 .doctor-panel .tool-panel-heading > div { min-width: 0; overflow-wrap: anywhere; }
 .diagnostics-export { margin: 0 0 16px; min-width: 0; }
 .diagnostics-export-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
