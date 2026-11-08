@@ -53,6 +53,7 @@ import {
   CircleHelp,
   PanelBottom,
   Keyboard,
+  Focus,
 } from "lucide-react";
 import type {
   Connection,
@@ -147,6 +148,13 @@ import {
   type ClosedPanel,
 } from "./closed-panels";
 import { planMaximize, type MaximizeRequest } from "./panel-maximize";
+import {
+  FOCUS_OFF,
+  focusAfterSidebar,
+  showStatusBar,
+  toggleFocus,
+  type FocusState,
+} from "./focus-mode";
 import {
   recentKey,
   recentsFor,
@@ -245,6 +253,8 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
+  // Focus mode is a view state of this session: it is never saved and never writes a preference.
+  const [focusMode, setFocusMode] = useState<FocusState>(FOCUS_OFF);
   const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const modalRef = useRef(modal);
@@ -1749,6 +1759,20 @@ export default function App() {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
     if (count > 0) notify(reconnectNotice(count));
   };
+  // Hides the sidebar and the status bar for this session; leaving puts the sidebar back as it was.
+  const toggleFocusMode = () => {
+    const step = toggleFocus(focusMode, {
+      sidebar,
+      statusBar: preferences["appearance.statusBar"],
+    });
+    setFocusMode(step.state);
+    if (step.view) setSidebar(step.view.sidebar);
+  };
+  // Opening the sidebar by any route (Ctrl+B, the palette, the rail, a project) ends focus mode and keeps it open.
+  useEffect(
+    () => setFocusMode((f) => focusAfterSidebar(f, sidebar)),
+    [sidebar],
+  );
   // Maximize only flips flexlayout's flag on one group: nothing is rebuilt, moved or resized by hand.
   const toggleMaximize = (
     request: MaximizeRequest,
@@ -1860,6 +1884,12 @@ export default function App() {
           "appearance.statusBar",
           !preferences["appearance.statusBar"],
         ),
+    },
+    {
+      name: "Toggle focus mode",
+      hint: "Hide the sidebar and status bar",
+      icon: <Focus size={16} />,
+      action: toggleFocusMode,
     },
     {
       name: "Open welcome guide",
@@ -2617,7 +2647,7 @@ export default function App() {
             </div>
           </main>
         </div>
-        {preferences["appearance.statusBar"] && (
+        {showStatusBar(focusMode, preferences["appearance.statusBar"]) && (
           <footer className="statusbar">
             <AccountStatus connection={connection} />
             <div>
