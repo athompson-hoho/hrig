@@ -125,6 +125,83 @@ function sidebar(overrides = {}, context = preferences()) {
   };
 }
 
+test('pod disclosure toggles actual owner state without hiding favorites', () => {
+  const pins = load('../src/seat-pins.ts');
+  const connection = { id: 'host', kind: 'ssh', name: 'Host' };
+  const favorite = seat('favorite', { name: 'Favorite' });
+  const ordinary = seat('ordinary', { name: 'Ordinary' });
+  let workspace = { connections: [connection], activeConnection: 'host',
+    pinnedSeats: [pins.seatPinIdentity(connection, favorite.id)], collapsedPods: [],
+    sidebarWidth: 321 };
+  let actualOnTogglePod;
+  const toggled = [];
+  const view = sidebar({ connection, inventory: { rigs: [], seats: [ordinary, favorite] },
+    pinnedSeats: workspace.pinnedSeats, collapsedPods: workspace.collapsedPods,
+    podsAvailable: true, onTogglePod(original) {
+      toggled.push(original);
+      actualOnTogglePod(original);
+      view.props.collapsedPods = workspace.collapsedPods;
+    } });
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite', 'ordinary']);
+  assert.equal(view.count(), 2);
+  const disclosure = action => view.nodes().find(node => node.type === 'button' &&
+    node.props['aria-label'] === `${action} pod Builders in rig RigNorth`);
+  const collapse = disclosure('Collapse');
+  assert.ok(collapse, 'Sidebar renders native Collapse pod Builders in rig RigNorth disclosure');
+
+  // Resolve future owner/helper seams only after the baseline behavior assertion:
+  // missing imports or callback setup must never masquerade as the intended RED.
+  const pods = load('../src/seat-pods.ts', { './seat-pins': pins });
+  const app = ts.createSourceFile('App.tsx', fs.readFileSync('src/App.tsx', 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const callbacks = [];
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.text === 'onTogglePod') {
+      callbacks.push(node.initializer.expression);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(app);
+  assert.equal(callbacks.length, 1, 'actual App pod callback exists uniquely');
+  const scope = { ...pins, ...pods, podsAvailable: true,
+    pinOwner: pins.pinConnectionIdentity(connection), local: connection,
+    setState(update) { workspace = update(workspace); } };
+  vm.runInNewContext(ts.transpileModule(`callback = (${callbacks[0].getText(app)});`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText, scope);
+  actualOnTogglePod = scope.callback;
+  const identity = pods.podIdentity(connection, ordinary);
+  const controlledId = collapse.props['aria-controls'];
+  const region = () => view.nodes().find(node => node.props?.id === controlledId);
+  assert.equal(collapse.props.type, 'button');
+  assert.equal(collapse.props.title, 'Collapse pod Builders in rig RigNorth');
+  assert.equal(collapse.props['aria-expanded'], true);
+  assert.equal(collapse.props.disabled, false);
+  assert.equal(typeof controlledId, 'string');
+  assert.ok(region(), 'expanded disclosure controls a mounted container');
+  assert.ok(textOf(region()).includes('Ordinary'));
+  assert.equal(textOf(region()).includes('Favorite'), false, 'favorite is outside controlled rows');
+  collapse.props.onClick();
+  view.render();
+  assert.deepEqual(Array.from(workspace.collapsedPods), [identity]);
+  assert.equal(workspace.sidebarWidth, 321);
+  assert.equal(disclosure('Expand').props['aria-expanded'], false);
+  assert.equal(disclosure('Expand').props['aria-controls'], controlledId);
+  assert.ok(region(), 'collapsed disclosure keeps its controlled container mounted');
+  assert.equal(textOf(region()), '', 'collapsed row actions are not rendered');
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite']);
+  assert.equal(view.count(), 2, 'matched count includes collapsed rows');
+  disclosure('Expand').props.onClick();
+  view.render();
+  assert.deepEqual(Array.from(workspace.collapsedPods), []);
+  assert.equal(disclosure('Collapse').props['aria-expanded'], true);
+  assert.equal(disclosure('Collapse').props['aria-controls'], controlledId);
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite', 'ordinary']);
+  assert.equal(view.count(), 2);
+  assert.deepEqual(toggled, [ordinary, ordinary]);
+  assert.deepEqual(view.calls, [], 'pod disclosure never invokes existing host actions');
+});
+
 test('Sidebar native pin control reversibly orders rows through its local callback without host actions', () => {
   const toggled = [];
   const pins = load('../src/seat-pins.ts');
