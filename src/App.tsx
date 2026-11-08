@@ -50,6 +50,7 @@ import {
   ExternalLink,
   RefreshCw,
   CircleHelp,
+  PanelBottom,
   Keyboard,
 } from "lucide-react";
 import type {
@@ -1696,6 +1697,25 @@ export default function App() {
       icon: <PanelLeft size={16} />,
       action: () => setSidebar((v) => !v),
     },
+    {
+      name: "Toggle status bar",
+      hint: "Appearance setting",
+      icon: <PanelBottom size={16} />,
+      action: () =>
+        settingsContext.update(
+          Object.hasOwn(projectPreferences, "appearance.statusBar")
+            ? "project"
+            : "user",
+          "appearance.statusBar",
+          !preferences["appearance.statusBar"],
+        ),
+    },
+    {
+      name: "Open welcome guide",
+      hint: "Workspace guide",
+      icon: <CircleHelp size={16} />,
+      action: () => setModal("guide"),
+    },
     ...[
       ["Visual workspace arranger", "arranger"],
       ["Task boards and integrations", "workItems"],
@@ -1749,6 +1769,12 @@ export default function App() {
       hint: `${seats.length} seats`,
       icon: <Columns2 size={16} />,
       action: openAll,
+    },
+    {
+      name: "Refresh rigs and workspace",
+      hint: "Seats and project files",
+      icon: <RefreshCw size={16} />,
+      action: refreshAll,
     },
     {
       name: "Arrange: Team",

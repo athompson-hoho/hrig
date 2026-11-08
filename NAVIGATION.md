@@ -11,3 +11,5 @@ Ctrl+Shift+P (Cmd+Shift+P) finds existing panels in the current workspace by tit
 Project path spelling remains stable to preserve previous layout keys. Different aliases for the same remote folder can remain separate entries. Existing content search remains literal; regex, whole-word and include/exclude content filters are future HR-16 work.
 
 Seat rows and the command center offer Open seat beside current. This reuses an existing seat panel and puts it to the right of the active group. See [terminal splits](docs/terminal-splits.md) for behavior and existing arrange/navigator controls.
+
+The command center (Ctrl+K, Cmd+K on macOS) also runs Toggle sidebar, Toggle status bar, Refresh rigs and workspace and Open welcome guide; Toggle status bar flips the appearance.statusBar setting, so the same entry turns it back on. Typing several words keeps only the commands whose name or hint contains every word, lists name matches before hint-only matches, and Enter runs the first command in that list. These commands only change what is shown or re-read data and none sends anything to a terminal or seat.
