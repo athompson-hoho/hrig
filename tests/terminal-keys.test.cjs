@@ -13,6 +13,7 @@ const mod = new Module("terminal-keys", module);
 mod._compile(built.outputFiles[0].text, "terminal-keys");
 const { classifyTerminalKey } = mod.exports;
 const { terminalOwnsKey } = mod.exports;
+const { clearShortcutLabel } = mod.exports;
 const k = (key, mods = {}) => ({
   key,
   ctrlKey: false,
@@ -120,5 +121,17 @@ test("terminalOwnsKey and classifyTerminalKey never disagree (App steps aside ex
     assert.equal(terminalOwnsKey(ev, platform, inTerminal), clear);
     // Outside a terminal the App handler keeps the key, so the palette still opens.
     assert.equal(terminalOwnsKey(ev, platform, outsideTerminal), false);
+  }
+});
+test("clearShortcutLabel is Cmd K on macOS and Ctrl Shift K elsewhere", () => {
+  assert.equal(clearShortcutLabel("darwin"), "Cmd K");
+  assert.equal(clearShortcutLabel("win32"), "Ctrl Shift K");
+  assert.equal(clearShortcutLabel("linux"), "Ctrl Shift K");
+  assert.equal(clearShortcutLabel("unknown"), "Ctrl Shift K");
+});
+test("the clear label names modifiers that classifyTerminalKey treats as clear", () => {
+  assert.equal(classifyTerminalKey(k("k", { metaKey: true }), "darwin", false), "clear");
+  for (const platform of ["win32", "linux", "unknown"]) {
+    assert.equal(classifyTerminalKey(k("k", { ctrlKey: true, shiftKey: true }), platform, false), "clear");
   }
 });

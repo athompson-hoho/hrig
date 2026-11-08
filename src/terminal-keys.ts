@@ -34,6 +34,10 @@ export function classifyTerminalKey(
   if (key === "k") return mac !== event.shiftKey ? "clear" : "pass";
   return "pass";
 }
+/** Palette hint text for the clear shortcut on the given platform. */
+export function clearShortcutLabel(platform: string): string {
+  return platform === "darwin" ? "Cmd K" : "Ctrl Shift K";
+}
 /** CSS selector of the root element of a terminal panel. */
 export const TERMINAL_PANEL_SELECTOR = ".terminal-panel";
 /**

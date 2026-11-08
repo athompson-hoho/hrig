@@ -509,6 +509,7 @@ export default function SettingsPage({ project }: { project: string }) {
                 ["Ctrl Shift P", "Find open panels"],
                 ["Ctrl B", "Toggle sidebar"],
                 ["Ctrl Shift T", "New shell"],
+                ["Ctrl Shift K", "Clear focused terminal scrollback (Cmd K on macOS)"],
                 ["Ctrl S", "Save editor file"],
               ].map(([key, label]) => (
                 <div key={key}>

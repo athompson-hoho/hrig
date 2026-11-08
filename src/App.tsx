@@ -126,7 +126,7 @@ import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
-import { terminalOwnsKey } from "./terminal-keys";
+import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -1640,7 +1640,8 @@ export default function App() {
     return [
       ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
         name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
-        hint: `${target.name} · ${config.connection.name} · ${target.id}`,
+        hint: `${target.name} · ${config.connection.name} · ${target.id}` +
+          (command === "clear" ? ` · ${clearShortcutLabel(window.hrig.platform)}` : ""),
         icon: <Columns2 size={16} />,
         action: () => {
           model.doAction(Actions.selectTab(t.id!));
@@ -3008,7 +3009,7 @@ export default function App() {
                 {
                   icon: <Keyboard />,
                   title: "A few useful shortcuts",
-                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
+                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl Shift K: clear terminal (Cmd K on macOS) · Ctrl S: save file.",
                 },
               ].map((item) => (
                 <div key={item.title}>
