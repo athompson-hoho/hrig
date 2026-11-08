@@ -29,6 +29,9 @@ export interface ReopenKeyEvent extends HelpKeyEvent {
 /** The same key event shape serves the maximize chord. */
 export type MaximizeKeyEvent = ReopenKeyEvent;
 
+/** The same key event shape serves the focus mode chord. */
+export type FocusModeKeyEvent = ReopenKeyEvent;
+
 /**
  * The shortcut catalog for a platform, rebuilt on every call. It mirrors the
  * App key handler, terminal-keys, terminal-zoom and the editor save command;
@@ -89,6 +92,11 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           id: "workspace.maximizePanel",
           label: "Maximize or restore the focused panel group",
           keys: [`${mod}+Shift+M`],
+        },
+        {
+          id: "workspace.focusMode",
+          label: "Hide or show the sidebar and status bar (focus mode)",
+          keys: [`${mod}+Shift+D`],
         },
         {
           id: "workspace.shortcuts",
@@ -243,4 +251,30 @@ export function isMaximizePanelKey(
 /** Palette hint text for the maximize shortcut on the given platform. */
 export function maximizeShortcutHint(platform: string): string {
   return platform === "darwin" ? "Cmd Shift M" : "Ctrl Shift M";
+}
+
+/**
+ * True for Shift+D with Cmd on macOS or Ctrl elsewhere and no other modifier,
+ * the chord that turns focus mode on or off. Monaco binds D only with Ctrl or
+ * Cmd alone (add selection to next match) and, on macOS, with the physical
+ * Control key alone (delete right), never with Shift, so none of its keys is
+ * taken. A held key (repeat), composing or already handled events never
+ * match, so one press flips focus mode once.
+ */
+export function isFocusModeKey(
+  event: FocusModeKeyEvent,
+  platform: string,
+): boolean {
+  if (event.altKey || event.isComposing || event.repeat) return false;
+  if (event.defaultPrevented || !event.shiftKey) return false;
+  if (typeof event.key !== "string" || event.key.toLowerCase() !== "d")
+    return false;
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
+/** Palette hint text for the focus mode shortcut on the given platform. */
+export function focusModeShortcutHint(platform: string): string {
+  return platform === "darwin" ? "Cmd Shift D" : "Ctrl Shift D";
 }

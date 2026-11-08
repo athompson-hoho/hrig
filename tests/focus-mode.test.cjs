@@ -589,3 +589,196 @@ test("focus-mode is session view state: nothing is stored, the preference is nev
   assert.equal(count(app, "focusAfterSidebar("), 1);
   assert.equal(count(app, "FOCUS_OFF"), 2, "the import and the first state");
 });
+
+test("focus-mode chord, hint and docs: the shortcut is claimed after the other chords and before the generic ones, acts only with no dialog open, is found in no other handler, and NAVIGATION.md says what it does", () => {
+  const DOT = String.fromCharCode(183);
+  const app = appText();
+  assert.ok(
+    has(
+      app,
+      'import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";',
+    ),
+  );
+  assert.ok(
+    has(
+      app,
+      "hint: `Hide the sidebar and status bar " +
+        DOT +
+        " ${focusModeShortcutHint(window.hrig.platform)}`,",
+    ),
+  );
+  assert.equal(count(app, "focusModeShortcutHint(window.hrig.platform)"), 1);
+  const handler = between(
+    app,
+    "const handler = (event: KeyboardEvent) => {",
+    "const windows = [",
+  );
+  const order = [
+    "if (isHelpKey(",
+    "if (isReopenPanelKey(event, window.hrig.platform)) {",
+    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
+    "if (isFocusModeKey(event, window.hrig.platform)) {",
+    "if (event.ctrlKey || event.metaKey) {",
+  ].map((needle) => handler.indexOf(tight(needle)));
+  assert.ok(
+    order.every((at, i) => at >= 0 && (i === 0 || order[i - 1] < at)),
+    "claim order: " + order,
+  );
+  assert.ok(
+    has(
+      handler,
+      "if (isFocusModeKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode(); return; }",
+    ),
+    "claimed always, acts only with no dialog open",
+  );
+  assert.equal(count(app, "toggleFocusMode("), 1, "the chord is the one call");
+  assert.equal(count(app, "isFocusModeKey("), 1);
+  // What was there before is untouched: the early return, the claimed letters,
+  // the other claimed chords and Ctrl+B.
+  assert.ok(
+    has(
+      handler,
+      "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (event.key.toLowerCase() === "b") { event.preventDefault(); setSidebar((v) => !v); }',
+    ),
+    "Ctrl+B still toggles the sidebar",
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (isMaximizePanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleMaximize("toggle", event.target); return; }',
+    ),
+  );
+  assert.ok(
+    !/fit\(|resizeTerminal|ResizeObserver|dispatchEvent|setTimeout/.test(
+      handler,
+    ),
+  );
+  assert.equal(count(app, '"Escape"'), 1, "no new Escape handler");
+  assert.equal(
+    count(app, 'addEventListener("keydown"'),
+    2,
+    "no second handler",
+  );
+
+  // The chord letter, audited again by machine: no other source file compares
+  // a key with d, and only the shortcut module and the App know the predicate.
+  const files = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((name) => /\.(ts|tsx)$/.test(name))
+    .sort();
+  assert.deepEqual(
+    files.filter((name) =>
+      /\bkey(?:\.toLowerCase\(\))?\s*[!=]==?\s*"d"|case "d"/i.test(
+        stripComments(read("src/" + name)),
+      ),
+    ),
+    ["shortcuts.ts"],
+    "only the predicate compares a key with d",
+  );
+  assert.deepEqual(
+    files.filter((name) =>
+      stripComments(read("src/" + name)).includes("isFocusModeKey("),
+    ),
+    ["App.tsx", "shortcuts.ts"],
+  );
+  assert.deepEqual(
+    files.filter((name) =>
+      /\b(?:enterFocus|exitFocus|toggleFocus|focusAfterSidebar|showStatusBar)\(/.test(
+        stripComments(read("src/" + name)),
+      ),
+    ),
+    ["App.tsx", "focus-mode.ts"],
+  );
+  // Nothing outside src listens for keys: no shortcut layer in the main
+  // process, the pop-out page, the mobile app or the start page, and the one
+  // application menu holds only the standard macOS roles.
+  const scan = (dir, found) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) scan(file, found);
+      else if (/\.(cjs|mjs|js|html|ts|tsx)$/.test(entry.name)) found.push(file);
+    }
+    return found;
+  };
+  const outside = [
+    ...scan(path.join(root, "electron"), []),
+    ...scan(path.join(root, "public"), []),
+    ...scan(path.join(root, "mobile"), []),
+    path.join(root, "index.html"),
+  ];
+  assert.ok(outside.length > 10);
+  for (const file of outside) {
+    const text = fs.readFileSync(file, "utf8");
+    assert.ok(
+      !/before-input-event|globalShortcut|registerShortcut|accelerator|keydown|onKeyDown|keyup|keypress/.test(
+        text,
+      ),
+      path.relative(root, file) + " handles keys",
+    );
+  }
+  assert.ok(
+    collapse(read("electron/main.cjs")).includes(
+      "Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]):null);",
+    ),
+  );
+
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff);
+  const lines = raw.split("\n");
+  assert.equal(lines.at(-1), "", "the file ends with one line feed");
+  const mine = lines.filter((line) =>
+    line.startsWith("The command center entry Toggle focus mode"),
+  );
+  assert.equal(mine.length, 1);
+  const after = (start) =>
+    lines.indexOf(mine[0]) > lines.findIndex((line) => line.startsWith(start));
+  assert.ok(after("The command center entry Reopen closed panel"));
+  assert.ok(after("Double-click the empty part of a panel group's tab strip"));
+  assert.ok(/^[\x20-\x7e]*$/.test(mine[0]), "ASCII only");
+  for (const fragment of [
+    "or Ctrl+Shift+D (Cmd+Shift+D on macOS)",
+    "hides the sidebar and the status bar so the panels get the whole window",
+    "running it again puts both back exactly as they were",
+    "a sidebar or status bar you had already closed stays closed",
+    "Focus mode is a view state for the current session only",
+    "It is not a setting, nothing is saved or written",
+    "the Show status bar preference is never changed",
+    "choosing Toggle status bar while focus mode is on changes the saved preference and takes effect when you leave",
+    "Opening the sidebar by any route (Ctrl+B, Toggle sidebar, the sidebar button, an activity rail icon, opening a project) ends focus mode and keeps the sidebar open",
+    "The activity rail and toolbar stay visible",
+    "restarting the app starts with focus mode off",
+    "The shortcut is ignored while a dialog is open and does not repeat while held",
+    "in a terminal it replaces Ctrl+Shift+D, which no longer reaches the shell",
+    "plain Ctrl+D, including Monaco's add selection to next match in the editor, is unchanged",
+    "nothing is typed or sent",
+  ])
+    assert.ok(mine[0].includes(fragment), "NAVIGATION.md lacks: " + fragment);
+  assert.ok(
+    raw.includes("also runs Toggle sidebar, Toggle status bar"),
+    "the earlier command center sentence is still there",
+  );
+});

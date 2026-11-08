@@ -20,6 +20,7 @@ const shortcuts = load("src/shortcuts.ts");
 const { shortcutGroups, isHelpKey, hasOpenDialog } = shortcuts;
 const { isReopenPanelKey, reopenShortcutHint } = shortcuts;
 const { isMaximizePanelKey, maximizeShortcutHint } = shortcuts;
+const { isFocusModeKey, focusModeShortcutHint } = shortcuts;
 const { classifyTerminalKey, TERMINAL_PANEL_SELECTOR } = load(
   "src/terminal-keys.ts",
 );
@@ -99,7 +100,9 @@ test("shortcuts tracer: a bare question mark on the page opens, in a field or un
     ["Workspace", "Terminal", "Editor"],
   );
   assert.deepEqual(Object.keys(shortcuts).sort(), [
+    "focusModeShortcutHint",
     "hasOpenDialog",
+    "isFocusModeKey",
     "isHelpKey",
     "isMaximizePanelKey",
     "isReopenPanelKey",
@@ -140,6 +143,7 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.newShell",
       "workspace.reopenPanel",
       "workspace.maximizePanel",
+      "workspace.focusMode",
       "workspace.shortcuts",
       "terminal.clear",
       "editor.save",
@@ -160,6 +164,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.newShell": ["Cmd+Shift+T"],
     "workspace.reopenPanel": ["Cmd+Shift+H"],
     "workspace.maximizePanel": ["Cmd+Shift+M"],
+    "workspace.focusMode": ["Cmd+Shift+D"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Cmd+F"],
     "terminal.copy": ["Cmd+C"],
@@ -181,6 +186,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.newShell": ["Ctrl+Shift+T"],
     "workspace.reopenPanel": ["Ctrl+Shift+H"],
     "workspace.maximizePanel": ["Ctrl+Shift+M"],
+    "workspace.focusMode": ["Ctrl+Shift+D"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Ctrl+F"],
     "terminal.copy": ["Ctrl+Shift+C"],
@@ -746,5 +752,201 @@ test("shortcuts maximize chord is claimed by no terminal, zoom, help, editor, ap
     found.plainCtrlM,
     [toggle],
     "plain Ctrl+M is the only other M binding",
+  );
+});
+
+function focusEvent(extra = {}) {
+  return {
+    key: "D",
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: true,
+    ...extra,
+  };
+}
+
+test("shortcuts focus mode chord is Shift+D with Cmd on macOS or Ctrl elsewhere and nothing else", () => {
+  for (const platform of PLATFORMS) {
+    const [text, ...more] = byId(platform)["workspace.focusMode"];
+    assert.equal(more.length, 0);
+    assert.equal(text, platform === "darwin" ? "Cmd+Shift+D" : "Ctrl+Shift+D");
+    assert.equal(isFocusModeKey(chord(text), platform), true, platform);
+    assert.equal(focusModeShortcutHint(platform), text.split("+").join(" "));
+    assert.match(
+      labelOf(platform, "workspace.focusMode"),
+      /Hide or show the sidebar and status bar \(focus mode\)/,
+    );
+    for (const id of ["workspace.reopenPanel", "workspace.maximizePanel"]) {
+      const other = byId(platform)[id][0];
+      assert.equal(isFocusModeKey(chord(other), platform), false, id);
+    }
+    assert.equal(isReopenPanelKey(chord(text), platform), false);
+    assert.equal(isMaximizePanelKey(chord(text), platform), false);
+  }
+  assert.equal(focusModeShortcutHint(""), "Ctrl Shift D");
+  assert.equal(focusModeShortcutHint("freebsd"), "Ctrl Shift D");
+  const lower = { key: "d", metaKey: true, ctrlKey: false };
+  assert.equal(isFocusModeKey(focusEvent(lower), "darwin"), true);
+  assert.equal(isFocusModeKey(focusEvent({ key: "d" }), "linux"), true);
+  for (const platform of ["win32", "linux", "freebsd", ""]) {
+    assert.equal(isFocusModeKey(focusEvent(), platform), true, platform);
+    for (const extra of [
+      { metaKey: true },
+      { ctrlKey: false },
+      { ctrlKey: false, metaKey: true },
+    ])
+      assert.equal(
+        isFocusModeKey(focusEvent(extra), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+  }
+  for (const extra of [
+    { ctrlKey: true, metaKey: false },
+    { ctrlKey: true, metaKey: true },
+    { ctrlKey: false, metaKey: false },
+  ])
+    assert.equal(
+      isFocusModeKey(focusEvent(extra), "darwin"),
+      false,
+      "darwin " + JSON.stringify(extra),
+    );
+  for (const platform of PLATFORMS) {
+    const mod =
+      platform === "darwin"
+        ? { ctrlKey: false, metaKey: true }
+        : { ctrlKey: true, metaKey: false };
+    assert.equal(isFocusModeKey(focusEvent(mod), platform), true);
+    for (const extra of [
+      { shiftKey: false },
+      { altKey: true },
+      { altKey: true, ctrlKey: true },
+      { isComposing: true },
+      { repeat: true },
+      { defaultPrevented: true },
+      { key: "H" },
+      { key: "M" },
+      { key: "T" },
+      { key: "Escape" },
+      { key: "" },
+      { key: "Process" },
+      { key: undefined },
+      { key: 68 },
+    ])
+      assert.equal(
+        isFocusModeKey(focusEvent({ ...mod, ...extra }), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+    for (const key of "abcefghijklmnopqrstuvwxyz0123456789,.-=") {
+      assert.equal(
+        isFocusModeKey(focusEvent({ ...mod, key }), platform),
+        false,
+        platform + key,
+      );
+    }
+  }
+});
+
+test("shortcuts focus mode chord is claimed by no terminal, zoom, help, editor, app or Monaco binding", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  for (const platform of PLATFORMS) {
+    const text = byId(platform)["workspace.focusMode"][0];
+    for (const selected of [false, true])
+      assert.equal(
+        classifyTerminalKey(chord(text), platform, selected),
+        "pass",
+        platform + " terminal " + selected,
+      );
+    assert.equal(zoomAction(chord(text)), null, platform + " zoom");
+    assert.equal(isHelpKey(chord(text), element("BODY"), false), false);
+    const all = [];
+    for (const group of shortcutGroups(platform))
+      for (const entry of group.shortcuts)
+        for (const key of entry.keys) all.push([entry.id, key]);
+    assert.deepEqual(
+      all.filter(([, key]) => key.toLowerCase() === text.toLowerCase()),
+      [["workspace.focusMode", text]],
+      platform + " the chord is listed once",
+    );
+    for (const [id, key] of all) {
+      if (id === "workspace.focusMode" || !key.includes("+")) continue;
+      assert.equal(
+        isFocusModeKey(chord(key), platform),
+        false,
+        platform + " " + id + " " + key,
+      );
+    }
+  }
+  assert.equal(
+    classifyTerminalKey(chord("Ctrl+D"), "linux", false),
+    "pass",
+    "plain Ctrl+D is not the focus mode chord",
+  );
+  assert.equal(isFocusModeKey(chord("Ctrl+D"), "linux"), false);
+  assert.equal(isFocusModeKey(chord("Ctrl+Shift+D"), "darwin"), false);
+  assert.equal(isFocusModeKey(chord("Cmd+D"), "darwin"), false);
+  const editor = fs.readFileSync(
+    path.join(__dirname, "..", "src", "EditorPanel.tsx"),
+    "utf8",
+  );
+  assert.equal(
+    editor.split("editor.addCommand(").length - 1,
+    1,
+    "the editor registers one command of its own",
+  );
+  assert.ok(
+    /editor\.addCommand\(\s*monaco\.KeyMod\.CtrlCmd \| monaco\.KeyCode\.KeyS,/.test(
+      editor,
+    ),
+    "and it is Save, so Ctrl+Shift+D is never a Monaco command of the app",
+  );
+
+  // Monaco's own bindings, read from the installed package: re-audit on an upgrade.
+  const monaco = path.join(__dirname, "..", "node_modules", "monaco-editor");
+  const version = JSON.parse(
+    fs.readFileSync(path.join(monaco, "package.json"), "utf8"),
+  ).version;
+  assert.match(
+    version,
+    /^0\.56\./,
+    "Monaco changed to " + version + ": audit Shift+D again",
+  );
+  const found = {};
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (entry.name.endsWith(".js")) {
+        const lines = fs
+          .readFileSync(file, "utf8")
+          .split("\n")
+          .filter((line) => line.includes("KeyCode.KeyD */"));
+        if (lines.length > 0) found[path.relative(monaco, file)] = lines;
+      }
+    }
+  };
+  walk(path.join(monaco, "esm", "vs", "editor"));
+  const names = Object.keys(found).sort();
+  assert.deepEqual(
+    names.map((name) => path.basename(name)),
+    ["coreCommands.js", "multicursor.js"],
+    "only these Monaco files bind the D key",
+  );
+  for (const lines of Object.values(found))
+    for (const line of lines)
+      assert.ok(
+        !line.includes("KeyMod.Shift"),
+        "a Monaco D binding uses Shift: " + line.trim(),
+      );
+  const multicursor = found[names.find((n) => n.endsWith("multicursor.js"))];
+  assert.equal(multicursor.length, 2, "add next match and its K D chord");
+  const core = found[names.find((n) => n.endsWith("coreCommands.js"))];
+  assert.equal(core.length, 1);
+  assert.ok(
+    core[0].includes("256 /* KeyMod.WinCtrl */ | 34 /* KeyCode.KeyD */"),
+    "macOS Control+D (delete right) is the only other D binding",
   );
 });

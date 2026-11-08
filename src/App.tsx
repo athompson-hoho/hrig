@@ -139,6 +139,7 @@ import {
   reopenShortcutHint,
 } from "./shortcuts";
 import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
+import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1887,7 +1888,7 @@ export default function App() {
     },
     {
       name: "Toggle focus mode",
-      hint: "Hide the sidebar and status bar",
+      hint: `Hide the sidebar and status bar · ${focusModeShortcutHint(window.hrig.platform)}`,
       icon: <Focus size={16} />,
       action: toggleFocusMode,
     },
@@ -2063,6 +2064,13 @@ export default function App() {
         event.stopPropagation();
         if (modal === null && !hasOpenDialog(event.target))
           toggleMaximize("toggle", event.target);
+        return;
+      }
+      // Same rule: claimed so no shell sees it; focus mode never writes a preference.
+      if (isFocusModeKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode();
         return;
       }
       if (event.ctrlKey || event.metaKey) {
