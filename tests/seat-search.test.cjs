@@ -72,6 +72,10 @@ function sidebar(overrides = {}, context = preferences()) {
     // missing-module RED: the actual absent control must fail its assertion.
     './seat-sort': fs.existsSync(path.join(__dirname, '../src/seat-sort.ts'))
       ? load('../src/seat-sort.ts') : {},
+    // Optional only for the baseline RED: absence must fail the actual control
+    // assertion rather than module setup. GREEN injects the real pin helper.
+    './seat-pins': fs.existsSync(path.join(__dirname, '../src/seat-pins.ts'))
+      ? load('../src/seat-pins.ts') : {},
     './seat-search': fs.existsSync(require('node:path').join(__dirname, '../src/seat-search.ts'))
       ? load('../src/seat-search.ts') : {},
   }).default;
@@ -79,6 +83,7 @@ function sidebar(overrides = {}, context = preferences()) {
     section: 'sessions', connection: { id: 'host', kind: 'ssh', name: 'Host' }, root: '~',
     inventory: { rigs: [], seats, sampledAt: new Date().toISOString() }, inventoryError: '',
     busy: false, selectedRig: 'r1', fileRevision: 0,
+    pinnedSeats: [], pinsAvailable: true, onToggleSeatPin() {},
     ...Object.fromEntries(['onRig', 'onRefresh', 'onProject', 'onConnect', 'onManageRigs',
       'onSeat', 'onSeatBeside', 'onRelaunch', 'onDrag', 'onFile', 'onDiff'].map(key => [key, action])),
     ...overrides,
@@ -119,6 +124,44 @@ function sidebar(overrides = {}, context = preferences()) {
       n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
   };
 }
+
+test('Sidebar native pin control reversibly orders rows through its local callback without host actions', () => {
+  const toggled = [];
+  const view = sidebar({ onToggleSeatPin(original) {
+    toggled.push(original);
+    const { seatPinIdentity, toggleSeatPin } = load('../src/seat-pins.ts');
+    view.props.pinnedSeats = toggleSeatPin(view.props.pinnedSeats,
+      seatPinIdentity(view.props.connection, original.id));
+  } });
+  assert.deepEqual(view.rows().map(row => row.key), ['a', 'b']);
+  assert.equal(view.count(), 2);
+  const findPin = name => view.nodes().find(node => node.type === 'button' &&
+    node.props['aria-label'] === name);
+  const pin = findPin('Pin session Bob in RigNorth');
+  assert.ok(pin, 'Sidebar renders native Pin session Bob in RigNorth control');
+  assert.equal(pin.props.type, 'button');
+  assert.equal(pin.props.title, 'Pin session Bob in RigNorth');
+  assert.equal(pin.props['aria-pressed'], false);
+  assert.equal(pin.props.disabled, false);
+  const bobRow = view.rows().find(row => row.key === 'b');
+  assert.equal(bobRow.props.children[1], pin, 'pin is the sibling immediately after seat-open');
+  pin.props.onClick();
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['b', 'a']);
+  assert.equal(view.count(), 2);
+  assert.equal(toggled[0], seats[1], 'local callback receives the original represented seat');
+  const unpin = findPin('Unpin session Bob in RigNorth');
+  assert.ok(unpin);
+  assert.equal(unpin.props.title, 'Unpin session Bob in RigNorth');
+  assert.equal(unpin.props['aria-pressed'], true);
+  unpin.props.onClick();
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['a', 'b']);
+  assert.equal(view.count(), 2);
+  assert.equal(findPin('Pin session Bob in RigNorth').props['aria-pressed'], false);
+  assert.deepEqual(toggled, [seats[1], seats[1]]);
+  assert.deepEqual(view.calls, [], 'pinning never invokes existing host actions');
+});
 
 test('Sidebar status select offers five ordered choices and reversibly filters actual rows', () => {
   const inventorySeats = Object.freeze([
