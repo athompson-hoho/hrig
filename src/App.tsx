@@ -103,6 +103,7 @@ import {
 import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { snippetContext, type SnippetContext } from "./snippet-vars";
+import { onSnippetDraft, type SnippetDraft } from "./snippet-draft";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
@@ -1733,6 +1734,7 @@ export default function App() {
     }
   };
   const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string; connection: string; context: SnippetContext} | null>(null);
+  const [snippetDraft, setSnippetDraft] = useState<SnippetDraft | null>(null);
   const openPalette = () => {
     projectIntent.current++;
     setSearch("");
@@ -1784,6 +1786,16 @@ export default function App() {
         action: () => {model.doAction(Actions.selectTab(t.id!));setSnippetTarget(target);}},
     ];
   });
+  // A terminal's Save selection as snippet arrives as a window event; this only opens Saved snippets filled in, and it saves and sends nothing.
+  const openSnippetDraft = useRef<(id: string, draft: SnippetDraft) => void>(() => undefined);
+  openSnippetDraft.current = (id, draft) => {
+    const tab = terminalTabs.find(t => (t.config as PanelConfig).terminalId === id);
+    if (!tab) { notify("Saved snippets are not available in this terminal"); return; }
+    const cfg = tab.config as PanelConfig;
+    setSnippetTarget({id, name: tab.name || "Terminal", connection: cfg.connection.name, context: snippetContext(cfg.connection, cfg.root, cfg.seat)});
+    setSnippetDraft(draft);
+  };
+  useEffect(() => onSnippetDraft((id, draft) => openSnippetDraft.current(id, draft)), []);
   const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
   const reconnectDropped = () => {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
@@ -3215,9 +3227,10 @@ export default function App() {
         {snippetTarget && <TerminalSnippets name={snippetTarget.name} connection={snippetTarget.connection} terminalId={snippetTarget.id}
           snippets={state.terminalSnippets || []}
           context={snippetTarget.context}
+          draft={snippetDraft}
           onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
           onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}
-          onClose={() => setSnippetTarget(null)} />}
+          onClose={() => {setSnippetTarget(null);setSnippetDraft(null);}} />}
         {modal === "palette" && (
           <Modal title="Command center" onClose={() => setModal(null)} wide>
             <div className="palette-input">

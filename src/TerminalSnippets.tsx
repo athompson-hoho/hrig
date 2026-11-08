@@ -4,12 +4,12 @@ import { snippetError, type TerminalSnippet } from "./terminal-commands";
 import { expand, type SnippetContext } from "./snippet-vars";
 import { SnippetExport, SnippetImport } from "./SnippetTransfer";
 const PLACEHOLDER_NOTE = "Placeholders {host}, {seat} and {project} are filled in from this terminal when you insert, and the preview shows the exact text. Write {{host}} to keep the braces as they are.";
-export default function TerminalSnippets({ name, connection, terminalId, snippets, context, onChange, onInsert, onClose }: {
-  name: string; connection: string; terminalId: string; snippets: TerminalSnippet[]; context: SnippetContext; onChange: (value: TerminalSnippet[]) => void;
+export default function TerminalSnippets({ name, connection, terminalId, snippets, context, draft, onChange, onInsert, onClose }: {
+  name: string; connection: string; terminalId: string; snippets: TerminalSnippet[]; context: SnippetContext; draft?: { name: string; text: string } | null; onChange: (value: TerminalSnippet[]) => void;
   onInsert: (text: string, run: boolean) => void; onClose: () => void;
 }) {
-  const [label, setLabel] = useState("");
-  const [text, setText] = useState("");
+  const [label, setLabel] = useState(draft ? draft.name : "");
+  const [text, setText] = useState(draft ? draft.text : "");
   const [review, setReview] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [view, setView] = useState<"list" | "export" | "import">("list");
@@ -32,6 +32,7 @@ export default function TerminalSnippets({ name, connection, terminalId, snippet
       <div className="modal-actions"><button onClick={() => setReview(null)}>Back</button><button className="primary-button" onClick={() => {onInsert(review,true);onClose();}}>Insert and run</button></div>
     </> : <>
       {snippets.map(s => <div className="modal-actions" key={s.id}><button onClick={() => {setLabel(s.name);setText(s.text);}}>{s.name}</button><button aria-label={`Delete snippet ${s.name}`} onClick={() => onChange(snippets.filter(item => item.id !== s.id))}>Delete</button></div>)}
+      {draft && <p className="field-note">Filled in from your terminal selection. Nothing is saved or sent until you press Save snippet. A selection can hold secrets, and saved snippets are stored as plain text in HRig's workspace settings.</p>}
       <label className="field">Name<input value={label} onChange={e => setLabel(e.target.value)} maxLength={80}/></label>
       <label className="field">Command<textarea value={text} onChange={e => setText(e.target.value)} rows={4} maxLength={10000}/></label>
       <p className="field-note">{PLACEHOLDER_NOTE}</p>

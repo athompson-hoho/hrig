@@ -10,6 +10,7 @@ import { classifyTerminalKey } from "./terminal-keys";
 import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
 import { copyTextForClipboard } from "./terminal-copy-text";
+import { draftFromSelection, publishSnippetDraft } from "./snippet-draft";
 import {
   historyKeyDirection,
   pushSearchQuery,
@@ -58,8 +59,10 @@ export default function TerminalTools({
   trimCopy.current = effective["terminal.copyTrimTrailingWhitespace"];
   // Every write of terminal text to the clipboard goes through this function; paste and export never do.
   const clipboardText = (text: string) => copyTextForClipboard(text, trimCopy.current);
+  // The one read of the selection for copy and for Save selection as snippet; the snippet route never writes to the clipboard, so it does not use clipboardText.
+  const selectedText = () => terminal.current?.getSelection();
   const copySelection = async () => {
-    const text = terminal.current?.getSelection();
+    const text = selectedText();
     if (!text) return;
     try {
       await navigator.clipboard.writeText(clipboardText(text));
@@ -67,6 +70,12 @@ export default function TerminalTools({
     } catch (e) {
       setNotice((e as Error).message);
     }
+  };
+  // Opens Saved snippets filled in from the selection; nothing is saved or typed until the person presses Save snippet there, and a selection that cannot be one line is explained here instead.
+  const saveSelectionAsSnippet = () => {
+    const draft = draftFromSelection(selectedText());
+    if (draft.ok) publishSnippetDraft(terminalId, draft.text);
+    else setNotice(draft.error);
   };
   // term.paste honors bracketed-paste mode and normalizes newlines; the text
   // reaches the shell only through the terminal's normal input path.
@@ -278,12 +287,15 @@ export default function TerminalTools({
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 150),
+            top: Math.min(menu.y, window.innerHeight - 190),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button role="menuitem" disabled={!menu.selection} onClick={choose(copySelection)}>
             <span>Copy</span>
+          </button>
+          <button role="menuitem" disabled={!menu.selection} onClick={choose(saveSelectionAsSnippet)}>
+            <span>Save selection as snippet…</span>
           </button>
           <button role="menuitem" onClick={choose(paste)}>
             <span>Paste</span>
