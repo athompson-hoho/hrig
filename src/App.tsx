@@ -157,6 +157,11 @@ import {
   type FocusState,
 } from "./focus-mode";
 import {
+  SIDEBAR_DEFAULT_WIDTH,
+  dragSidebarWidth,
+  normalizeSidebarWidth,
+} from "./sidebar-width";
+import {
   recentKey,
   recentsFor,
   recordRecent,
@@ -195,7 +200,7 @@ const defaultState: WorkspaceState = {
   activeRig: "",
   layouts: {},
   savedLayouts: [],
-  sidebarWidth: 264,
+  sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 };
 type ModalKind =
   | "connect"
@@ -517,6 +522,8 @@ export default function App() {
             localFound;
         setState({
           ...base,
+          // A hand-edited or damaged saved width is clamped, or replaced by the default.
+          sidebarWidth: normalizeSidebarWidth(base.sidebarWidth),
           projectHistory: normalizeHistory(base.projectHistory),
           connections,
           preferences:
@@ -2168,14 +2175,11 @@ export default function App() {
   };
   const resizeSidebar = (event: React.PointerEvent) => {
     const startX = event.clientX;
-    const startWidth = state.sidebarWidth || 264;
+    const startWidth = normalizeSidebarWidth(state.sidebarWidth);
     const move = (e: PointerEvent) =>
       setState((s) => ({
         ...s,
-        sidebarWidth: Math.max(
-          210,
-          Math.min(440, startWidth + e.clientX - startX),
-        ),
+        sidebarWidth: dragSidebarWidth(startWidth, startX, e.clientX),
       }));
     const stop = () => {
       document.removeEventListener("pointermove", move);
@@ -2328,7 +2332,7 @@ export default function App() {
           {sidebar && (
             <div
               className="sidebar-container"
-              style={{ width: state.sidebarWidth || 264 }}
+              style={{ width: normalizeSidebarWidth(state.sidebarWidth) }}
             >
               <Sidebar
                 onManageRigs={() =>
