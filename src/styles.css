@@ -4246,7 +4246,7 @@ button:hover {
 .pod-disclosure:hover { background: var(--color-272c34); }
 .pod-disclosure:disabled { cursor: default; }
 .pod-disclosure > svg, .pod-disclosure > .count { flex-shrink: 0; }
-.pod-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pod-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; line-height: 1.2; }
 .pod-content { min-width: 0; }
 .pod-group > .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .session-row .seat-row { flex: 1; min-width: 0; width: auto; margin: 0; }
