@@ -110,6 +110,8 @@ export interface DesignSeat {
 export interface HrigAPI {
   terminalLog(request: {id: string; op: "start" | "stop" | "status"}): Promise<TerminalLogState>;
   onTerminalLog(callback: (state: TerminalLogState) => void): () => void;
+  clipboardHasImage(): Promise<boolean>;
+  pasteClipboardImage(id: string): Promise<string|null>;
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
   updates(request:{op:string;confirmed?:boolean;allowUnsigned?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;

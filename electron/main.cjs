@@ -423,6 +423,20 @@ handle("files:operation", (_event, connection, request) =>
 handle("files:git", (_event, connection, root) =>
   backend.git(connection, root),
 );
+const terminalImages=require('./terminal-images.cjs');
+handle('terminal:clipboard-image', () => !clipboard.readImage().isEmpty());
+handle('terminal:paste-image', async (_event,id) => {
+ const item=terminals.get(id);if(!item)throw Error('Connect the terminal before pasting an image.');
+ const image=clipboard.readImage();if(image.isEmpty())throw Error('Clipboard does not contain an image.');
+ const png=image.toPNG();terminalImages.validateImage(png);
+ const target=terminalImages.imageDestination(item.connection);
+ const choice=await dialog.showMessageBox(mainWindow,{type:'question',title:'Paste image into terminal',message:`Copy clipboard image to ${item.connection.name} (${item.connection.host || item.connection.distro || "local desktop"})?`,detail:`${target}\n${png.length} bytes. The path will be inserted without Enter.`,buttons:['Cancel','Copy image'],defaultId:0,cancelId:0,noLink:true});
+ if(choice.response!==1)return null;
+ if(terminals.get(id)!==item)throw Error('Terminal changed while confirming image paste.');
+ await terminalImages.saveImage(item.connection,target,png);
+ if(terminals.get(id)!==item)throw Error('Terminal disconnected. Image was saved but no path was inserted.');
+ return terminalImages.quotedImagePath(target,item.connection.kind==='local'&&process.platform==='win32' ? (item.localShell==='cmd'?'cmd':'powershell') : 'posix');
+});
 handle("terminal:create", async (event, options) => {
   const { id, connection, root } = options;
   let session = options.session;
@@ -488,7 +502,7 @@ handle("terminal:create", async (event, options) => {
     env,
     useConpty: true,
   });
-  const item = { terminal, buffer: "", sender: event.sender };
+  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell };
   terminals.set(id, item);
   terminal.onData((data) => {
     if (terminals.get(id) !== item) return;

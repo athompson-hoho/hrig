@@ -444,6 +444,7 @@ export default function TerminalPanel({
       <TerminalSessionTools terminal={terminalRef} id={config.terminalId!} generation={attempt * 2 + (ready ? 1 : 0)} />
       <TerminalTools
         findRequest={findRequest}
+        terminalId={config.terminalId!}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
       />
