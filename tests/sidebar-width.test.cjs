@@ -652,3 +652,149 @@ test("sidebar-width is stored in the workspace state only: no setting, no second
   );
   assert.ok(!/idth/.test(focus.text), "focus mode leaves the width alone");
 });
+
+test("sidebar-width collapse shortcut: Ctrl+B (Cmd+B on macOS) already shows and hides the sidebar, it is listed once and no second chord exists, and NAVIGATION.md documents it with the width", () => {
+  const shortcuts = bundle("src/shortcuts.ts");
+  const terminal = bundle("src/terminal-keys.ts");
+  for (const platform of ["darwin", "linux", "win32"]) {
+    const mac = platform === "darwin";
+    const mod = mac ? "Cmd" : "Ctrl";
+    const rows = shortcuts
+      .shortcutGroups(platform)
+      .flatMap((group) => group.shortcuts);
+    // One catalog row for the sidebar, and no other row that is about it
+    // except the focus mode one, which names it.
+    assert.deepEqual(
+      rows.filter((row) => /sidebar/i.test(row.id)),
+      [
+        {
+          id: "workspace.sidebar",
+          label: "Show or hide the sidebar",
+          keys: [mod + "+B"],
+        },
+      ],
+    );
+    assert.deepEqual(
+      rows
+        .filter((row) => /sidebar/i.test(row.label))
+        .map((row) => row.id)
+        .sort(),
+      ["workspace.focusMode", "workspace.sidebar"],
+    );
+    assert.equal(
+      rows.filter((row) =>
+        row.keys.some(
+          (key) => key.toLowerCase() === (mod + "+b").toLowerCase(),
+        ),
+      ).length,
+      1,
+      "the chord is listed once",
+    );
+    // A terminal leaves the key alone, so the App handler is what takes it,
+    // even from inside a terminal panel.
+    const press = {
+      key: "b",
+      ctrlKey: !mac,
+      metaKey: mac,
+      altKey: false,
+      shiftKey: false,
+    };
+    for (const selected of [false, true])
+      assert.equal(
+        terminal.classifyTerminalKey(press, platform, selected),
+        "pass",
+      );
+    assert.equal(
+      terminal.terminalOwnsKey(press, platform, { closest: () => ({}) }),
+      false,
+    );
+  }
+
+  // The key handler: the chord is claimed for the whole window and flips the
+  // sidebar, as it always did; it is the only place that tests a b key.
+  const app = appText();
+  const handler = between(
+    app,
+    "const handler = (event: KeyboardEvent) => {",
+    "const windows = [",
+  );
+  const generic = handler.slice(
+    handler.indexOf(tight("if (event.ctrlKey || event.metaKey) {")),
+  );
+  assert.ok(generic.length < handler.length, "the generic Ctrl or Cmd branch");
+  assert.ok(
+    has(
+      generic,
+      'if ([",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")) { event.preventDefault(); event.stopPropagation(); }',
+    ),
+    "b is claimed so no terminal or editor sees it",
+  );
+  assert.ok(
+    has(
+      generic,
+      'if (event.key.toLowerCase() === "b") { event.preventDefault(); setSidebar((v) => !v); }',
+    ),
+  );
+  assert.equal(count(handler, 'toLowerCase() === "b"'), 1);
+  assert.equal(count(handler, "setSidebar("), 1);
+
+  // The other ways to the same toggle are untouched, and there are exactly
+  // three call sites: the chord, the command center entry and the toolbar button.
+  assert.equal(count(app, "setSidebar((v) => !v)"), 3);
+  assert.equal(count(app, 'name: "Toggle sidebar"'), 1);
+  const entry = between(
+    app,
+    'name: "Toggle sidebar",',
+    'name: "Toggle status bar",',
+  );
+  assert.ok(entry.includes(tight('hint: "Ctrl B",')));
+  assert.ok(entry.includes(tight("action: () => setSidebar((v) => !v),")));
+  assert.ok(
+    has(
+      app,
+      '<IconButton title={sidebar ? "Hide sidebar" : "Show sidebar"} onClick={() => setSidebar((v) => !v)} >',
+    ),
+  );
+  // Where the chord was already listed for people.
+  assert.ok(read("README.md").includes("| Ctrl B | Show / hide sidebar |"));
+  assert.ok(
+    stripComments(read("src/SettingsPage.tsx")).includes(
+      '["Ctrl B", "Toggle sidebar"]',
+    ),
+  );
+
+  // NAVIGATION.md: one paragraph, after the earlier ones, with the numbers
+  // taken from the module so the text cannot drift from the limits.
+  const nav = read("NAVIGATION.md");
+  assert.equal(nav.charCodeAt(0), 0xfeff, "byte order mark");
+  assert.ok(nav.endsWith(".\n") && !nav.endsWith("\n\n"));
+  const mine = nav
+    .split("\n")
+    .filter((line) =>
+      line.startsWith(
+        "The sidebar shows and hides with Ctrl+B (Cmd+B on macOS)",
+      ),
+    );
+  assert.equal(mine.length, 1);
+  assert.ok(/^[\x20-\x7e]*$/.test(mine[0]), "ASCII only");
+  const at = nav.indexOf(mine[0]);
+  assert.ok(at > nav.indexOf("The command center entry Reopen closed panel"));
+  assert.ok(at > nav.indexOf("The command center entry Toggle focus mode"));
+  for (const fragment of [
+    "with the Toggle sidebar entry in the command center",
+    "the Hide sidebar and Show sidebar button in the toolbar",
+    "also listed in the Keyboard shortcuts sheet",
+    "including while a terminal has focus, so Ctrl+B does not reach the shell",
+    "between " + SIDEBAR_MIN_WIDTH + " and " + SIDEBAR_MAX_WIDTH + " pixels",
+    "moved to the nearest limit",
+    "falls back to the default of " + SIDEBAR_DEFAULT_WIDTH + " pixels",
+    "a new workspace starts at " + SIDEBAR_DEFAULT_WIDTH + " pixels",
+    "Hiding the sidebar keeps its width",
+    "or by leaving focus mode",
+    "Whether the sidebar is open is not saved",
+    "The width is not a setting",
+    "nothing is typed or sent",
+  ])
+    assert.ok(mine[0].includes(fragment), "NAVIGATION.md: " + fragment);
+  assert.ok(nav.includes("also runs Toggle sidebar, Toggle status bar"));
+});
