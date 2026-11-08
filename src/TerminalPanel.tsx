@@ -31,6 +31,11 @@ import { localShellLabel } from "./platform";
 import { isDropped, publishTerminalDropped } from "./terminal-dropped";
 import { HostTintLabel, hostTintStyle, useHostTint } from "./HostTint";
 import TerminalFileDrop from "./TerminalFileDrop";
+import {
+  isPrimaryActivation,
+  linkHover,
+  type TerminalLinks,
+} from "./terminal-link-at";
 export default function TerminalPanel({
   config,
   onFile,
@@ -50,6 +55,7 @@ export default function TerminalPanel({
   const localShell = useRef(preferences["terminal.localShell"]).current;
   const host = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const linkRef = useRef<TerminalLinks>({ hovered: null, open: null });
   const zoom = useTerminalZoom(
     panel,
     config.terminalId!,
@@ -210,10 +216,28 @@ export default function TerminalPanel({
     terminalRef.current = term;
     fitRef.current = fit;
     term.loadAddon(fit);
+    const openUrl = (uri: string) => {
+      window.hrig.openTerminalLink(uri).catch((e) => setError(e.message));
+    };
+    const openPath = (file: string, line?: number) => {
+      window.hrig
+        .edit(config.connection, {
+          op: "read",
+          root: config.root,
+          path: file,
+        })
+        .then(() => {
+          if (!disposed) onFile(file, line);
+        })
+        .catch((e) => setError(e.message));
+    };
+    // The right-click menu's Open link takes the same two routes a click does. xterm also activates a link when any mouse button is released over it, which would open the link while the menu shows, so only a primary click opens one.
+    linkRef.current.open = (link) =>
+      link.kind === "url" ? openUrl(link.text) : openPath(link.text, link.line);
     term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        window.hrig.openTerminalLink(uri).catch((e) => setError(e.message));
-      }),
+      new WebLinksAddon((event, uri) => {
+        if (isPrimaryActivation(event, window.hrig.platform)) openUrl(uri);
+      }, linkHover(linkRef, "url")),
     );
     term.registerLinkProvider({
       provideLinks(y, callback) {
@@ -222,18 +246,11 @@ export default function TerminalPanel({
             return {
               range,
               text: file,
-              activate: () => {
-                window.hrig
-                  .edit(config.connection, {
-                    op: "read",
-                    root: config.root,
-                    path: file,
-                  })
-                  .then(() => {
-                    if (!disposed) onFile(file, line);
-                  })
-                  .catch((e) => setError(e.message));
+              activate: (event: MouseEvent) => {
+                if (isPrimaryActivation(event, window.hrig.platform))
+                  openPath(file, line);
               },
+              ...linkHover(linkRef, "path", line),
             };
           },
         );
@@ -334,6 +351,8 @@ export default function TerminalPanel({
     host.current.addEventListener("mousedown", focus);
     return () => {
       disposed = true;
+      linkRef.current.hovered = null;
+      linkRef.current.open = null;
       clearTimeout(stableTimer);
       observer.disconnect();
       unsubscribe();
@@ -491,6 +510,7 @@ export default function TerminalPanel({
         terminalId={config.terminalId!}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
+        links={linkRef}
       />
       <div className="terminal-stage">
         <div className="terminal-host" ref={host} />

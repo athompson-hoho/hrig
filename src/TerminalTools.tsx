@@ -11,6 +11,7 @@ import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
 import { copyTextForClipboard } from "./terminal-copy-text";
 import { draftFromSelection, publishSnippetDraft } from "./snippet-draft";
+import type { TerminalLink, TerminalLinks } from "./terminal-link-at";
 import {
   historyKeyDirection,
   pushSearchQuery,
@@ -20,16 +21,21 @@ import {
 // Recent find queries, shared by every open terminal and kept in memory only: a query can hold a secret, so the list is never saved, restored or exported.
 let searchHistory: readonly string[] = [];
 
+// Height of the two link items and their separator in the right-click menu (two 33px buttons and an 11px separator, see .dropdown in styles.css); added to the bottom-edge clamp only while they show.
+const LINK_ITEMS_HEIGHT = 77;
+
 export default function TerminalTools({
   terminal,
   generation,
   findRequest = 0,
   terminalId,
+  links,
 }: {
   terminal: RefObject<Terminal | null>;
   generation: number;
   findRequest?: number;
   terminalId: string;
+  links?: RefObject<TerminalLinks>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -43,7 +49,7 @@ export default function TerminalTools({
   const viewport = useRef<number | null>(null);
   // Which remembered query this find box shows while ArrowUp and ArrowDown browse (-1 when it is not browsing); one per box, so two terminals never share a place in the list.
   const historyAt = useRef(-1);
-  const [menu, setMenu] = useState<{ x: number; y: number; selection: boolean } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; selection: boolean; link: TerminalLink | null } | null>(null);
   // Ref so toggling the setting is read at settle time and never re-subscribes the effect below.
   const { effective } = useSettings();
   const copyOnSelect = useRef(effective["terminal.copyOnSelect"]);
@@ -61,15 +67,19 @@ export default function TerminalTools({
   const clipboardText = (text: string) => copyTextForClipboard(text, trimCopy.current);
   // The one read of the selection for copy and for Save selection as snippet; the snippet route never writes to the clipboard, so it does not use clipboardText.
   const selectedText = () => terminal.current?.getSelection();
-  const copySelection = async () => {
-    const text = selectedText();
-    if (!text) return;
+  // The one clipboard write for text the person picked (the selection or a link); a failure uses the same notice.
+  const copyText = async (text: string, done: string) => {
     try {
       await navigator.clipboard.writeText(clipboardText(text));
-      setNotice("Selection copied.");
+      setNotice(done);
     } catch (e) {
       setNotice((e as Error).message);
     }
+  };
+  const copySelection = async () => {
+    const text = selectedText();
+    if (!text) return;
+    await copyText(text, "Selection copied.");
   };
   // Opens Saved snippets filled in from the selection; nothing is saved or typed until the person presses Save snippet there, and a selection that cannot be one line is explained here instead.
   const saveSelectionAsSnippet = () => {
@@ -173,7 +183,8 @@ export default function TerminalTools({
       event.preventDefault();
       setHasImage(false);
       void window.hrig.clipboardHasImage().then(setHasImage).catch(e=>setNotice(e.message));
-      setMenu({ x: event.clientX, y: event.clientY, selection: term.hasSelection() });
+      // The link xterm underlines under the pointer right now, if any; read here because the menu is not under the pointer once it shows.
+      setMenu({ x: event.clientX, y: event.clientY, selection: term.hasSelection(), link: links?.current.hovered ?? null });
     };
     host?.addEventListener("contextmenu", contextmenu);
     // xterm answers a native copy event, for example from the macOS Edit menu, with the raw selection; this listener runs after its handler and replaces that text.
@@ -279,6 +290,7 @@ export default function TerminalTools({
     void action();
     terminal.current?.focus();
   };
+  const menuLink = menu?.link ?? null;
   return (
     <>
       {menu && (
@@ -287,10 +299,21 @@ export default function TerminalTools({
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 190),
+            top: Math.min(menu.y, window.innerHeight - 190 - (menuLink ? LINK_ITEMS_HEIGHT : 0)),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          {menuLink && (
+            <>
+              <button role="menuitem" onClick={choose(() => links?.current.open?.(menuLink))}>
+                <span>Open link</span>
+              </button>
+              <button role="menuitem" onClick={choose(() => copyText(menuLink.text, "Link copied."))}>
+                <span>Copy link</span>
+              </button>
+              <div className="menu-separator" />
+            </>
+          )}
           <button role="menuitem" disabled={!menu.selection} onClick={choose(copySelection)}>
             <span>Copy</span>
           </button>
