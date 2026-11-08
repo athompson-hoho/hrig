@@ -165,14 +165,14 @@ test('pod disclosure toggles actual owner state without hiding favorites', () =>
   }).outputText, scope);
   actualOnTogglePod = scope.callback;
   const identity = pods.podIdentity(connection, ordinary);
-  const controlledId = collapse.props['aria-controls'];
-  const region = () => view.nodes().find(node => node.props?.id === controlledId);
+  const descriptionId = collapse.props['aria-describedby'];
+  const description = () => view.nodes().find(node => node.props?.id === descriptionId);
   assert.equal(collapse.props.type, 'button');
   assert.equal(collapse.props.title, 'Collapse pod Builders in rig RigNorth');
   assert.equal(collapse.props['aria-expanded'], true);
   assert.equal(collapse.props.disabled, false);
-  assert.equal(typeof controlledId, 'string');
-  assert.ok(region(), 'expanded disclosure controls a mounted container');
+  assert.equal(typeof descriptionId, 'string');
+  assert.ok(description(), 'expanded disclosure describes its matching pod');
   assert.ok(view.nodes().some(n => n.props?.className === 'pod-content' && textOf(n).includes('Ordinary')), 'expanded ordinary segment is mounted');
   assert.ok(view.nodes().filter(n => n.props?.className === 'pod-content')
     .every(n => !textOf(n).includes('Favorite')), 'favorite is outside ordinary pod segments');
@@ -181,16 +181,16 @@ test('pod disclosure toggles actual owner state without hiding favorites', () =>
   assert.deepEqual(Array.from(workspace.collapsedPods), [identity]);
   assert.equal(workspace.sidebarWidth, 321);
   assert.equal(disclosure('Expand').props['aria-expanded'], false);
-  assert.equal(disclosure('Expand').props['aria-controls'], controlledId);
-  assert.ok(region(), 'collapsed disclosure keeps its controlled container mounted');
-  assert.equal(textOf(region()), '', 'collapsed row actions are not rendered');
+  assert.equal(disclosure('Expand').props['aria-describedby'], descriptionId);
+  assert.ok(description(), 'collapsed disclosure keeps its description mounted');
+  assert.ok(textOf(description()).includes('1 matching unpinned session.'), 'collapsed count description remains truthful');
   assert.deepEqual(view.rows().map(row => row.key), ['favorite']);
   assert.equal(view.count(), 2, 'matched count includes collapsed rows');
   disclosure('Expand').props.onClick();
   view.render();
   assert.deepEqual(Array.from(workspace.collapsedPods), []);
   assert.equal(disclosure('Collapse').props['aria-expanded'], true);
-  assert.equal(disclosure('Collapse').props['aria-controls'], controlledId);
+  assert.equal(disclosure('Collapse').props['aria-describedby'], descriptionId);
   assert.deepEqual(view.rows().map(row => row.key), ['favorite', 'ordinary']);
   assert.equal(view.count(), 2);
   assert.deepEqual(toggled, [ordinary, ordinary]);
@@ -202,10 +202,10 @@ test('pod controls keep unique opaque IDs across instances toggle filter disappe
   const second = seat('second', { name: 'B', pod: 'Two' });
   const view = sidebar({ inventory: { rigs: [], seats: [first, second] } });
   const controls = v => v.nodes().filter(n => n.props?.className === 'pod-disclosure');
-  const before = controls(view).map(n => n.props['aria-controls']);
+  const before = controls(view).map(n => n.props['aria-describedby']);
   assert.equal(new Set(before).size, 2);
   const other = sidebar({ inventory: { rigs: [], seats: [first, second] } });
-  assert.ok(controls(other).every(n => !before.includes(n.props['aria-controls'])));
+  assert.ok(controls(other).every(n => !before.includes(n.props['aria-describedby'])));
   for (const id of before) {
     assert.equal(id.includes('host'), false);
     assert.equal(id.includes('One'), false);
@@ -215,14 +215,14 @@ test('pod controls keep unique opaque IDs across instances toggle filter disappe
   const pods = load('../src/seat-pods.ts', { './seat-pins': load('../src/seat-pins.ts') });
   view.props.collapsedPods = [pods.podIdentity(view.props.connection, first)];
   view.render();
-  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), before);
+  assert.deepEqual(controls(view).map(n => n.props['aria-describedby']), before);
   assert.deepEqual(view.rows().map(n => n.key), ['second']);
   view.query('B');
-  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), [before[1]]);
+  assert.deepEqual(controls(view).map(n => n.props['aria-describedby']), [before[1]]);
   view.query('');
   view.props.inventory = { rigs: [], seats: [seat('first', { name: 'Z', pod: 'One' }), second] };
   view.render();
-  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), [before[1], before[0]]);
+  assert.deepEqual(controls(view).map(n => n.props['aria-describedby']), [before[1], before[0]]);
   assert.equal(controls(view)[1].props['aria-expanded'], false);
 });
 
@@ -278,11 +278,13 @@ test('pod groups preserve selected-sort ties original actions and stable adjacen
     assert.equal(groups.length, 2);
     for (const group of groups) {
       const children = group.props.children;
-      const button = children[0], content = children[2];
+      const button = children[0], description = children[1];
       assert.equal(button.type, 'button');
       assert.equal(button.props.type, 'button');
-      assert.equal(button.props['aria-controls'], content.props.id);
-      assert.equal(content.props.className, 'pod-content');
+      assert.equal(button.props['aria-describedby'], description.props.id);
+      assert.equal(button.props['aria-controls'], undefined);
+      assert.ok(textOf(description).includes('matching unpinned'));
+      assert.ok(view.nodes().filter(n => n.props?.className === 'pod-content').every(n => n.props.role === 'group'));
     }
     view.rows().forEach((row, i) => {
       row.props.children[0].props.onClick();
@@ -292,7 +294,7 @@ test('pod groups preserve selected-sort ties original actions and stable adjacen
   assert.deepEqual(view.calls, []);
 });
 
-test('all collapsed and pin transitions retain counts choices and mounted empty regions across filtering', () => {
+test('all collapsed and pin transitions retain counts choices and descriptions across filtering', () => {
   const pins = load('../src/seat-pins.ts');
   const pods = load('../src/seat-pods.ts', { './seat-pins': pins });
   const a = seat('a', { name: 'Alpha', pod: 'One', status: 'working' });
@@ -302,12 +304,13 @@ test('all collapsed and pin transitions retain counts choices and mounted empty 
     pods.podIdentity(view.props.connection, b)]);
   const controls = () => view.nodes().filter(n => n.props?.className === 'pod-disclosure');
   view.props.collapsedPods = saved; view.render();
-  const ids = controls().map(n => n.props['aria-controls']);
+  const ids = controls().map(n => n.props['aria-describedby']);
   assert.equal(view.count(), 2);
   assert.equal(view.rows().length, 0);
   assert.equal(controls().length, 2);
   assert.ok(controls().every(n => n.props['aria-expanded'] === false));
-  for (const id of ids) assert.equal(view.nodes().find(n => n.props?.id === id).props.children, false);
+  for (const id of ids) assert.ok(textOf(view.nodes().find(n => n.props?.id === id)).includes('matching unpinned'));
+  assert.equal(view.nodes().filter(n => n.props?.className === 'pod-content').length, 0, 'collapsed groups render no empty placeholder');
   assert.ok(!view.nodes().some(n => textOf(n) === 'No matching sessions'));
   view.props.pinnedSeats = [pins.seatPinIdentity(view.props.connection, a.id)]; view.render();
   assert.deepEqual(view.rows().map(n => n.key), ['a']);
@@ -321,7 +324,7 @@ test('all collapsed and pin transitions retain counts choices and mounted empty 
   assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).includes('No matching sessions')));
   view.query(''); view.status('all'); view.props.pinnedSeats = []; view.render();
   assert.equal(view.rows().length, 0);
-  assert.deepEqual(controls().map(n => n.props['aria-controls']), ids);
+  assert.deepEqual(controls().map(n => n.props['aria-describedby']), ids);
   assert.equal(view.props.collapsedPods, saved);
   view.props.inventory = { rigs: [], seats: [] }; view.props.busy = true; view.render();
   assert.equal(controls().length, 0);
@@ -329,7 +332,7 @@ test('all collapsed and pin transitions retain counts choices and mounted empty 
   view.props.busy = false; view.render();
   assert.ok(view.nodes().some(n => textOf(n) === 'No seats yet'));
   view.props.inventory = { rigs: [], seats: [a, b] }; view.render();
-  assert.deepEqual(controls().map(n => n.props['aria-controls']), ids);
+  assert.deepEqual(controls().map(n => n.props['aria-describedby']), ids);
   assert.equal(view.count(), 2);
   assert.deepEqual(view.calls, []);
 });
@@ -343,7 +346,7 @@ test('partial pod labels separate empty literal and tagged rig fallback with tru
   const view = sidebar({ selectedRig: '', inventory: { rigs: [], seats: input } });
   const controls = view.nodes().filter(n => n.props?.className === 'pod-disclosure');
   assert.equal(controls.length, 4);
-  assert.equal(new Set(controls.map(n => n.props['aria-controls'])).size, 4);
+  assert.equal(new Set(controls.map(n => n.props['aria-describedby'])).size, 4);
   assert.equal(controls.filter(n => n.props['aria-label'] === 'Collapse pod Ungrouped in rig Unknown rig').length, 2);
   assert.equal(view.count(), 5);
   const descriptions = controls.map(n => textOf(view.nodes().find(d => d.props?.id === n.props['aria-describedby'])));

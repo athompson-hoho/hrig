@@ -178,7 +178,7 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
       changed(value => value + 1);
     }} />];
   });
-  return <div ref={viewport} className={`virtual-list ${className || ""}`} aria-label={label} aria-describedby={help} tabIndex={0}
+  return <div ref={viewport} className={`virtual-list ${className || ""}`} role="region" aria-label={label} aria-describedby={help} tabIndex={0}
     style={{ maxHeight, overflow: "auto", overflowAnchor: "none" }}
     onFocusCapture={event => {
       const index = rowIndex(event.target);

@@ -312,7 +312,7 @@ export default function Sidebar({
   }
   const renderSession = (row: SessionRow) => {
     if (row.seat) return row.group
-      ? <div className="pod-content" aria-label={`${row.group.podLabel} · ${row.group.rigLabel}`}>{renderSeat(row.seat)}</div>
+      ? <div className="pod-content" role="group" aria-label={`${row.group.podLabel} · ${row.group.rigLabel}`}>{renderSeat(row.seat)}</div>
       : renderSeat(row.seat);
     const group = row.group;
     if (!podTokens.current.has(group.identity))
@@ -324,7 +324,7 @@ export default function Sidebar({
     return (
       <div className="pod-group">
         <button type="button" className="pod-disclosure" disabled={!podsAvailable}
-          aria-expanded={expanded} aria-controls={id} aria-describedby={`${id}-description`}
+          aria-expanded={expanded} aria-describedby={`${id}-description`}
           aria-label={label} title={label}
           onClick={() => { if (podsAvailable) onTogglePod(group.seats[0]); }}>
           {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
@@ -337,7 +337,6 @@ export default function Sidebar({
           {!expanded && attention > 0 && ` ${attention} need input.`}
           {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
         </span>
-        <div className="pod-content" id={id} aria-label={`${group.podLabel} · ${group.rigLabel}`}>{false}</div>
       </div>
     );
   };

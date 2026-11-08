@@ -69,13 +69,19 @@ function assertDisclosureTargets(view) {
   const ids = view.nodes().map(n => n.props.id).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length, 'mounted IDs remain unique');
   for (const disclosure of disclosureRows(view)) {
-    for (const attr of ['aria-controls', 'aria-describedby']) {
-      assert.equal(ids.filter(id => id === disclosure.props[attr]).length, 1, `${attr} resolves uniquely`);
-    }
+    assert.equal(disclosure.props['aria-controls'], undefined, 'optional controls never claims an empty target');
+    assert.equal(ids.filter(id => id === disclosure.props['aria-describedby']).length, 1,
+      'disclosure description resolves uniquely');
+  }
+  for (const content of classNodes(view, 'pod-content')) {
+    assert.equal(content.props.role, 'group');
+    assert.ok(seatRows(view).some(row => content.contains(row)), 'each named pod group contains actual mounted seat content');
   }
 }
 function viewport(view, label) {
-  return view.nodes().find(n => n.props.className?.split(' ').includes('virtual-list') && n.props['aria-label'] === label);
+  const node = view.nodes().find(n => n.props.className?.split(' ').includes('virtual-list') && n.props['aria-label'] === label);
+  if (node) assert.equal(node.props.role, 'region', 'actual consumer viewport permits its accessible name');
+  return node;
 }
 function scroll(view, node, top) {
   assert.ok(node, 'real labelled viewport is mounted');
