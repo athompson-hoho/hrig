@@ -6,6 +6,8 @@ import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
 import { pasteClipboard } from "./terminal-paste";
 import { classifyTerminalKey } from "./terminal-keys";
+import { useSettings } from "./SettingsContext";
+import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
 
 export default function TerminalTools({
   terminal,
@@ -29,6 +31,10 @@ export default function TerminalTools({
   const field = useRef<HTMLInputElement>(null);
   const viewport = useRef<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; selection: boolean } | null>(null);
+  // Ref so toggling the setting is read at settle time and never re-subscribes the effect below.
+  const { effective } = useSettings();
+  const copyOnSelect = useRef(effective["terminal.copyOnSelect"]);
+  copyOnSelect.current = effective["terminal.copyOnSelect"];
   const copySelection = async () => {
     const text = terminal.current?.getSelection();
     if (!text) return;
@@ -95,6 +101,15 @@ export default function TerminalTools({
       }
       return false;
     });
+    // Clipboard write only; success is silent, failure uses the existing notice.
+    const copyOnSelectScheduler = createCopyOnSelect({
+      delayMs: COPY_SELECT_DELAY_MS,
+      enabled: () => copyOnSelect.current,
+      read: () => term.getSelection(),
+      copy: (text) => navigator.clipboard.writeText(text),
+      onError: (e) => setNotice((e as Error).message),
+    });
+    const selectionListener = term.onSelectionChange(() => copyOnSelectScheduler.notify());
     const host = term.element?.parentElement;
     const contextmenu = (event: MouseEvent) => {
       event.preventDefault();
@@ -105,6 +120,8 @@ export default function TerminalTools({
     host?.addEventListener("contextmenu", contextmenu);
     return () => {
       host?.removeEventListener("contextmenu", contextmenu);
+      selectionListener.dispose();
+      copyOnSelectScheduler.cancel();
       listener.dispose();
       addon.dispose();
       search.current = null;

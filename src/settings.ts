@@ -29,6 +29,7 @@ export const defaults = {
   "terminal.theme": "inherit",
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
+  "terminal.copyOnSelect": false,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -304,6 +305,13 @@ export const schema: Setting[] = [
     label: "Automatic seat reconnection",
     description:
       "Retry failed existing seat attachments with bounded backoff, up to six attempts. Never starts another agent.",
+  },
+  {
+    key: "terminal.copyOnSelect",
+    category: "Terminal",
+    label: "Copy on select",
+    description:
+      "Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell.",
   },
   {
     key: "workspace.refreshInterval",
