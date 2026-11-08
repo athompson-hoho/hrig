@@ -1139,3 +1139,126 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
       file + " does not mention drop",
     );
 });
+
+test("terminal-drop-path docs: TERMINALS.md says what a drop inserts and where it refuses, and the design note says remote upload is not implemented and why", () => {
+  const mod = pure();
+  for (const file of ["TERMINALS.md", "docs/terminal-file-drop.md"]) {
+    const text = read(file);
+    assert.ok(!text.startsWith(char(0xfeff)), file + " has no byte order mark");
+    assert.ok(
+      text.endsWith("\n") && !text.endsWith("\n\n"),
+      file + " ends with one line feed",
+    );
+    assert.ok(!text.includes("\r"), file + " has no carriage return");
+  }
+
+  // TERMINALS.md: one paragraph in the paste group, one line, printable ASCII.
+  const lines = read("TERMINALS.md").split("\n");
+  const at = lines.findIndex((line) =>
+    line.startsWith(
+      "Dropping a file from your computer onto a local terminal inserts its path at the prompt and never presses Enter.",
+    ),
+  );
+  assert.ok(at > 0, "TERMINALS.md has the paragraph");
+  assert.equal(
+    lines.filter((line) => line.startsWith("Dropping a file")).length,
+    1,
+    "exactly one such paragraph",
+  );
+  assert.ok(
+    lines[at - 1] === "" && lines[at + 1] === "",
+    "blank lines around the paragraph",
+  );
+  assert.ok(
+    lines[at - 2].startsWith(
+      "The terminal.confirmMultilinePaste setting is off by default",
+    ),
+    "right after the paste confirmation paragraph",
+  );
+  assert.ok(
+    lines[at + 2].startsWith(
+      "The terminal.showSizeOnResize setting is on by default",
+    ),
+    "right before the size paragraph",
+  );
+  assert.ok(!/[^ -~]/.test(lines[at]), "the paragraph is printable ASCII");
+  for (const part of [
+    "single quotes for Bash, Zsh and PowerShell, double quotes for Command Prompt",
+    "several files go in as several quoted paths separated by spaces",
+    "the text goes in through the terminal's normal paste, so nothing runs until you press Enter yourself",
+    "a dashed outline marks a terminal that accepts the drop",
+    "Only local terminals accept it",
+    'says "Dropped paths are local; remote upload is not supported"',
+    "terminals that are not connected and OpenRig action terminals refuse too",
+    "longer than " + mod.MAX_DROP_PATH.toLocaleString("en-US") + " characters",
+    "holds a control, line-break or invisible character",
+    "as is a drop of more than " + mod.MAX_DROP_FILES + " files",
+    "Command Prompt also refuses a path with %, !, ^ or a double quote",
+    "a dropped path never triggers the terminal.confirmMultilinePaste dialog",
+    "Dragging a panel tab is not affected, and there is no setting for this",
+    "nothing happens unless you drop a file from outside HRig",
+    "whether the agent reads a quoted path as a file reference depends on the agent",
+    "Uploading the file to a remote host is not implemented",
+    "docs/terminal-file-drop.md holds the design note",
+  ])
+    assert.ok(lines[at].includes(part), "TERMINALS.md must say: " + part);
+  assert.ok(
+    lines[at].includes(mod.DROP_REMOTE_NOTICE.split(". ")[0]),
+    "the documented notice is the one the code shows",
+  );
+
+  // The design note: short, honest about the status, and names what the existing channel does and what an upload would need.
+  const note = read("docs/terminal-file-drop.md");
+  const noteLines = note.split("\n");
+  assert.equal(noteLines[0], "# Dropping files onto terminals");
+  assert.ok(noteLines.length <= 40, "the design note stays short");
+  assert.ok(!/[^\n -~]/.test(note), "the note is printable ASCII");
+  for (const heading of [
+    "## What exists",
+    "## Why the image-paste channel does not carry it",
+    "## What a remote upload would need",
+    "## Decision",
+  ])
+    assert.equal(
+      noteLines.filter((line) => line === heading).length,
+      1,
+      heading,
+    );
+  for (const part of [
+    "Remote upload is a design note only. Not implemented.",
+    "`webUtils.getPathForFile`",
+    "`window.hrig.pathForFile`",
+    "`src/terminal-drop-path.ts`",
+    "`terminal:paste-image`",
+    "[terminal-image-paste.md](terminal-image-paste.md)",
+    "caps it at 10 MiB",
+    "native confirmation",
+    "It never receives a path from the renderer",
+    "The renderer is untrusted",
+    "a private 0700 directory and a 0600 file",
+    "Not implemented. The safe local insert ships first",
+  ])
+    assert.ok(note.includes(part), "the design note must say: " + part);
+  assert.ok(
+    fs.existsSync(path.join(root, "docs", "terminal-image-paste.md")),
+    "the linked image-paste note exists",
+  );
+  // What the note says about the image channel is what the main process does.
+  const main = read("electron/main.cjs");
+  assert.ok(
+    main.includes("handle('terminal:paste-image', async (_event,id) =>"),
+  );
+  assert.ok(
+    main.includes("terminalImages.saveImage(item.connection,target,png)"),
+  );
+  assert.equal(
+    require("../electron/terminal-images.cjs").MAX_IMAGE_BYTES,
+    10 * 1024 * 1024,
+  );
+  assert.ok(
+    !/fileDrop|file-drop|dropPath|terminal\.drop|Dropped paths/i.test(
+      read("SETTINGS.md"),
+    ),
+    "SETTINGS.md has no drop row",
+  );
+});
