@@ -114,6 +114,27 @@ test('actual boot callback normalizes legacy malformed and mixed pins alongside 
   }
 });
 
+test('actual queued App callback rejects every changed identity slot and resolves fallback owners', () => {
+  const queued = [];
+  const initial = workspace();
+  propsFor(initial, helpers.pinConnectionIdentity(host), update => queued.push(update))
+    .onToggleSeatPin(seat);
+  for (const change of [{ id: 'new-id' }, { kind: 'wsl' }, { host: 'other' },
+    { port: 22 }, { distro: 'Ubuntu' }, { rigBinary: '/other' }]) {
+    const latest = workspace({ connections: [{ ...host, ...change }] });
+    assert.equal(queued[0](latest), latest);
+  }
+  const fallback = workspace({ activeConnection: 'missing' });
+  assert.deepEqual(Array.from(queued[0](fallback).pinnedSeats), [identity]);
+  const empty = workspace({ connections: [], activeConnection: 'missing' });
+  assert.equal(queued[0](empty), empty, 'local fallback cannot inherit the old SSH pin');
+  let state = initial;
+  const update = propsFor(initial, helpers.pinConnectionIdentity(host), fn => { state = fn(state); });
+  update.onToggleSeatPin(seat);
+  update.onToggleSeatPin(seat);
+  assert.deepEqual(Array.from(state.pinnedSeats), [], 'reused callback reads latest membership');
+});
+
 test('actual debounced save and beforeunload flush carry full latest workspace and preserve errors', async () => {
   const state = workspace({ pinnedSeats: [identity], sidebarWidth: 410 });
   const saves = [], timers = [], cleared = [], toasts = [], logs = [], flushes = [];

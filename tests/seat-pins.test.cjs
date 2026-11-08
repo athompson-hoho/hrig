@@ -63,3 +63,27 @@ test('stable partition preserves duplicate rows references count and normal orde
   assert.deepEqual(plain(partitionPinnedSeats([], host, [key])), []);
   assert.equal(partitionPinnedSeats([b], host, [key])[0], b);
 });
+
+test('punctuation and explicit endpoint slots round trip without joining or normalizing identities', () => {
+  const unusual = Object.freeze({ ...host, id: 'owner,[]"\\', host: 'MiXeD:server',
+    port: 65535, distro: 'a,b', rigBinary: '/rig "custom"' });
+  const expected = JSON.stringify(['owner,[]"\\', 'ssh', 'MiXeD:server', 65535,
+    'a,b', '/rig "custom"', 'rig:["seat"],\\']);
+  assert.equal(seatPinIdentity(unusual, 'rig:["seat"],\\'), expected);
+  assert.deepEqual(plain(normalizePinnedSeats([expected])), [expected]);
+  for (const port of [1, 22, 65535]) {
+    const explicit = seatPinIdentity({ ...host, port }, 'rig:seat');
+    assert.notEqual(explicit, key);
+    assert.deepEqual(plain(normalizePinnedSeats([key, explicit])), [key, explicit]);
+  }
+  for (const port of [-1, 1.5, '22', true]) {
+    assert.deepEqual(plain(normalizePinnedSeats([
+      JSON.stringify(['owner', 'ssh', 'server', port, null, null, 'rig:seat']), key,
+    ])), [key]);
+  }
+  const once = setSeatPinned(Object.freeze([]), expected, true);
+  assert.deepEqual(plain(setSeatPinned(once, expected, true)), [expected]);
+  let toggled = once;
+  for (let i = 0; i < 10; i++) toggled = toggleSeatPin(toggled, expected);
+  assert.deepEqual(plain(toggled), [expected]);
+});

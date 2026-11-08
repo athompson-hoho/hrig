@@ -255,6 +255,55 @@ test('Sidebar partitions sorted matches without bypassing filters or inventing a
   assert.deepEqual(view.calls, []);
 });
 
+test('Sidebar pin partition preserves equal names across rigs and each sort/filter intersection', () => {
+  const first = seat('r1:same', { name: 'Same', status: 'idle' });
+  const second = seat('r2:same', { name: 'Same', rigId: 'r2', rigName: 'RigSouth', status: 'working' });
+  const attention = seat('r1:attention', { name: 'Zed', status: 'attention' });
+  const input = Object.freeze([first, second, attention]);
+  const { seatPinIdentity } = load('../src/seat-pins.ts');
+  const view = sidebar({ selectedRig: '', inventory: { rigs: [], seats: input } });
+  view.props.pinnedSeats = [seatPinIdentity(view.props.connection, second.id)];
+  const expected = { name: [second, first, attention],
+    activity: [second, attention, first], 'attention-first': [second, attention, first] };
+  const check = values => {
+    assert.deepEqual(view.rows().map(row => row.key), values.map(value => value.id));
+    assert.equal(view.count(), values.length);
+    view.rows().forEach((row, index) => {
+      row.props.children[0].props.onClick();
+      assert.equal(view.calls.pop()[0], values[index]);
+    });
+  };
+  for (const mode of ['name', 'activity', 'attention-first']) {
+    view.sort(mode);
+    check(expected[mode]);
+    view.query('Same');
+    check([second, first]);
+    view.status('working');
+    check([second]);
+    view.props.selectedRig = 'r1'; view.render();
+    check([]);
+    view.props.selectedRig = 'r2'; view.render();
+    check([second]);
+    view.props.selectedRig = ''; view.query(''); view.status('all');
+    check(expected[mode]);
+    view.props.pinnedSeats = [];
+    view.render();
+    check(mode === 'name' ? [first, second, attention] :
+      mode === 'activity' ? [second, attention, first] : [attention, first, second]);
+    view.props.pinnedSeats = [seatPinIdentity(view.props.connection, second.id)];
+    view.render();
+    view.props.connection = { ...view.props.connection, host: 'other' }; view.render();
+    check(mode === 'name' ? [first, second, attention] :
+      mode === 'activity' ? [second, attention, first] : [attention, first, second]);
+    assert.ok(view.rows().every(row => row.props.children[1].props['aria-pressed'] === false));
+    view.props.connection = { id: 'host', kind: 'ssh', name: 'Renamed', root: '/new' };
+    view.render();
+    check(expected[mode]);
+  }
+  assert.deepEqual(view.calls, []);
+  assert.deepEqual(input, [first, second, attention]);
+});
+
 test('Sidebar status select offers five ordered choices and reversibly filters actual rows', () => {
   const inventorySeats = Object.freeze([
     seat('working', { status: 'working' }),
