@@ -89,6 +89,11 @@ import {
 } from "./settings";
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
+import {
+  CHECKING_SNAPSHOT,
+  failureOutcome,
+  pollDelay,
+} from "./inventory-health";
 import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
@@ -223,6 +228,12 @@ export default function App() {
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const inventoryHealth = useRef<{
+    key: string;
+    failures: number;
+    lastSuccessAt: number | null;
+    verified: boolean;
+  }>({ key: "", failures: 0, lastSuccessAt: null, verified: false });
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -547,44 +558,84 @@ export default function App() {
       connection.distro,
       connection.rigBinary,
     ]);
-    setInventory(inventoryCache.current.get(inventoryKey) || null);
-    setInventoryError(
-      inventoryCache.current.has(inventoryKey)
-        ? "Checking the last successful snapshot…"
-        : "",
-    );
+    if (inventoryHealth.current.key !== inventoryKey) {
+      // A switched-to connection shows its cached snapshot, unverified: the
+      // guard stays on (with a gentle "checking" note) until a poll succeeds.
+      const cached = inventoryCache.current.get(inventoryKey);
+      inventoryHealth.current = {
+        key: inventoryKey,
+        failures: 0,
+        lastSuccessAt: cached ? Date.parse(cached.sampledAt) || null : null,
+        verified: false,
+      };
+      setInventory(cached || null);
+      setInventoryError(cached ? CHECKING_SNAPSHOT : "");
+    }
     if (connection.kind === "local" && isWindows) {
       setBusy(false);
       return;
     }
+    const interval = preferences["workspace.refreshInterval"];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!active) return;
+      timer = setTimeout(
+        load,
+        pollDelay(interval, inventoryHealth.current.failures),
+      );
+    };
     const load = async () => {
+      // Never overlap polls, and don't poll a hidden window; it refreshes the
+      // moment the window is visible again.
       if (inFlight) return;
+      if (document.hidden) return schedule();
       inFlight = true;
       setBusy(true);
+      const health = inventoryHealth.current;
       try {
         const result = await window.hrig.inventory(connection);
         if (active) {
+          health.failures = 0;
+          health.lastSuccessAt = Date.now();
+          health.verified = true;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
           setInventoryError("");
         }
       } catch (e) {
         if (active) {
-          setInventoryError((e as Error).message);
+          health.failures++;
+          const outcome = failureOutcome({
+            verified: health.verified,
+            failures: health.failures,
+            lastSuccessAt: health.lastSuccessAt,
+            now: Date.now(),
+            intervalSeconds: interval,
+          });
+          // "quiet": keep serving the verified snapshot; "checking": leave the
+          // unverified-snapshot guard on without calling it an error.
+          if (outcome === "report") setInventoryError((e as Error).message);
         }
       } finally {
         inFlight = false;
-        if (active) setBusy(false);
+        if (active) {
+          setBusy(false);
+          schedule();
+        }
       }
     };
-    load();
-    const timer = setInterval(
-      load,
-      preferences["workspace.refreshInterval"] * 1000,
-    );
+    const visible = () => {
+      if (!document.hidden && !inFlight) {
+        clearTimeout(timer);
+        void load();
+      }
+    };
+    document.addEventListener("visibilitychange", visible);
+    void load();
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visible);
     };
   }, [
     loaded,
@@ -2082,20 +2133,20 @@ export default function App() {
                   {currentRig?.name || "Workspace"}
                 </span>
                 <span
-                  className={`connection-state ${inventoryError ? "error" : ""}`}
+                  className={`connection-state ${inventoryError && inventoryError !== CHECKING_SNAPSHOT ? "error" : ""}`}
                 >
                   <StatusDot
                     status={
-                      busy
+                      busy && !inventory
                         ? "unknown"
                         : connection.kind === "local" || inventory
                           ? "running"
                           : "unknown"
                     }
                   />
-                  {busy
+                  {busy && !inventory
                     ? "Connecting"
-                    : inventoryError
+                    : inventoryError && inventoryError !== CHECKING_SNAPSHOT
                       ? "Unavailable"
                       : connection.kind === "local"
                         ? "Local"

@@ -16,6 +16,15 @@ import {
 } from "lucide-react";
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
+import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+function InventoryAge({ sampledAt }: { sampledAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  return <>{formatAge(now - Date.parse(sampledAt))}</>;
+}
 function FileTree({
   connection,
   root,
@@ -380,10 +389,15 @@ export default function Sidebar({
             <span className="count">{seats.length}</span>
           </div>
           <div className="sidebar-scroll">
-            {inventoryError && inventory && (
+            {inventoryError === CHECKING_SNAPSHOT && inventory && (
+              <div className="sidebar-empty" role="status">
+                Refreshing · showing the last known snapshot…
+              </div>
+            )}
+            {inventoryError && inventoryError !== CHECKING_SNAPSHOT && inventory && (
               <div className="error-box" role="status">
-                Stale inventory · Last success: {inventory.sampledAt}.{" "}
-                {inventoryError}{" "}
+                Stale inventory · last updated{" "}
+                <InventoryAge sampledAt={inventory.sampledAt} />. {inventoryError}{" "}
                 <button onClick={onRefresh}>Retry connection</button>
               </div>
             )}
