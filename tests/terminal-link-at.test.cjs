@@ -848,3 +848,77 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
       file,
     );
 });
+
+test("terminal-link-at docs: TERMINALS.md says when the link items appear, what each does and that only a left click opens a link, and its words match the menu and the open path", () => {
+  const doc = read("TERMINALS.md");
+  assert.ok(!doc.startsWith(char(65279)), "no byte order mark");
+  assert.ok(doc.endsWith("\n") && !doc.endsWith("\n\n"), "one final line feed");
+  assert.ok(!doc.includes("\r"), "no carriage return");
+  const lines = doc.split("\n");
+  const at = lines.findIndex((l) => l.startsWith("Right-click a link"));
+  assert.ok(at > 0, "the paragraph exists");
+  assert.equal(
+    lines.filter((l) => l.startsWith("Right-click a link")).length,
+    1,
+    "exactly one such paragraph",
+  );
+  const para = lines[at];
+  assert.ok(
+    para.startsWith(
+      "Right-click a link in a terminal to get Open link and Copy link at the top of the right-click menu.",
+    ),
+  );
+  assert.ok(
+    !/[^ -~]/.test(para),
+    "the paragraph is printable ASCII on one line",
+  );
+  assert.equal(lines[at - 1], "", "a blank line before");
+  assert.equal(lines[at + 1], "", "a blank line after");
+  assert.ok(
+    lines[at - 2].startsWith("HTTP/HTTPS links require native confirmation"),
+    "right after the links paragraph",
+  );
+  assert.ok(
+    lines[at + 2].startsWith("These controls do not recreate the PTY"),
+    "right before the controls paragraph",
+  );
+  for (const fragment of [
+    "The items appear only while the pointer is on a link that HRig already underlines when you point at it",
+    "a web address (http or https) or a file path with an extension",
+    "including one that wraps onto the next row",
+    "a right-click anywhere else shows the same menu as before",
+    "Open link does exactly what clicking the link does",
+    'a web address asks "Open this link in your browser?" first',
+    "a link with a user name or password or a protocol other than http or https is refused",
+    "a file path opens in an HRig editor tab at its line after the same check as a click",
+    "Copy link puts the web address, or the path without its line number, on the clipboard",
+    'shows "Link copied."',
+    "a clipboard error uses the same notice line as Copy",
+    "Nothing is typed into the terminal or sent to the shell or the seat.",
+    "Only a left click opens a link",
+    "a right-click or middle-click on a link does not",
+    "neither does a Control-click on macOS, where it opens the menu",
+    "a quoted path with no separator before its first space, gets no items",
+  ])
+    assert.ok(para.includes(fragment), "TERMINALS.md must say: " + fragment);
+
+  // The words are the ones the product uses.
+  const tools = collapse(stripComments(read("src/TerminalTools.tsx")));
+  assert.ok(tools.includes("<span>Open link</span>"));
+  assert.ok(tools.includes("<span>Copy link</span>"));
+  assert.ok(tools.includes('"Link copied."'));
+  const main = read("electron/terminal-tools.cjs");
+  assert.ok(main.includes('message: "Open this link in your browser?"'));
+  assert.ok(main.includes('["http:", "https:"].includes(url.protocol)'));
+  assert.ok(collapse(main).includes("url.username || url.password"));
+  // No setting row for this.
+  assert.ok(
+    !/link/i.test(
+      read("SETTINGS.md")
+        .split("\n")
+        .filter((l) => /terminal\.(link|openLink|copyLink)/.test(l))
+        .join("\n"),
+    ),
+  );
+  assert.equal(count(doc, "Right-click a link"), 1);
+});
