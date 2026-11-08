@@ -825,7 +825,11 @@ test("panel-maximize chord, Escape and docs: the shortcut is claimed before the 
     ),
     "Reopen closed panel is untouched",
   );
-  assert.equal(count(app, "toggleMaximize("), 3, "two commands and the chord");
+  assert.equal(
+    count(app, "toggleMaximize("),
+    4,
+    "two commands, the chord and the rebound chord",
+  );
   assert.equal(
     count(app, '"Escape"'),
     1,

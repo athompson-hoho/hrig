@@ -631,7 +631,11 @@ test("focus-mode chord, hint and docs: the shortcut is claimed after the other c
     ),
     "claimed always, acts only with no dialog open",
   );
-  assert.equal(count(app, "toggleFocusMode("), 1, "the chord is the one call");
+  assert.equal(
+    count(app, "toggleFocusMode("),
+    2,
+    "the chord and the rebound chord",
+  );
   assert.equal(count(app, "isFocusModeKey("), 1);
   // What was there before is untouched: the early return, the claimed letters,
   // the other claimed chords and Ctrl+B.

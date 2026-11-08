@@ -1195,3 +1195,31 @@ test("terminal.copyTrimTrailingWhitespace is documented in SETTINGS.md and TERMI
     );
   }
 });
+test("shortcuts.overrides is plain text with the generic rule, empty by default, listed once in Workspace and documented in SETTINGS.md", () => {
+  const key = "shortcuts.overrides";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], "");
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Workspace");
+  assert.equal(rows[0].label, "Shortcut overrides");
+  const text =
+    "workspace.reopenPanel=Ctrl+Shift+J,workspace.maximizePanel=Ctrl+Shift+Y";
+  assert.deepEqual(settings.validateOverrides({ [key]: text }), {
+    [key]: text,
+  });
+  for (const value of ["", "{}", "a;b", "a<b>"]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Invalid text for " + key,
+      "the generic text rule for " + JSON.stringify(value),
+    );
+  }
+  assert.equal(settings.resolveSettings({ [key]: text })[key], text);
+  assert.equal(settings.resolveSettings()[key], "");
+  const doc = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  assert.ok(
+    doc.includes("| `" + key + "` | empty |"),
+    "SETTINGS.md must have a shortcuts.overrides row with an empty default",
+  );
+});

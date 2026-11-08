@@ -723,7 +723,7 @@ test("closed-panels chord and docs: the shortcut is claimed before the generic c
     ),
     "Ctrl+Shift+T is still New shell",
   );
-  assert.equal(count(app, "reopenClosedPanel"), 3);
+  assert.equal(count(app, "reopenClosedPanel"), 4);
   assert.deepEqual(filesWith(/isReopenPanelKey\(/), [
     "App.tsx",
     "shortcuts.ts",

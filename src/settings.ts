@@ -48,6 +48,7 @@ export const defaults = {
   "notifications.desktop": false,
   "notifications.terminalBell": false,
   "notifications.terminalQuiet": false,
+  "shortcuts.overrides": "",
 };
 export type Preferences = typeof defaults;
 export type SettingKey = keyof Preferences;
@@ -444,6 +445,13 @@ export const schema: Setting[] = [
     label: "Terminal quiet alerts",
     description:
       "Also notify when a terminal you are not looking at goes quiet after a burst of output, such as a finished build. Requires desktop notifications. No terminal text is included.",
+  },
+  {
+    key: "shortcuts.overrides",
+    category: "Workspace",
+    label: "Shortcut overrides",
+    description:
+      "New keys for the three shortcuts that can be rebound, written as id=keys pairs separated by commas, for example workspace.reopenPanel=Ctrl+Shift+J. Empty (the default) keeps every shortcut as it is. The Keyboard shortcuts sheet (press ?) edits this text, refuses keys the terminal, the editor or another shortcut uses, and has Reset; a clashing or unknown entry written here by hand is ignored. Changes only which keys you press; nothing is sent to the shell or the seat.",
   },
 ];
 export function validateOverrides(value: unknown): Overrides {

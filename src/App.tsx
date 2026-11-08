@@ -146,6 +146,7 @@ import {
 } from "./shortcuts";
 import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
 import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
+import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -344,6 +345,11 @@ export default function App() {
   const preferences = useMemo(
     () => resolveSettings(userPreferences, projectPreferences),
     [userPreferences, projectPreferences],
+  );
+  const overridesText = preferences["shortcuts.overrides"];
+  const shortcutOverrides = useMemo(
+    () => parseOverrideText(overridesText, window.hrig?.platform || "unknown").map,
+    [overridesText],
   );
   const themeDocuments = useRef(new Set<Document>([document]));
   const [systemDark, setSystemDark] = useState(
@@ -2092,6 +2098,7 @@ export default function App() {
       ? [{name: "Terminal: " + droppedLabel(droppedNow.length), hint: "Re-attach ended or errored terminals · others untouched", icon: <RefreshCw size={16} />, action: reconnectDropped}]
       : []),
   ];
+  const shownCommands = withEffectiveHints(commands, window.hrig.platform, shortcutOverrides);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey) return;
@@ -2102,6 +2109,19 @@ export default function App() {
         event.preventDefault();
         event.stopPropagation();
         openShortcuts();
+        return;
+      }
+      // Overridden chords run their shortcut; the old keys of a moved one go back to the terminal.
+      const rebound = routeOverriddenKey(event, window.hrig.platform, shortcutOverrides);
+      if (rebound !== null) {
+        if (rebound.id === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) {
+          if (rebound.id === "workspace.reopenPanel") reopenClosedPanel();
+          else if (rebound.id === "workspace.maximizePanel") toggleMaximize("toggle", event.target);
+          else toggleFocusMode();
+        }
         return;
       }
       // Claimed always so it never reaches a shell; acts only with no dialog open.
@@ -3242,7 +3262,7 @@ export default function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    const item = pickFirst(commands, search);
+                    const item = pickFirst(shownCommands, search);
                     if (item) {
                       setModal(null);
                       item.action();
@@ -3256,7 +3276,7 @@ export default function App() {
               <kbd>ESC</kbd>
             </div>
             <div className="command-list">
-              {filterCommands(commands, search)
+              {filterCommands(shownCommands, search)
                 .map((c) => (
                   <button
                     key={c.name + c.hint}
