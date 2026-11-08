@@ -20,6 +20,7 @@ import TerminalAlerts from "./TerminalAlerts";
 import { useTerminalZoom } from "./useTerminalZoom";
 import { effectiveFontSize } from "./terminal-zoom";
 import { normalizeContrastRatio } from "./terminal-contrast";
+import { sanitizeWordSeparator } from "./terminal-words";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -367,6 +368,9 @@ export default function TerminalPanel({
       preferences["terminal.minimumContrastRatio"],
     );
     term.options.macOptionIsMeta = preferences["terminal.macOptionIsMeta"];
+    term.options.wordSeparator = sanitizeWordSeparator(
+      preferences["terminal.wordSeparator"],
+    );
     term.options.theme = terminalTheme(preferences, colorTheme);
     try {
       fitRef.current?.fit();

@@ -1,5 +1,6 @@
 import { themes } from "./theme-catalog";
 import { isWindows } from "./platform";
+import { DEFAULT_WORD_SEPARATOR, isValidWordSeparator } from "./terminal-words";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -35,6 +36,7 @@ export const defaults = {
   "terminal.bellStyle": "none",
   "terminal.minimumContrastRatio": 1,
   "terminal.macOptionIsMeta": false,
+  "terminal.wordSeparator": DEFAULT_WORD_SEPARATOR,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -358,6 +360,13 @@ export const schema: Setting[] = [
       "macOS only; no effect on Windows or Linux. Off (the default) keeps Option typing special characters such as accents. On makes Option act as the Meta key in terminals, so Option+B and Option+F move back and forward a word in shells such as zsh and bash, and Option no longer types special characters there. Applies at once to every open terminal. Changes only how your own key presses are encoded; nothing is sent to the shell or the seat unless you press a key.",
   },
   {
+    key: "terminal.wordSeparator",
+    category: "Terminal",
+    label: "Word separators",
+    description:
+      "Characters that end a word when you double-click text in a terminal to select it. The default is xterm's own: space, parentheses, square and curly brackets, single and double quotes, comma and backtick, so nothing changes until you edit it. Up to 64 characters, no line breaks or control characters, and not empty. Keep a space in the list unless you want a double-click to run across spaces. Applies at once to every open terminal. Changes only what a double-click selects; nothing is sent to the shell or the seat.",
+  },
+  {
     key: "workspace.refreshInterval",
     category: "Workspace",
     label: "Rig refresh interval",
@@ -453,7 +462,9 @@ export function validateOverrides(value: unknown): Overrides {
       throw new Error("Unsupported option for " + key);
     if (
       typeof v === "string" &&
-      (!v.trim() || v.length > 300 || /[\u0000-\u001f;{}<>]/.test(v))
+      (key === "terminal.wordSeparator"
+        ? !isValidWordSeparator(v)
+        : !v.trim() || v.length > 300 || /[\u0000-\u001f;{}<>]/.test(v))
     )
       throw new Error("Invalid text for " + key);
     result[key] = v;
