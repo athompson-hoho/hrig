@@ -8,6 +8,7 @@ import {
   Suspense,
 } from "react";
 import { flushSync } from "react-dom";
+import { attentionScope, attentionJumpEligibility } from "./attention-inbox";
 import AccountStatus from "./AccountStatus";
 import UpdateNotice from "./UpdateNotice";
 import {
@@ -230,6 +231,7 @@ export default function App() {
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const attentionContext = useRef<any>(null);
   const inventoryHealth = useRef<{
     key: string;
     failures: number;
@@ -1097,6 +1099,32 @@ export default function App() {
       (element || panel)?.focus();
     });
   };
+  attentionContext.current = { connection, inventory, inventoryError, openSeat, focusPanel };
+  const jumpAttention = (captured: Connection, seat: Seat, diagnostic = false): string => {
+    const latest = attentionContext.current;
+    const current = stateRef.current.connections.find((c) => c.id === stateRef.current.activeConnection) || stateRef.current.connections[0] || local;
+    const scope = attentionScope(captured, current, latest.inventory, inventoryHealth.current, latest.inventoryError);
+    if (!scope.ready) return scope.reason;
+    if (pinConnectionIdentity(latest.connection) !== pinConnectionIdentity(current)) return "Current connection inventory is unavailable. Existing terminal preserved.";
+    const reason = attentionJumpEligibility(scope.inventory, seat, diagnostic);
+    if (reason) return reason;
+    const id = `seat:${current.id}:${seat.id}`;
+    try {
+    const node = modelRef.current.getNodeById(id) as TabNode | undefined;
+    if (node) {
+      const config = node.getConfig?.();
+      if (node.getComponent?.() !== "terminal" || !config?.connection ||
+        pinConnectionIdentity(config.connection) !== pinConnectionIdentity(current) ||
+        config.terminalId !== id || config.seat?.id !== seat.id || config.seat?.session !== seat.session ||
+        !node.getDocument?.() || !node.getWindow?.() || node.getWindow()?.closed)
+        return "Existing target cannot be safely focused. Existing terminal preserved.";
+      latest.focusPanel(id);
+    } else latest.openSeat(scope.inventory!.seats.find((row) => row.id === seat.id)!);
+    return "";
+    } catch {
+      return "Existing target cannot be safely focused. Existing terminal preserved.";
+    }
+  };
   const movePanel = (id: string, target: string, direction: string) => {
     const current = modelRef.current;
     if (
@@ -1421,10 +1449,9 @@ export default function App() {
         return (
           <AttentionPanel
             connection={config.connection}
-            inventory={
-              config.connection.id === connection.id ? inventory : null
-            }
-            onSeat={openSeat}
+            scope={attentionScope(config.connection, connection, inventory, inventoryHealth.current, inventoryError)}
+            inventory={attentionScope(config.connection, connection, inventory, inventoryHealth.current, inventoryError).inventory}
+            onSeat={(seat, diagnostic) => jumpAttention(config.connection, seat, diagnostic)}
             notifications={preferences["notifications.desktop"]}
             onNotifications={(value) =>
               settingsContext.update(

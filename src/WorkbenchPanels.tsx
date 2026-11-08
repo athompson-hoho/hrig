@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import type { Connection, Seat, Inventory, PanelConfig } from "./types";
 import { ErrorBox, Loading, StatusDot, Empty } from "./components";
+import { attentionSeats, attentionJumpEligibility } from "./attention-inbox";
+import { pinConnectionIdentity } from "./seat-pins";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const [report, setReport] = useState<any>(null);
@@ -98,19 +100,27 @@ export function AttentionPanel({
   connection,
   inventory,
   onSeat,
+  scope,
   notifications,
   onNotifications,
 }: {
   connection: Connection;
   inventory: Inventory | null;
-  onSeat: (seat: Seat) => void;
+  onSeat: (seat: Seat, diagnostic?: boolean) => string;
+  scope: { ready: boolean; reason: string };
   notifications: boolean;
   onNotifications: (value: boolean) => void;
 }) {
   const [blocked, setBlocked] = useState<any[] | null>(null);
   const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState("");
+  const [blockedOwner, setBlockedOwner] = useState("");
+  const owner = pinConnectionIdentity(connection);
   useEffect(() => {
     let active = true;
+    setBlockedOwner(owner);
+    setBlocked(null);
+    setError("");
     const load = () =>
       window.hrig
         .queue(connection)
@@ -133,70 +143,48 @@ export function AttentionPanel({
       active = false;
       clearInterval(timer);
     };
-  }, [connection.id]);
-  const seats =
-    inventory?.seats.filter(
-      (s) => s.status === "attention" || (s.status === "failed" && s.error),
-    ) || [];
-  return (
-    <div className="tool-panel">
-      <div className="tool-panel-heading">
-        <AlertCircle />
-        <div>
-          <h3>Needs your attention</h3>
-          <p>Reported seat problems and blocked work; no inferred urgency.</p>
-        </div>
-      </div>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={notifications}
-          onChange={(e) => onNotifications(e.target.checked)}
-        />
-        Windows notifications when a seat newly needs input
-      </label>
-      {error && <ErrorBox error={error} />}{" "}
-      {blocked === null && !error && <Loading text="Checking attention" />}
-      {!seats.length && blocked !== null && !blocked.length && !error && (
-        <Empty
-          icon={<Check size={28} />}
-          title="Nothing needs your attention"
-          description="Seats needing input and blocked tasks will appear here."
-        />
-      )}
-      {seats.map((seat) => (
-        <button
-          className="attention-row"
-          key={seat.id}
-          onClick={() => onSeat(seat)}
-        >
-          <StatusDot status="attention" />
-          <section>
-            <strong>
-              {seat.name}@{seat.rigName}
-            </strong>
-            <p>
-              {seat.error ||
-                seat.activity ||
-                "OpenRig reports that this seat needs attention."}
-            </p>
-          </section>
-          <span>Open seat →</span>
-        </button>
-      ))}
-      {(blocked || []).map((item) => (
-        <div className="attention-row" key={String(item.id)}>
-          <StatusDot status="attention" />
-          <section>
-            <strong>{String(item.title)}</strong>
-            <p>
-              {String(item.destination)} · {String(item.status)}
-            </p>
-          </section>
-        </div>
-      ))}
-    </div>
-  );
+  }, [owner]);
+  const ownedBlocked = blockedOwner === owner ? blocked : null;
+  const ownedError = blockedOwner === owner ? error : "";
+  const seats = attentionSeats(inventory);
+  const problems = inventory?.seats.filter((seat) => seat.status === "failed" && seat.error) || [];
+  const context = (seat: Seat) => `${seat.name || "Seat name unavailable"} · ${seat.rigName || seat.rigId || "Rig unavailable"} · ${seat.pod || "Pod unavailable"} · ${connection.name}`;
+  const row = (seat: Seat, index: number, diagnostic = false) => {
+    const reason = !scope.ready ? scope.reason : attentionJumpEligibility(inventory, seat, diagnostic);
+    return <div className="attention-row attention-inbox-row" key={`${seat.id}:${index}`}>
+      <StatusDot status={diagnostic ? "failed" : "attention"} />
+      <section><strong>{context(seat)}</strong>
+        <p>{diagnostic ? "Failed" : "Needs input"} · Session: {seat.session || "unavailable"}</p>
+        {seat.error && <p>{seat.error}</p>}
+        {reason && <p>{reason}</p>}
+      </section>
+      <button className="small-button" disabled={!!reason} aria-label={`${diagnostic ? "Open" : "Jump to"} ${context(seat)}`}
+        onClick={() => setRefusal(onSeat(seat, diagnostic) || "")}>{diagnostic ? "Open seat →" : "Jump to seat →"}</button>
+    </div>;
+  };
+  return <div className="tool-panel attention-inbox">
+    <div className="tool-panel-heading"><AlertCircle /><div>
+      <h3>Needs your attention</h3><p>{connection.name} · {connection.kind} · {connection.host || connection.distro || "Local desktop"}</p>
+    </div></div>
+    <label className="checkbox-label"><input type="checkbox" checked={notifications}
+      onChange={(e) => onNotifications(e.target.checked)} />Windows notifications when a seat newly needs input</label>
+    <p>{scope.reason}</p>
+    {refusal && <ErrorBox error={refusal} />}
+    <h4>{inventory && !scope.ready ? "Last known needs input" : "Needs input"}{inventory ? ` (${seats.length})` : ""}</h4>
+    {inventory && scope.ready && !seats.length && <Empty icon={<Check size={28} />} title="No seats need input" description="No represented seats need input on this connection." />}
+    {seats.map((seat, index) => row(seat, index))}
+    <h4>Seat problems</h4>
+    {inventory && !problems.length && <p>No failed seat diagnostics.</p>}
+    {problems.map((seat, index) => row(seat, index, true))}
+    <h4>Blocked work</h4>
+    {ownedError && <ErrorBox error={`${connection.name}: ${ownedError}`} />}
+    {ownedBlocked === null && !ownedError && <Loading text="Checking blocked work" />}
+    {ownedBlocked !== null && !ownedBlocked.length && !ownedError && <p>No blocked work.</p>}
+    {(ownedBlocked || []).map((item, index) => <div className="attention-row" key={`${String(item.id)}:${index}`}>
+      <StatusDot status="attention" /><section><strong>{String(item.title || "Work title unavailable")}</strong>
+      <p>{String(item.destination || "Destination unavailable")} · {String(item.status)}</p></section>
+    </div>)}
+  </div>;
 }
 export function ProjectTools({
   connection,
