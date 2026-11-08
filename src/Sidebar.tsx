@@ -19,6 +19,8 @@ import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
+import { sortSeats } from "./seat-sort";
+import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -191,6 +193,7 @@ export default function Sidebar({
   fileRevision: number;
 }) {
   const [query, setQuery] = useState("");
+  const { effective, project, update } = useSettings();
   const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
   const [changes, setChanges] = useState<GitEntry[]>([]);
   const [gitError, setGitError] = useState("");
@@ -224,7 +227,10 @@ export default function Sidebar({
   }, [section, connection.id, root, fileRevision, gitRevision]);
   const rigs = inventory?.rigs || [];
   const searchResult = filterSeats(inventory?.seats || [], selectedRig, query);
-  const seats = filterSeatsByStatus(searchResult.seats, statusFilter);
+  const seats = sortSeats(
+    filterSeatsByStatus(searchResult.seats, statusFilter),
+    effective["rig.seatSort"],
+  );
   const noMatches = searchResult.scopedCount > 0 &&
     (searchResult.hasQuery || statusFilter !== "all") && seats.length === 0;
   return (
@@ -363,6 +369,21 @@ export default function Sidebar({
             <option value="idle">Idle</option>
             <option value="attention">Needs input</option>
             <option value="stopped">Stopped</option>
+          </select>
+          <select
+            aria-label="Sort sessions"
+            className="sidebar-status-filter"
+            value={effective["rig.seatSort"]}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "name" || value === "activity" || value === "attention-first")
+                update(Object.hasOwn(project, "rig.seatSort") ? "project" : "user",
+                  "rig.seatSort", value);
+            }}
+          >
+            <option value="name">Name</option>
+            <option value="activity">Activity (working first)</option>
+            <option value="attention-first">Attention first</option>
           </select>
           <div className="section-label">
             <span>RIGS</span>
