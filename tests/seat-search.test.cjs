@@ -37,6 +37,7 @@ function sidebar(overrides = {}) {
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     './components': { ErrorBox: 'ErrorBox', IconButton: 'IconButton', StatusDot: 'StatusDot' },
     './inventory-health': health,
+    './seat-status': load('../src/seat-status.ts'),
     './seat-search': fs.existsSync(require('node:path').join(__dirname, '../src/seat-search.ts'))
       ? load('../src/seat-search.ts') : {},
   }).default;
@@ -62,14 +63,54 @@ function sidebar(overrides = {}) {
     return result;
   };
   const input = () => nodes().find(n => n.type === 'input' && n.props['aria-label'] === 'Filter sessions');
+  const statusSelect = () => nodes().find(n => n.type === 'select' &&
+    n.props['aria-label'] === 'Filter session status');
   render();
-  return { calls, props, nodes, input, render, health,
+  return { calls, props, nodes, input, statusSelect, render, health,
     query(value) { input().props.onChange({ target: { value } }); render(); },
+    status(value) {
+      assert.ok(statusSelect(), 'Sidebar exposes the native Filter session status select');
+      statusSelect().props.onChange({ target: { value } });
+      render();
+    },
     rows: () => nodes().filter(n => n.props?.className === 'session-row'),
     count: () => nodes().find(n => n.props?.className === 'section-label' &&
       n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
   };
 }
+
+test('Sidebar status select offers five ordered choices and reversibly filters actual rows', () => {
+  const inventorySeats = Object.freeze([
+    seat('working', { status: 'working' }),
+    seat('idle', { status: 'idle' }),
+    seat('attention', { status: 'attention' }),
+    seat('stopped', { status: 'stopped' }),
+    seat('exited', { status: 'exited' }),
+    seat('failed', { status: 'failed' }),
+    seat('running', { status: 'running' }),
+    seat('unknown', { status: 'unknown' }),
+    seat('missing', { status: undefined, session: null, activity: 'working' }),
+  ]);
+  const view = sidebar({ inventory: { rigs: [], seats: inventorySeats, sampledAt: new Date().toISOString() } });
+  const select = view.statusSelect();
+  assert.ok(select, 'Sidebar exposes the native Filter session status select');
+  assert.equal(select.props.value, 'all');
+  assert.equal(select.props.className, 'sidebar-status-filter');
+  assert.deepEqual(Array.from(select.props.children, option => [option.props.value, option.props.children]), [
+    ['all', 'All statuses'], ['working', 'Working'], ['idle', 'Idle'],
+    ['attention', 'Needs input'], ['stopped', 'Stopped'],
+  ]);
+  for (const [value, expected] of [
+    ['working', ['working']], ['idle', ['idle']], ['attention', ['attention']],
+    ['stopped', ['stopped', 'exited', 'failed']], ['all', inventorySeats.map(item => item.id)],
+  ]) {
+    view.status(value);
+    assert.deepEqual(view.rows().map(row => row.key), expected);
+    assert.equal(view.count(), expected.length);
+    assert.equal(view.statusSelect().props.value, value);
+  }
+  assert.deepEqual(view.calls, []);
+});
 
 test('Sidebar input filters actual rows and count by pod, then clearing restores scope without actions', () => {
   const view = sidebar();
@@ -163,7 +204,7 @@ test('Sidebar populated scope with no matches renders static status copy and cle
     textOf(n).includes('No matching sessions'));
   assert.ok(status, 'filtered populated scope must show No matching sessions status');
   assert.equal(status.props.className, 'sidebar-empty');
-  assert.equal(textOf(status), 'No matching sessionsTry another search or clear the filter.');
+  assert.equal(textOf(status), 'No matching sessionsTry another search or clear the filters.');
   assert.equal(textOf(status).includes(query), false);
   assert.equal(view.input().type, 'input');
   assert.equal(view.input().props.multiline, undefined);
@@ -241,4 +282,98 @@ test('Sidebar partial seat without session retains beside and relaunch guards', 
   view.query('');
   assert.deepEqual(view.rows().map(row => row.key), ['partial']);
   assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar intersects rig/query/status and preserves independent controls through snapshots', () => {
+  const items = Object.freeze([seat('z', { status: 'idle' }), seat('a', { status: 'idle' }),
+    seat('working', { status: 'working' }), seat('other', { status: 'idle', rigId: 'r2' })]);
+  const view = sidebar({ inventory: { rigs: [], seats: items } });
+  view.query('  aLiCe ');
+  view.status('idle');
+  assert.deepEqual(view.rows().map(row => row.key), ['z', 'a']);
+  view.status('all');
+  assert.equal(view.input().props.value, '  aLiCe ');
+  assert.equal(view.props.selectedRig, 'r1');
+  assert.equal(view.count(), 3);
+  view.status('idle');
+  for (const query of ['', ' \t ']) {
+    view.query(query);
+    assert.equal(view.statusSelect().props.value, 'idle');
+    assert.deepEqual(view.rows().map(row => row.key), ['z', 'a']);
+  }
+  view.props.selectedRig = 'r2';
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['other']);
+  view.props.inventory = { rigs: [], seats: [seat('replacement', { rigId: 'r2', status: 'idle' })] };
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['replacement']);
+  assert.equal(view.count(), 1);
+  view.status('invalid');
+  assert.equal(view.statusSelect().props.value, 'idle');
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar status-only and combined empty results retain unavailable and true-empty precedence', () => {
+  const view = sidebar();
+  for (const query of ['', 'unmatched']) {
+    view.query(query);
+    view.status('idle');
+    assert.equal(view.count(), 0);
+    assert.ok(view.nodes().some(n => n.props?.role === 'status' &&
+      textOf(n) === 'No matching sessionsTry another search or clear the filters.'));
+  }
+  view.props.selectedRig = 'missing';
+  view.render();
+  assert.ok(view.nodes().some(n => n.props?.className === 'connection-empty' && textOf(n).includes('No seats yet')));
+  view.props.inventory = null;
+  view.props.inventoryError = 'SSH unavailable';
+  view.render();
+  assert.ok(view.nodes().some(n => n.props?.className === 'connection-empty' && textOf(n).includes('Rig unavailable')));
+  assert.equal(view.nodes().some(n => textOf(n).includes('No matching sessions')), false);
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar status filtering preserves stale/checking guards and notices even when empty', () => {
+  for (const checking of [false, true]) {
+    const view = sidebar({ inventory: { rigs: [], seats: [seat('a', { status: 'idle' })] } });
+    view.props.inventoryError = checking ? view.health.CHECKING_SNAPSHOT : 'SSH disconnected';
+    for (const [status, query] of [['idle', ''], ['working', ''], ['idle', 'unmatched'], ['all', '']]) {
+      view.status(status);
+      view.query(query);
+      assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).includes(
+        checking ? 'Refreshing · showing the last known snapshot…' : 'Stale inventory · last updated')));
+      for (const row of view.rows()) {
+        assert.equal(row.props.children[0].props.disabled, true);
+        assert.equal(row.props.children[0].props.draggable, false);
+        assert.equal(row.props.children[1].props.disabled, true);
+        assert.equal(row.props.children[2].props.disabled, true);
+      }
+    }
+    assert.deepEqual(view.calls, []);
+  }
+});
+
+test('Sidebar filtered explicit actions receive original seats while missing-session guards remain', () => {
+  const original = seat('original', { status: 'idle' });
+  const partial = seat('partial', { status: 'idle', session: null });
+  const view = sidebar({ inventory: { rigs: [], seats: Object.freeze([original, partial]) } });
+  view.status('idle');
+  view.query('Alice');
+  assert.deepEqual(view.calls, []);
+  const [row, partialRow] = view.rows();
+  assert.equal(row.props.children[0].props.disabled, false);
+  assert.equal(row.props.children[0].props.draggable, true);
+  assert.equal(row.props.children[1].props.disabled, false);
+  assert.equal(row.props.children[2].props.disabled, false);
+  row.props.children[0].props.onClick();
+  const event = {};
+  row.props.children[0].props.onDragStart(event);
+  row.props.children[1].props.onClick();
+  row.props.children[2].props.onClick();
+  assert.deepEqual(view.calls, [[original], [event, original], [original], [original]]);
+  for (const args of view.calls) assert.equal(args[args.length - 1], original);
+  assert.equal(partialRow.props.children[0].props.disabled, false);
+  assert.equal(partialRow.props.children[0].props.draggable, true);
+  assert.equal(partialRow.props.children[1].props.disabled, true);
+  assert.equal(partialRow.props.children[2].props.disabled, true);
 });

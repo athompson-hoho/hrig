@@ -18,6 +18,7 @@ import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { filterSeats } from "./seat-search";
+import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -190,6 +191,7 @@ export default function Sidebar({
   fileRevision: number;
 }) {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
   const [changes, setChanges] = useState<GitEntry[]>([]);
   const [gitError, setGitError] = useState("");
   const [isRepository, setIsRepository] = useState(true);
@@ -221,7 +223,10 @@ export default function Sidebar({
     };
   }, [section, connection.id, root, fileRevision, gitRevision]);
   const rigs = inventory?.rigs || [];
-  const { seats, noMatches } = filterSeats(inventory?.seats || [], selectedRig, query);
+  const searchResult = filterSeats(inventory?.seats || [], selectedRig, query);
+  const seats = filterSeatsByStatus(searchResult.seats, statusFilter);
+  const noMatches = searchResult.scopedCount > 0 &&
+    (searchResult.hasQuery || statusFilter !== "all") && seats.length === 0;
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -343,6 +348,22 @@ export default function Sidebar({
             />
             <kbd>/</kbd>
           </div>
+          <select
+            aria-label="Filter session status"
+            className="sidebar-status-filter"
+            value={statusFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "all" || value === "working" || value === "idle" ||
+                  value === "attention" || value === "stopped") setStatusFilter(value);
+            }}
+          >
+            <option value="all">All statuses</option>
+            <option value="working">Working</option>
+            <option value="idle">Idle</option>
+            <option value="attention">Needs input</option>
+            <option value="stopped">Stopped</option>
+          </select>
           <div className="section-label">
             <span>RIGS</span>
             <button title="Add connection" onClick={onConnect}>
@@ -411,7 +432,7 @@ export default function Sidebar({
             ) : noMatches ? (
               <div className="sidebar-empty" role="status">
                 <strong>No matching sessions</strong>
-                <p>Try another search or clear the filter.</p>
+                <p>Try another search or clear the filters.</p>
               </div>
             ) : seats.length ? (
               seats.map((s) => (
