@@ -451,13 +451,19 @@ handle("terminal:create", async (event, options) => {
   core.validateConnection(connection);
   let existing = terminals.get(id);
   if (options.seatId) {
-    const latest = await backend.inventory(connection);
-    const matches = latest.seats.filter((s) => s.id === options.seatId);
-    if (!session || !matches.length || matches.some((seat) => seat.session !== session))
-      throw new Error("Seat session changed or is unavailable. Existing terminal preserved; inspect readiness in OpenRig.");
-    existing = terminals.get(id);
-    if (existing && !seatTerminalReuse(existing, options, matches[0]))
+    if (existing && !seatTerminalReuse(existing, options))
       throw new Error("Retained terminal ownership is unknown or conflicts. Existing terminal preserved; use existing connection controls to inspect it.");
+    if (!existing) {
+      const latest = await backend.inventory(connection);
+      const matches = latest.seats.filter((s) => s.id === options.seatId);
+      if (typeof session !== "string" || !session || matches.length !== 1 ||
+          typeof matches[0].session !== "string" || !matches[0].session)
+        throw new Error("Seat session changed or is unavailable. Existing terminal preserved; inspect readiness in OpenRig.");
+      session = matches[0].session;
+      existing = terminals.get(id);
+      if (existing && !seatTerminalReuse(existing, { ...options, session }, matches[0]))
+        throw new Error("Retained terminal ownership is unknown or conflicts. Existing terminal preserved; use existing connection controls to inspect it.");
+    }
   } else if (existing?.seatId || existing && id.startsWith("seat:")) {
     throw new Error("Seat terminal requires verified seat provenance. Existing terminal preserved.");
   }

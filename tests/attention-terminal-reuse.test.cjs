@@ -50,10 +50,10 @@ function hostFixture(options, retained) {
   for (const name of ['set', 'delete', 'clear']) { const original = terminals[name].bind(terminals);
     terminals[name] = (...args) => { effects.push({ name, args }); return original(...args); }; }
   const record = name => (...args) => { effects.push({ name, args }); };
-  const scope = { terminals, process, core: { validateConnection() {}, quote: v => v, sessionCommand: v => `attach ${v}`,
+  const scope = { terminals, process: { env: {}, platform: 'linux', cwd: () => '/synthetic' }, core: { validateConnection() {}, quote: v => v, sessionCommand: v => `attach ${v}`,
     transport: (...args) => { effects.push({ name: 'transport', args }); return { file: 'inert', args: ['fixture'] }; } },
     backend: { inventory: async () => ({ seats: [{ id: options.seatId, session: options.session }] }) },
-    require: name => { assert.equal(name, 'node-pty'); return { spawn: (...args) => { effects.push({ name: 'spawn', args }); return terminal; } }; },
+    require: name => { if (name === './platform.cjs') return { localShell: (...args) => { effects.push({ name: 'localShell', args }); return { file: 'inert', args: [] }; } }; assert.equal(name, 'node-pty'); return { spawn: (...args) => { effects.push({ name: 'spawn', args }); return terminal; } }; },
     features: { rigCommand: () => 'control' },
     rigControl: { consumeTerminal: (...args) => { effects.push({ name: 'consume', args }); return { args: ['status'] }; } },
     terminalLogs: { forget: record('forget'), append: record('append') } };
@@ -128,5 +128,40 @@ if (require.main === module) test('actual host rechecks map after deferred inven
   await assert.rejects(pending, /preserved/);
   assert.equal(terminals.get(options.id), concurrent); assert.equal(concurrent.buffer, 'keep');
   const next = handler({}, options); resolve({ seats: [{ id: 's', session: 'new' }] });
-  await assert.rejects(next, /session changed/); assert.equal(terminals.get(options.id), concurrent);
+  await assert.rejects(next, /preserved/); assert.equal(terminals.get(options.id), concurrent);
+});
+
+if (require.main === module) test('matching retained owners reuse offline on SSH and local Windows without inventory', async () => {
+  for (const kind of ['ssh', 'local']) {
+    const options = { id: 'seat:h:s', connection: { id: 'h', kind }, seatId: 's', session: 'old' };
+    const retained = { ...options, buffer: 'original', terminal: {} };
+    const f = hostFixture(options, retained); f.scope.process.platform = 'win32';
+    f.scope.backend.inventory = async () => { throw Error('inventory must not run'); };
+    const result = await createHandler(f.scope)({}, options);
+    assert.equal(result.buffer, 'original'); assert.equal(result.reused, true);
+    assert.equal(f.terminals.get(options.id), retained); assert.deepEqual(f.effects, []);
+  }
+});
+if (require.main === module) test('unique relaunch or rename session refresh attaches once without changing caller options', async () => {
+  for (const kind of ['ssh', 'local']) for (const session of ['relaunched', 'renamed']) {
+    const options = { id: 'seat:h:s', connection: { id: 'h', kind }, seatId: 's', session: 'old', root: '/synthetic', localShell: 'powershell' };
+    const before = JSON.stringify(options), f = hostFixture(options); let calls = 0;
+    f.scope.process.platform = 'win32';
+    f.scope.backend.inventory = async connection => { calls++; assert.equal(connection, options.connection); return { seats: [{ id: 's', session }] }; };
+    await createHandler(f.scope)({ sender: {} }, options);
+    assert.equal(calls, 1); assert.equal(JSON.stringify(options), before);
+    assert.equal(f.terminals.get(options.id).session, session);
+    assert.equal(f.effects.filter(e => e.name === 'spawn').length, 1);
+    assert.equal(f.effects.find(e => e.name === 'transport').args[1], `attach ${session}`);
+    assert.ok(!f.effects.some(e => ['kill', 'write', 'delete', 'forget'].includes(e.name)));
+  }
+});
+if (require.main === module) test('ambiguous missing or malformed inventory cannot spawn a terminal', async () => {
+  const options = { id: 'seat:h:s', connection: { id: 'h', kind: 'ssh' }, seatId: 's', session: 'old' };
+  for (const seats of [[], [{ id: 's' }], [{ id: 's', session: '' }], [{ id: 's', session: 123 }], [{ id: 's', session: 'fresh' }, { id: 's', session: 'fresh' }]]) {
+    const f = hostFixture(options); f.scope.backend.inventory = async () => ({ seats });
+    await assert.rejects(createHandler(f.scope)({}, options)); assert.deepEqual(f.effects, []);
+  }
+  const f = hostFixture(options); f.scope.backend.inventory = async () => { throw Error('offline'); };
+  await assert.rejects(createHandler(f.scope)({}, options), /offline/); assert.deepEqual(f.effects, []);
 });

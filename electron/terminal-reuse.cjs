@@ -4,6 +4,6 @@ const owner = connection => connection && JSON.stringify([
 function seatTerminalReuse(item, options, seat) {
   return !!item && !!options.seatId && typeof options.session === 'string' && !!options.session &&
     owner(item.connection) === owner(options.connection) && item.seatId === options.seatId &&
-    item.session === options.session && seat?.id === options.seatId && seat.session === options.session;
+    item.session === options.session && (!seat || seat.id === options.seatId && seat.session === options.session);
 }
 module.exports = { seatTerminalReuse };
