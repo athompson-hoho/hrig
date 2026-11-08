@@ -10,6 +10,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const mountId = ++mountSerial;
   const instances = new Map(), dom = new Map(), modules = new Map();
   const observers = new Set(), pending = [];
+  const intervals = new Map(), listeners = new Map();
+  let timerSerial = 0;
   const document = { activeElement: null };
   let current, dirty = true, tree, props = initialProps, serial = 0;
   const element = (type, props, key) => ({ type, key, props: props || {} });
@@ -68,8 +70,12 @@ function mountComponent(file, exportName, initialProps, options = {}) {
     vm.runInNewContext(compiled, {
       exports, document, ResizeObserver,
       // Timers stay inert; synthetic consumers never poll real hosts.
-      setInterval: () => 1, clearInterval() {},
-      window: { hrig: options.api || {} },
+      setInterval(fn, delay) { const id = ++timerSerial; intervals.set(id, { fn, delay }); return id; },
+      clearInterval(id) { intervals.delete(id); },
+      window: { hrig: options.api || {},
+        addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
+        removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
+      },
       require(id) {
         if (id in dependencies) return dependencies[id];
         if (id.startsWith('.')) {
@@ -156,7 +162,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const nodes = () => tree.flatMap(descendants).filter(n => typeof n === 'object');
   flush();
   return {
-    nodes, flush, document, observers,
+    nodes, flush, document, observers, intervals, listeners,
+    tickIntervals() { for (const { fn } of [...intervals.values()]) fn(); flush(); },
     text(node) { return descendants(node).filter(n => typeof n === 'string').join(''); },
     update(next) { props = { ...props, ...next }; dirty = true; flush(); },
     async settle() { for (let i = 0; i < 8; i++) { await Promise.resolve(); flush(); } },
