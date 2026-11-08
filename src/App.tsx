@@ -16,6 +16,7 @@ import {
   Layout,
   Model,
   TabNode,
+  TabSetNode,
   type ILayoutApi,
   type IJsonTabNode,
   type Action,
@@ -144,6 +145,7 @@ import {
   pushClosed,
   type ClosedPanel,
 } from "./closed-panels";
+import { planMaximize, type MaximizeRequest } from "./panel-maximize";
 import {
   recentKey,
   recentsFor,
@@ -1746,6 +1748,40 @@ export default function App() {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
     if (count > 0) notify(reconnectNotice(count));
   };
+  // Maximize only flips flexlayout's flag on one group: nothing is rebuilt, moved or resized by hand.
+  const toggleMaximize = (
+    request: MaximizeRequest,
+    source: EventTarget | null,
+  ) => {
+    const holder = (source as Element | null)?.closest?.("[data-panel-id]");
+    const panel = holder
+      ? model.getNodeById(holder.getAttribute("data-panel-id") || "")
+      : undefined;
+    let owner = panel ? panel.getParent() : undefined;
+    while (owner && !(owner instanceof TabSetNode)) owner = owner.getParent();
+    const focused =
+      owner instanceof TabSetNode
+        ? owner
+        : model.getActiveTabset() || model.getFirstTabSet();
+    const layoutId = focused ? focused.getLayoutId() : Model.MAIN_LAYOUT_ID;
+    let groups = 0;
+    model.visitNodes((node) => {
+      if (node instanceof TabSetNode && node.getLayoutId() === layoutId)
+        groups++;
+    });
+    const plan = planMaximize(request, {
+      tabsetId: focused ? focused.getId() : null,
+      enabled: !!focused && focused.isEnableMaximize(),
+      groups,
+      maximizedId: model.getMaximizedTabset(layoutId)?.getId() ?? null,
+    });
+    if (plan.action === "none") {
+      setToast(plan.message);
+      return;
+    }
+    remember();
+    model.doAction(Actions.maximizeToggle(plan.tabsetId, layoutId));
+  };
   // Reopens only through openFile and openSeat, the same paths the sidebar uses.
   const reopenClosedPanel = () => {
     const { entry, stack } = popLatest(closedPanels.current, workspace);
@@ -1889,6 +1925,18 @@ export default function App() {
       hint: `Latest closed file or seat · ${reopenShortcutHint(window.hrig.platform)}`,
       icon: <PanelTop size={16} />,
       action: reopenClosedPanel,
+    },
+    {
+      name: "Maximize panel",
+      hint: "Fill the workspace with the focused group",
+      icon: <Square size={16} />,
+      action: () => toggleMaximize("maximize", null),
+    },
+    {
+      name: "Restore panel layout",
+      hint: "Show every panel group again",
+      icon: <LayoutGrid size={16} />,
+      action: () => toggleMaximize("restore", null),
     },
     {
       name: "Open all rig sessions",

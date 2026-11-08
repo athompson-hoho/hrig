@@ -1,4 +1,5 @@
 import { Model, type IJsonModel, type IJsonTabNode } from "flexlayout-react";
+import { withoutMaximized } from "./panel-maximize";
 export const globalLayout = {
   tabEnableRename: true,
   tabEnableFloat: true,
@@ -28,11 +29,12 @@ export function initialModel() {
     },
   });
 }
+// A stored layout never reopens maximized: that flag is a session-only view state.
 export function restoreModel(json?: IJsonModel) {
   try {
     if (json)
       return Model.fromJson({
-        ...json,
+        ...withoutMaximized(json),
         global: { ...globalLayout, ...json.global },
       });
   } catch {}
