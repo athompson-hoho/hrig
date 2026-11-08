@@ -9,3 +9,5 @@ Ctrl+P (Cmd+P) opens fuzzy project-file search. Type a filename or path subseque
 Ctrl+Shift+P (Cmd+Shift+P) finds existing panels in the current workspace by title, file, rig, seat, host or group. Recent panels appear first. Selecting a result focuses its docked panel, floating panel or native popout without opening another copy. The navigator also offers move-to-group and split controls, including Alt+Left/Right/Down/Enter. Rename groups in Arrange workspace; moves, splits and group names participate in arrangement undo.
 
 Project path spelling remains stable to preserve previous layout keys. Different aliases for the same remote folder can remain separate entries. Existing content search remains literal; regex, whole-word and include/exclude content filters are future HR-16 work.
+
+Seat rows and the command center offer Open seat beside current. This reuses an existing seat panel and puts it to the right of the active group. See [terminal splits](docs/terminal-splits.md) for behavior and existing arrange/navigator controls.

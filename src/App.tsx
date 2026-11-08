@@ -1060,6 +1060,17 @@ export default function App() {
     current.doAction(Actions.moveNode(id, target, location, -1));
     modelChanged(current);
   };
+  const openSeatBeside = (seat: Seat) => {
+    if (inventoryError || !seat.session) {openSeat(seat);return;}
+    const target = model.getActiveTabset() || model.getFirstTabSet();
+    if (!target) {openSeat(seat);return;}
+    const id = `seat:${connection.id}:${seat.id}`;
+    const existing = model.getNodeById(id) as TabNode | undefined;
+    if (existing && existing.getParent() === target && target.getChildren().length === 1) {openSeat(seat);return;}
+    if (existing && ((existing.getWindow() && existing.getWindow() !== window) || existing.getLayoutId() !== Model.MAIN_LAYOUT_ID)) {notify("Use the panel navigator to move this detached seat.");return;}
+    openSeat(seat);
+    if(model.getNodeById(id)) movePanel(id, target.getId(), "right");
+  };
   const dirtyInLayout = () =>
     allTabs().filter((t) => dirtyTabs.current.has(t.id!));
   const protect = (run: () => void, title = "Replace this arrangement?") => {
@@ -1721,6 +1732,7 @@ export default function App() {
       icon: <TerminalSquare size={16} />,
       action: () => openSeat(seat),
     })),
+    ...seats.map(seat => ({name: `Open ${seat.name} beside current`, hint: `${seat.rigName} · ${connection.name}`, icon: <Columns2 size={16}/>, action: () => openSeatBeside(seat)})),
     ...terminalCommands,
   ];
   useEffect(() => {
@@ -2004,6 +2016,7 @@ export default function App() {
                 onProject={openProject}
                 onConnect={openConnect}
                 onSeat={openSeat}
+                onSeatBeside={openSeatBeside}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
                 onFile={(path) => openFile(path)}
