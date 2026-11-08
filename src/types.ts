@@ -152,6 +152,7 @@ export interface HrigAPI {
     result: any;
     previewToken: string;
   }>;
+  exportDiagnostics(request: string): Promise<import('../electron/diagnostics-bundle.mjs').DiagnosticsExportResult>;
   doctor(connection: Connection): Promise<{
     healthy: boolean;
     checks: { name: string; ok: boolean; detail: string }[];
