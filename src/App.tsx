@@ -110,6 +110,7 @@ import {
   normalizeHistory,
   projectIdentity,
   visitProject,
+  welcomeRecents,
   type RecentProject,
 } from "./project-history";
 import RigControl from "./RigControl";
@@ -829,6 +830,22 @@ export default function App() {
     projectIntent.current++;
     setProjectOpening(false);
     setModal(null);
+  };
+  // Welcome rows open through the project hub's own path: the hub is where the folder check and any error show, and applyProject only proceeds while the hub is the open modal.
+  const openRecentProject = (project: RecentProject) => {
+    const target = availableConnection(
+      project,
+      state.connections,
+      window.hrig.platform,
+    );
+    openProject();
+    if (!target) {
+      setFormError(
+        "This project's connection is unavailable or changed. Open the folder again on the intended host.",
+      );
+      return;
+    }
+    void applyProject(project.root, target, project.rigId, project.rigName);
   };
   useEffect(() => {
     if (!loaded) return;
@@ -1642,6 +1659,8 @@ export default function App() {
             onGuide={() => setModal("guide")}
             connectionName={connection.name}
             seatCount={seats.filter((s) => s.session).length}
+            recents={welcomeRecents(projectHistory)}
+            onOpenRecent={openRecentProject}
           />
         );
     }

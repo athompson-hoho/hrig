@@ -9,6 +9,7 @@ import {
   Command,
   MousePointer2,
 } from "lucide-react";
+import type { RecentProject } from "./project-history";
 export default function Welcome({
   onConnect,
   onProject,
@@ -17,6 +18,8 @@ export default function Welcome({
   onGuide,
   connectionName,
   seatCount,
+  recents,
+  onOpenRecent,
 }: {
   onConnect: () => void;
   onProject: () => void;
@@ -25,6 +28,8 @@ export default function Welcome({
   onGuide: () => void;
   connectionName: string;
   seatCount: number;
+  recents: RecentProject[];
+  onOpenRecent: (project: RecentProject) => void;
 }) {
   return (
     <div className="welcome">
@@ -81,6 +86,39 @@ export default function Welcome({
           <ArrowUpRight size={16} />
         </button>
       </div>
+      {recents.length > 0 && (
+        <section
+          className="welcome-recents"
+          aria-label="Continue where you left off"
+        >
+          <div className="project-history-caption">
+            <span>CONTINUE WHERE YOU LEFT OFF</span>
+          </div>
+          <div className="project-hub-list">
+            {recents.map((project) => (
+              <div className="project-history-row" key={project.id}>
+                <button
+                  className="project-history-open"
+                  title={project.root}
+                  onClick={() => onOpenRecent(project)}
+                  aria-label={`Continue project ${project.name} on ${project.hostName}`}
+                >
+                  <FolderOpen size={20} />
+                  <span>
+                    <strong>{project.name}</strong>
+                    <small>
+                      <Network size={10} />
+                      {project.hostName}
+                      {project.rigName ? " · " + project.rigName : ""}
+                    </small>
+                  </span>
+                  <ArrowUpRight size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="arrangement-intro">
         <div>
           <span className="eyebrow">A WORKSPACE THAT MOVES WITH YOU</span>
