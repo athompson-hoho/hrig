@@ -125,6 +125,7 @@ import {
   bufferConfigs,
   persistBuffer,
   editorFocusers,
+  editorLineJumpers,
 } from "./editor-buffers";
 import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
@@ -1743,6 +1744,14 @@ export default function App() {
     window.focus();
     setModal("shortcuts");
   };
+  // Go to line opens Monaco's own prompt in the editor that has text focus once
+  // the command center has handed the focus back; nothing is typed or sent.
+  const goToLine = () => {
+    requestAnimationFrame(() => {
+      const opened = [...editorLineJumpers.values()].some((jump) => jump());
+      if (!opened) setToast("Click an editor first");
+    });
+  };
   const terminalTabs = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken);
   const terminalCommands = terminalTabs.flatMap(t => {
     const config = t.config as PanelConfig;
@@ -1910,6 +1919,12 @@ export default function App() {
       hint: "?",
       icon: <Keyboard size={16} />,
       action: openShortcuts,
+    },
+    {
+      name: "Go to line",
+      hint: "Ctrl G in the editor",
+      icon: <FileCode2 size={16} />,
+      action: goToLine,
     },
     ...[
       ["Visual workspace arranger", "arranger"],

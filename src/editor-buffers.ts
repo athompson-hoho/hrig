@@ -4,6 +4,8 @@ import type { PanelConfig } from "./types";
 import { draftKey, draftOperation } from "./drafts";
 export const bufferConfigs = new Map<string, PanelConfig>();
 export const editorFocusers = new Map<string, () => void>();
+// Each mounted editor offers to open its go-to-line prompt: true when it had focus.
+export const editorLineJumpers = new Map<string, () => boolean>();
 export function persistBuffer(id: string) {
   const b = buffers.get(id),
     c = bufferConfigs.get(id);
