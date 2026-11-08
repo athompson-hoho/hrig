@@ -501,6 +501,7 @@ export default function SettingsPage({ project }: { project: string }) {
                 Built-in workspace shortcuts. Terminal and editor applications
                 also handle their own keybindings.
               </p>
+              <p>Press ? outside a text field, the editor or a terminal, or run Open keyboard shortcuts in the command center, for the full list with the keys for your platform.</p>
               {[
                 ["Ctrl ,", "Open settings"],
                 ["Ctrl K", "Open command center"],

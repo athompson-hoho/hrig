@@ -1771,6 +1771,12 @@ export default function App() {
       icon: <CircleHelp size={16} />,
       action: () => setModal("guide"),
     },
+    {
+      name: "Open keyboard shortcuts",
+      hint: "?",
+      icon: <Keyboard size={16} />,
+      action: openShortcuts,
+    },
     ...[
       ["Visual workspace arranger", "arranger"],
       ["Task boards and integrations", "workItems"],
@@ -3099,7 +3105,7 @@ export default function App() {
                 {
                   icon: <Keyboard />,
                   title: "A few useful shortcuts",
-                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl Shift K: clear terminal (Cmd K on macOS) · Ctrl S: save file.",
+                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl Shift K: clear terminal (Cmd K on macOS) · Ctrl S: save file. Press ? for the full list.",
                 },
               ].map((item) => (
                 <div key={item.title}>
