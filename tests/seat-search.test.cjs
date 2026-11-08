@@ -3,6 +3,35 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { buildSync } = require('esbuild');
+const Module = require('node:module');
+const path = require('node:path');
+
+// Real validation/resolution, bundled only in memory as in settings.test.cjs.
+const settingsModule = new Module(__filename, module);
+settingsModule._compile(buildSync({ entryPoints: ['src/settings.ts'], bundle: true,
+  platform: 'node', format: 'cjs', write: false }).outputFiles[0].text, __filename);
+const settings = settingsModule.exports;
+
+function preferences(user = {}, project = {}) {
+  const calls = [];
+  const context = {
+    user: settings.safeOverrides(user), project: settings.safeOverrides(project), calls,
+    get effective() { return settings.resolveSettings(context.user, context.project); },
+    update(scope, key, value) {
+      const validated = settings.validateOverrides({ [key]: value });
+      calls.push([scope, key, value]);
+      context[scope] = { ...context[scope], ...validated };
+    },
+    replace(scope, value) { context[scope] = settings.validateOverrides(value); },
+    reset(scope, key) {
+      const next = { ...context[scope] };
+      if (key) delete next[key];
+      context[scope] = key ? next : {};
+    },
+  };
+  return context;
+}
 
 function load(file, dependencies = {}) {
   const exports = {};
@@ -22,7 +51,7 @@ const seats = Object.freeze([seat('a'), seat('b', { name: 'Bob', pod: 'Reviewers
   seat('c', { rigId: 'r2', name: 'Other' })]);
 
 // This harness checks actual element props and retained query state, not native DOM behavior.
-function sidebar(overrides = {}) {
+function sidebar(overrides = {}, context = preferences()) {
   const state = [];
   let cursor = 0;
   const calls = [];
@@ -38,6 +67,11 @@ function sidebar(overrides = {}) {
     './components': { ErrorBox: 'ErrorBox', IconButton: 'IconButton', StatusDot: 'StatusDot' },
     './inventory-health': health,
     './seat-status': load('../src/seat-status.ts'),
+    './SettingsContext': { useSettings: () => context },
+    // Baseline Sidebar does not import this module yet. Never manufacture a
+    // missing-module RED: the actual absent control must fail its assertion.
+    './seat-sort': fs.existsSync(path.join(__dirname, '../src/seat-sort.ts'))
+      ? load('../src/seat-sort.ts') : {},
     './seat-search': fs.existsSync(require('node:path').join(__dirname, '../src/seat-search.ts'))
       ? load('../src/seat-search.ts') : {},
   }).default;
@@ -65,8 +99,15 @@ function sidebar(overrides = {}) {
   const input = () => nodes().find(n => n.type === 'input' && n.props['aria-label'] === 'Filter sessions');
   const statusSelect = () => nodes().find(n => n.type === 'select' &&
     n.props['aria-label'] === 'Filter session status');
+  const sortSelect = () => nodes().find(n => n.type === 'select' &&
+    n.props['aria-label'] === 'Sort sessions');
   render();
-  return { calls, props, nodes, input, statusSelect, render, health,
+  return { calls, props, nodes, input, statusSelect, sortSelect, render, health, context,
+    sort(value) {
+      assert.ok(sortSelect(), 'Sidebar exposes the native Sort sessions select');
+      sortSelect().props.onChange({ target: { value } });
+      render();
+    },
     query(value) { input().props.onChange({ target: { value } }); render(); },
     status(value) {
       assert.ok(statusSelect(), 'Sidebar exposes the native Filter session status select');
@@ -109,6 +150,162 @@ test('Sidebar status select offers five ordered choices and reversibly filters a
     assert.equal(view.count(), expected.length);
     assert.equal(view.statusSelect().props.value, value);
   }
+  assert.deepEqual(view.calls, []);
+});
+
+const sortInventory = Object.freeze([
+  seat('idle', { name: 'seat10', status: 'idle' }),
+  seat('attention', { name: 'seat2', status: 'attention' }),
+  seat('working', { name: 'seat20', status: 'working' }),
+  seat('running', { name: 'seat1', status: 'running' }),
+  seat('other-rig', { rigId: 'r2', name: 'seat0', status: 'working' }),
+  seat('other-query', { name: 'Elsewhere', pod: 'Other', status: 'working' }),
+]);
+const sortRows = {
+  name: ['other-query', 'running', 'attention', 'idle', 'working'],
+  activity: ['other-query', 'working', 'running', 'attention', 'idle'],
+  'attention-first': ['attention', 'other-query', 'running', 'idle', 'working'],
+};
+
+test('Sidebar sort select offers three effective choices and orders actual rows without actions', () => {
+  const view = sidebar({ inventory: { rigs: [], seats: sortInventory } });
+  const select = view.sortSelect();
+  assert.ok(select, 'Sidebar exposes the native Sort sessions select');
+  assert.equal(select.props.value, 'name');
+  assert.equal(select.props.className, 'sidebar-status-filter');
+  assert.deepEqual(Array.from(select.props.children, option => [option.props.value, option.props.children]), [
+    ['name', 'Name'], ['activity', 'Activity (working first)'], ['attention-first', 'Attention first'],
+  ]);
+  const nodes = view.nodes();
+  assert.ok(nodes.indexOf(select) > nodes.indexOf(view.statusSelect()));
+  assert.ok(nodes.indexOf(select) < nodes.findIndex(n => n.props?.className === 'rig-list'));
+  for (const mode of ['name', 'activity', 'attention-first']) {
+    view.sort(mode);
+    assert.equal(view.sortSelect().props.value, mode);
+    assert.deepEqual(view.rows().map(row => row.key), sortRows[mode]);
+    assert.equal(view.count(), 5);
+    view.sort(mode);
+    assert.deepEqual(view.rows().map(row => row.key), sortRows[mode]);
+  }
+  assert.ok(view.context.calls.every(([scope, key]) => scope === 'user' && key === 'rig.seatSort'));
+  const writes = view.context.calls.length;
+  view.sort('ACTIVITY');
+  assert.equal(view.context.calls.length, writes);
+  assert.equal(view.sortSelect().props.value, 'attention-first');
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar sorting composes rig query and status and preserves controls through refresh', () => {
+  const view = sidebar({ inventory: { rigs: [], seats: sortInventory } });
+  view.query('Builders');
+  for (const [mode, expected] of [
+    ['name', ['running', 'attention', 'idle', 'working']],
+    ['activity', ['working', 'running', 'attention', 'idle']],
+    ['attention-first', ['attention', 'running', 'idle', 'working']],
+  ]) {
+    view.sort(mode);
+    assert.deepEqual(view.rows().map(row => row.key), expected);
+    assert.equal(view.input().props.value, 'Builders');
+    assert.equal(view.props.selectedRig, 'r1');
+    assert.equal(view.statusSelect().props.value, 'all');
+    view.status('working');
+    assert.deepEqual(view.rows().map(row => row.key), ['working']);
+    assert.equal(view.count(), 1);
+    view.status('all');
+  }
+  view.status('working');
+  view.props.inventory = { rigs: [], seats: [seat('new', { name: 'New', status: 'working' })] };
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['new']);
+  assert.equal(view.sortSelect().props.value, 'attention-first');
+  assert.equal(view.statusSelect().props.value, 'working');
+  assert.equal(view.input().props.value, 'Builders');
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar sort writes owned project defaults and follows external changes reset and inheritance', () => {
+  const context = preferences();
+  const view = sidebar({ inventory: { rigs: [], seats: sortInventory } }, context);
+  view.sort('activity');
+  assert.deepEqual(context.calls, [['user', 'rig.seatSort', 'activity']]);
+  context.replace('project', { 'rig.seatSort': 'name' });
+  view.render();
+  assert.equal(view.sortSelect().props.value, 'name');
+  assert.deepEqual(view.rows().map(row => row.key), sortRows.name);
+  view.sort('attention-first');
+  assert.deepEqual(context.calls[1], ['project', 'rig.seatSort', 'attention-first']);
+  assert.equal(context.user['rig.seatSort'], 'activity');
+  context.reset('project', 'rig.seatSort');
+  view.render();
+  assert.equal(view.sortSelect().props.value, 'activity');
+  assert.deepEqual(view.rows().map(row => row.key), sortRows.activity);
+  context.reset('user');
+  view.render();
+  assert.equal(view.sortSelect().props.value, 'name');
+  assert.deepEqual(view.rows().map(row => row.key), sortRows.name);
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar reconstructs validated serialized user and project sort preferences without claiming app restart', () => {
+  for (const projectOwned of [false, true]) {
+    const context = preferences({ 'editor.fontSize': 17 }, projectOwned ? { 'rig.seatSort': 'name' } : {});
+    const view = sidebar({ inventory: { rigs: [], seats: sortInventory } }, context);
+    for (const mode of ['activity', 'attention-first', 'name']) {
+      view.sort(mode);
+      const saved = JSON.parse(JSON.stringify({ preferences: context.user,
+        projectPreferences: { 'host::~': context.project } }));
+      const restored = preferences(saved.preferences, saved.projectPreferences['host::~']);
+      const reconstructed = sidebar({ inventory: { rigs: [], seats: sortInventory } }, restored);
+      assert.equal(reconstructed.sortSelect().props.value, mode);
+      assert.deepEqual(reconstructed.rows().map(row => row.key), sortRows[mode]);
+      assert.equal(reconstructed.count(), 5);
+      assert.equal(restored.user['editor.fontSize'], 17);
+      assert.equal(Object.hasOwn(restored.project, 'rig.seatSort'), projectOwned);
+      assert.equal(context.calls.at(-1)[0], projectOwned ? 'project' : 'user');
+      assert.deepEqual(restored.calls, []);
+      assert.deepEqual(reconstructed.calls, []);
+    }
+    assert.deepEqual(view.calls, []);
+  }
+});
+
+test('Sidebar sorting preserves original callback objects stale guards empty states and long titles', () => {
+  const original = seat('long', { name: 'Z'.repeat(1000), status: 'working' });
+  const partial = seat('partial', { name: 'A', status: 'attention', session: null });
+  const view = sidebar({ inventory: { rigs: [], seats: Object.freeze([original, partial]) } });
+  view.sort('activity');
+  assert.deepEqual(view.rows().map(row => row.key), ['long', 'partial']);
+  assert.ok(view.rows()[0].props.children[0].props.title.startsWith(original.name));
+  assert.equal(view.rows()[1].props.children[1].props.disabled, true);
+  assert.deepEqual(view.calls, []);
+  const row = view.rows()[0];
+  row.props.children[0].props.onClick();
+  row.props.children[1].props.onClick();
+  row.props.children[2].props.onClick();
+  assert.deepEqual(view.calls, [[original], [original], [original]]);
+  view.calls.length = 0;
+  for (const error of [view.health.CHECKING_SNAPSHOT, 'Disconnected']) {
+    view.props.inventoryError = error;
+    view.sort('attention-first');
+    assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).includes(
+      error === view.health.CHECKING_SNAPSHOT ? 'Refreshing' : 'Stale inventory')));
+    for (const item of view.rows()) {
+      assert.equal(item.props.children[0].props.disabled, true);
+      assert.equal(item.props.children[0].props.draggable, false);
+    }
+  }
+  view.props.inventoryError = '';
+  view.query('unmatched');
+  view.sort('name');
+  assert.equal(view.count(), 0);
+  assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).startsWith('No matching sessions')));
+  view.props.inventory = { rigs: [], seats: [] };
+  view.sort('activity');
+  assert.ok(view.nodes().some(n => n.props?.className === 'connection-empty' && textOf(n).includes('No seats yet')));
+  view.props.inventory = null;
+  view.props.inventoryError = 'Unavailable';
+  view.sort('attention-first');
+  assert.ok(view.nodes().some(n => n.props?.className === 'connection-empty' && textOf(n).includes('Rig unavailable')));
   assert.deepEqual(view.calls, []);
 });
 
