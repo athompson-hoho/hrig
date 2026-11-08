@@ -10,6 +10,14 @@ import { classifyTerminalKey } from "./terminal-keys";
 import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
 import { copyTextForClipboard } from "./terminal-copy-text";
+import {
+  historyKeyDirection,
+  pushSearchQuery,
+  recallSearchQuery,
+} from "./terminal-search-history";
+
+// Recent find queries, shared by every open terminal and kept in memory only: a query can hold a secret, so the list is never saved, restored or exported.
+let searchHistory: readonly string[] = [];
 
 export default function TerminalTools({
   terminal,
@@ -32,6 +40,8 @@ export default function TerminalTools({
   const search = useRef<SearchAddon | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const viewport = useRef<number | null>(null);
+  // Which remembered query this find box shows while ArrowUp and ArrowDown browse (-1 when it is not browsing); one per box, so two terminals never share a place in the list.
+  const historyAt = useRef(-1);
   const [menu, setMenu] = useState<{ x: number; y: number; selection: boolean } | null>(null);
   // Ref so toggling the setting is read at settle time and never re-subscribes the effect below.
   const { effective } = useSettings();
@@ -181,7 +191,7 @@ export default function TerminalTools({
     if (!query) {
       search.current?.clearDecorations();
       setResult({ resultIndex: -1, resultCount: 0 });
-      return;
+      return false;
     }
     if (regex) {
       try {
@@ -189,7 +199,7 @@ export default function TerminalTools({
       } catch {
         setInvalid("Invalid regular expression");
         search.current?.clearDecorations();
-        return;
+        return false;
       }
     }
     const options = {
@@ -204,6 +214,7 @@ export default function TerminalTools({
       },
     };
     search.current?.[backwards ? "findPrevious" : "findNext"](query, options);
+    return search.current !== null;
   };
   useEffect(() => {
     if (!open) return;
@@ -346,8 +357,26 @@ export default function TerminalTools({
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   e.preventDefault();
-                  find(e.shiftKey);
+                  if (find(e.shiftKey)) {
+                    searchHistory = pushSearchQuery(searchHistory, query);
+                    historyAt.current = -1;
+                  }
                 }
+                const direction = historyKeyDirection(
+                  e,
+                  e.nativeEvent.isComposing,
+                );
+                if (!direction) return;
+                const step = recallSearchQuery(
+                  searchHistory,
+                  historyAt.current,
+                  direction,
+                  query,
+                );
+                if (!step) return;
+                e.preventDefault();
+                historyAt.current = step.index;
+                setQuery(step.text);
               }}
             />
             <button
