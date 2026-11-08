@@ -172,3 +172,26 @@ test("terminal.copyOnSelect is an opt-in boolean Terminal setting that rejects n
     false,
   );
 });
+test("terminal.confirmMultilinePaste is an opt-in boolean Terminal setting that rejects non-booleans", () => {
+  const key = "terminal.confirmMultilinePaste";
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.equal(rows[0].options, undefined);
+  assert.equal(rows[0].min, undefined);
+  assert.equal(rows[0].max, undefined);
+  for (const value of [true, false]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of ["true", "yes", 1, 0, null, {}]) {
+    assert.throws(() => settings.validateOverrides({ [key]: value }));
+  }
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+});

@@ -61,6 +61,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `terminal.localShell` | `powershell` | Shell for new Windows terminals. Existing terminals and remote agent sessions are unaffected. |
 | `terminal.autoReconnect` | `true` | Retry failed existing seat attachments with bounded backoff, up to six attempts. Never starts another agent. |
 | `terminal.copyOnSelect` | `false` | Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell. |
+| `terminal.confirmMultilinePaste` | `false` | Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm. |
 | `workspace.refreshInterval` | `15` | Seconds between background rig and seat inventory refreshes on the active connection. |
 | `connections.defaultKind` | `wsl` | Default type when creating a connection from a local workspace. |
 | `connections.defaultRoot` | `~` | Default project directory for new WSL/SSH connections. Does not change existing connections. |
