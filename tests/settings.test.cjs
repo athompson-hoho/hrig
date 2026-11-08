@@ -372,3 +372,96 @@ test("terminal.cursor xterm starts at the defaults and TerminalPanel is its only
     .filter((name) => readSrc(name).includes("new Terminal("));
   assert.deepEqual(constructors, ["TerminalPanel.tsx"]);
 });
+test("terminal.bellStyle is a none-by-default Terminal select of exactly none and visual that rejects anything else", () => {
+  const key = "terminal.bellStyle";
+  assert.equal(settings.defaults[key], "none");
+  assert.equal(settings.resolveSettings()[key], "none");
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.deepEqual(
+    rows[0].options.map((option) => option.value),
+    ["none", "visual"],
+  );
+  assert.equal(rows[0].min, undefined);
+  assert.equal(rows[0].max, undefined);
+  for (const value of ["none", "visual"]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of [
+    "None",
+    "VISUAL",
+    "notification",
+    "sound",
+    "audible",
+    "",
+    " ",
+    " none",
+    "visual ",
+    "visual;",
+  ]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Unsupported option for terminal\.bellStyle/,
+      `${JSON.stringify(value)} must be rejected`,
+    );
+  }
+  for (const value of [true, 1, 0, null, {}, ["none"]]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Wrong value type for terminal\.bellStyle/,
+      `${JSON.stringify(value)} must be rejected`,
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: "notification" }), {});
+  assert.equal(settings.resolveSettings({ [key]: "visual" })[key], "visual");
+  assert.equal(
+    settings.resolveSettings({ [key]: "visual" }, { [key]: "none" })[key],
+    "none",
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: "none" }, { [key]: "visual" })[key],
+    "visual",
+  );
+});
+test("terminal.bellStyle leaves the existing bell notification setting alone and both are documented", () => {
+  const bellStyle = settings.schema.find(
+    (row) => row.key === "terminal.bellStyle",
+  );
+  const notification = settings.schema.find(
+    (row) => row.key === "notifications.terminalBell",
+  );
+  assert.ok(notification);
+  assert.equal(notification.category, "Notifications");
+  assert.equal(notification.options, undefined);
+  assert.equal(settings.defaults["notifications.terminalBell"], false);
+  for (const option of bellStyle.options) {
+    assert.doesNotMatch(option.value, /notif/i);
+  }
+  assert.ok(
+    bellStyle.description.includes(notification.label),
+    "the bell style description must point to the Terminal bell alerts setting",
+  );
+  const both = settings.resolveSettings({
+    "terminal.bellStyle": "visual",
+    "notifications.terminalBell": true,
+  });
+  assert.equal(both["terminal.bellStyle"], "visual");
+  assert.equal(both["notifications.terminalBell"], true);
+  const doc = fs.readFileSync(path.join(srcDir, "..", "SETTINGS.md"), "utf8");
+  const row = doc
+    .split("\n")
+    .find((line) => line.startsWith("| `terminal.bellStyle` | `none` |"));
+  assert.ok(
+    row,
+    "SETTINGS.md must have a terminal.bellStyle row with default none",
+  );
+  assert.ok(row.includes("`visual`"));
+  assert.ok(row.includes("`notifications.terminalBell`"));
+  assert.ok(
+    doc.includes("Terminal bell: `terminal.bellStyle`"),
+    "SETTINGS.md must record why notification is not a value of terminal.bellStyle",
+  );
+});

@@ -63,6 +63,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `terminal.copyOnSelect` | `false` | Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell. |
 | `terminal.confirmMultilinePaste` | `false` | Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm. |
 | `terminal.showSizeOnResize` | `true` | Briefly show the terminal size as columns x rows after it is resized. Display only; nothing is sent to the shell or the seat. |
+| `terminal.bellStyle` | `none` | What a terminal bell does inside HRig: `none` changes nothing, `visual` briefly highlights the terminal, at most once a second. No sound is played and nothing is sent to the shell or the seat. A desktop notification for a bell is the separate `notifications.terminalBell` setting; the two are independent and can both apply. |
 | `workspace.refreshInterval` | `15` | Seconds between background rig and seat inventory refreshes on the active connection. |
 | `connections.defaultKind` | `wsl` | Default type when creating a connection from a local workspace. |
 | `connections.defaultRoot` | `~` | Default project directory for new WSL/SSH connections. Does not change existing connections. |
@@ -73,6 +74,8 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `notifications.terminalQuiet` | `false` | Also notify when an unwatched terminal goes quiet after a burst of output (needs `notifications.desktop`). No terminal text. |
 
 Terminal zoom: Ctrl/Cmd `+`, `-`, `0` and Ctrl+wheel change the font size of one terminal only (8-32 pt, remembered until the app restarts); `terminal.fontSize` stays the default for every terminal.
+
+Terminal bell: `terminal.bellStyle` chooses only what a bell does inside HRig (`none` or `visual`). A third choice, a desktop notification, is deliberately not a value of this setting because it already exists as Terminal bell alerts (`notifications.terminalBell`, which needs `notifications.desktop`); the two settings are independent and can both apply.
 
 ## Follow-up ideas
 
