@@ -33,6 +33,7 @@ export const defaults = {
   "terminal.confirmMultilinePaste": false,
   "terminal.showSizeOnResize": true,
   "terminal.bellStyle": "none",
+  "terminal.minimumContrastRatio": 1,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -339,6 +340,16 @@ export const schema: Setting[] = [
     options: options("none", "visual"),
   },
   {
+    key: "terminal.minimumContrastRatio",
+    category: "Terminal",
+    label: "Minimum contrast",
+    description:
+      "Lowest contrast ratio allowed between terminal text and its background, from 1 to 21. 1 (the default) draws every color exactly as the program and theme set it. Raise it (4.5 and 7 are the WCAG AA and AAA levels) to lighten or darken only the text that is too hard to read, such as dim ANSI colors. Backgrounds are never changed. Display only; nothing is sent to the shell or the seat.",
+    min: 1,
+    max: 21,
+    step: 0.5,
+  },
+  {
     key: "workspace.refreshInterval",
     category: "Workspace",
     label: "Rig refresh interval",
@@ -425,7 +436,9 @@ export function validateOverrides(value: unknown): Overrides {
       (!Number.isFinite(v) ||
         v < (row.min ?? -Infinity) ||
         v > (row.max ?? Infinity) ||
-        (key !== "terminal.lineHeight" && !Number.isInteger(v)))
+        (key !== "terminal.lineHeight" &&
+          key !== "terminal.minimumContrastRatio" &&
+          !Number.isInteger(v)))
     )
       throw new Error("Value out of range for " + key);
     if (row.options && !row.options.some((o) => o.value === String(v)))
