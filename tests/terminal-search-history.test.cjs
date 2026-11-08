@@ -883,3 +883,57 @@ test("terminal-search-history session only: the list lives in memory inside one 
     !/terminal\.search|terminal\.find|searchHistory/.test(read("SETTINGS.md")),
   );
 });
+
+test("terminal-search-history docs: TERMINALS.md says what is remembered, how to recall it, that it is shared by every terminal and never saved", () => {
+  const doc = read("TERMINALS.md");
+  assert.ok(doc.startsWith("# Terminal output tools\n"), "no byte order mark");
+  assert.ok(doc.endsWith("\n") && !doc.endsWith("\n\n"), "one final line feed");
+  assert.ok(!doc.includes("\r"), "line feeds only");
+  const lines = doc.split("\n");
+  const at = lines.findIndex((line) =>
+    line.startsWith("Terminal search remembers the last "),
+  );
+  assert.ok(at > 0, "the paragraph is missing");
+  assert.equal(
+    lines.filter((line) => line.startsWith("Terminal search remembers")).length,
+    1,
+  );
+  const paragraph = lines[at];
+  assert.ok(/^[ -~]+$/.test(paragraph), "ASCII only, on one line");
+  assert.equal(lines[at - 1], "", "a blank line before");
+  assert.equal(lines[at + 1], "", "a blank line after");
+  assert.ok(
+    lines[at - 2].startsWith("Search supports case sensitivity"),
+    "it follows the search paragraph",
+  );
+  assert.ok(
+    lines[at + 2].startsWith("Copy output and export use rendered plain text"),
+    "it comes before the copy and export paragraph",
+  );
+  for (const fragment of [
+    "Terminal search remembers the last " +
+      MAX_SEARCH_HISTORY +
+      " different queries",
+    "Only a search run with Enter or Shift+Enter is remembered",
+    "the results that update while you type are not",
+    "an empty query or one made only of spaces is ignored",
+    "press the Up arrow to fill it with the most recent query",
+    "press the Down arrow to move back toward the newest",
+    "only while the box is empty or still showing a recalled query",
+    "do nothing with Ctrl, Alt, Shift or Cmd held",
+    "runs only when you press Enter",
+    "shared by every terminal open in HRig",
+    "kept in memory only",
+    "never saved to the workspace or the settings and never exported",
+    "because a query can contain a secret",
+    "There is no setting for it",
+    "nothing is typed or sent to the shell or the seat",
+  ])
+    assert.ok(
+      paragraph.includes(fragment),
+      "TERMINALS.md must say: " + fragment,
+    );
+  // The earlier find text stays.
+  assert.ok(doc.includes("Search text is never submitted to the shell."));
+  assert.equal(count(doc, "Terminal search remembers"), 1);
+});
