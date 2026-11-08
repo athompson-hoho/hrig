@@ -82,6 +82,8 @@ function handlerHarness(platform, overridesText) {
     isReopenPanelKey: catalog.isReopenPanelKey,
     isMaximizePanelKey: catalog.isMaximizePanelKey,
     isFocusModeKey: catalog.isFocusModeKey,
+    isPanelCycleKey: catalog.isPanelCycleKey,
+    cyclePanel: () => calls.push("cycle"),
     routeOverriddenKey: ov.routeOverriddenKey,
     window: { hrig: { platform } },
     shortcutOverrides: ov.parseOverrideText(overridesText, platform).map,
@@ -1014,12 +1016,13 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
       "isFocusModeKey",
       "isHelpKey",
       "isMaximizePanelKey",
+      "isPanelCycleKey",
       "isReopenPanelKey",
       "maximizeShortcutHint",
       "reopenShortcutHint",
       "shortcutGroups",
     ]),
-    "the catalog module is not edited",
+    "the catalog module exports only its known names",
   );
 
   // App.tsx: one import, one memo, one block between the help key and the reopen chord.

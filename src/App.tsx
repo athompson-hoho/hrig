@@ -147,6 +147,8 @@ import {
 import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
 import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
 import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";
+import { isPanelCycleKey } from "./shortcuts";
+import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1187,6 +1189,53 @@ export default function App() {
       (element || panel)?.focus();
     });
   };
+  // Ctrl+Tab order, newest first. Kept apart from the navigator's recent list; frozen while Control is held; selecting never touches terminal input.
+  const panelMru = useRef(emptyMru());
+  useEffect(() => {
+    const note = () => {
+      panelMru.current = noteActive(panelMru.current, model.getActiveTabset()?.getSelectedNode()?.getId() ?? null);
+    };
+    note();
+    const listener = {
+      onAfterAction: (action: Action) => {
+        // A close action names the panel that is gone.
+        const named = action.data?.node;
+        if (typeof named === "string" && !model.getNodeById(named)) panelMru.current = noteClosed(panelMru.current, named);
+        note();
+      },
+    };
+    model.addChangeListener(listener);
+    return () => model.removeChangeListener(listener);
+  }, [model]);
+  useEffect(() => {
+    const end = () => {
+      panelMru.current = endCycle(panelMru.current, modelRef.current.getActiveTabset()?.getSelectedNode()?.getId() ?? null);
+    };
+    const release = (event: KeyboardEvent) => {
+      if (event.key === "Control") end();
+    };
+    window.addEventListener("keyup", release, true);
+    window.addEventListener("blur", end);
+    return () => {
+      window.removeEventListener("keyup", release, true);
+      window.removeEventListener("blur", end);
+    };
+  }, []);
+  const cyclePanel = (direction: 1 | -1, source: EventTarget | null) => {
+    const owner = (source as Node | null)?.ownerDocument;
+    if (owner && owner !== document) return;
+    const step = stepCycle(
+      panelMru.current,
+      model.getActiveTabset()?.getSelectedNode()?.getId() ?? null,
+      direction,
+      (id) => {
+        const node = model.getNodeById(id);
+        return node instanceof TabNode && (!node.getWindow() || node.getWindow() === window);
+      },
+    );
+    panelMru.current = step.state;
+    if (step.target !== null) focusPanel(step.target);
+  };
   const movePanel = (id: string, target: string, direction: string) => {
     const current = modelRef.current;
     if (
@@ -2149,6 +2198,14 @@ export default function App() {
         event.preventDefault();
         event.stopPropagation();
         if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode();
+        return;
+      }
+      // Same rule: claimed (a shell would get a plain Tab), acts once per press and only with no dialog open.
+      if (isPanelCycleKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat && modal === null && !hasOpenDialog(event.target))
+          cyclePanel(event.shiftKey ? -1 : 1, event.target);
         return;
       }
       if (event.ctrlKey || event.metaKey) {

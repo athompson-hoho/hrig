@@ -21,6 +21,7 @@ const { shortcutGroups, isHelpKey, hasOpenDialog } = shortcuts;
 const { isReopenPanelKey, reopenShortcutHint } = shortcuts;
 const { isMaximizePanelKey, maximizeShortcutHint } = shortcuts;
 const { isFocusModeKey, focusModeShortcutHint } = shortcuts;
+const { isPanelCycleKey } = shortcuts;
 const { classifyTerminalKey, TERMINAL_PANEL_SELECTOR } = load(
   "src/terminal-keys.ts",
 );
@@ -105,6 +106,7 @@ test("shortcuts tracer: a bare question mark on the page opens, in a field or un
     "isFocusModeKey",
     "isHelpKey",
     "isMaximizePanelKey",
+    "isPanelCycleKey",
     "isReopenPanelKey",
     "maximizeShortcutHint",
     "reopenShortcutHint",
@@ -138,6 +140,7 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.palette",
       "workspace.quickOpen",
       "workspace.panels",
+      "workspace.cyclePanels",
       "workspace.sidebar",
       "workspace.settings",
       "workspace.newShell",
@@ -159,6 +162,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.palette": ["Cmd+K"],
     "workspace.quickOpen": ["Cmd+P"],
     "workspace.panels": ["Cmd+Shift+P"],
+    "workspace.cyclePanels": ["Ctrl+Tab", "Ctrl+Shift+Tab"],
     "workspace.settings": ["Cmd+comma"],
     "workspace.openProject": ["Cmd+O"],
     "workspace.sidebar": ["Cmd+B"],
@@ -182,6 +186,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.palette": ["Ctrl+K"],
     "workspace.quickOpen": ["Ctrl+P"],
     "workspace.panels": ["Ctrl+Shift+P"],
+    "workspace.cyclePanels": ["Ctrl+Tab", "Ctrl+Shift+Tab"],
     "workspace.settings": ["Ctrl+comma"],
     "workspace.openProject": ["Ctrl+O"],
     "workspace.sidebar": ["Ctrl+B"],
@@ -994,5 +999,123 @@ test("shortcuts go to line is Monaco's Ctrl+G, listed once after Save in the Edi
       labelOf(platform, "editor.gotoLine"),
       "Go to a line and column",
       platform,
+    );
+});
+
+test("shortcuts panel switch chord is Ctrl+Tab with or without Shift, the Control key on every platform and nothing else, listed once after Find open panels", () => {
+  const platforms = [...PLATFORMS, "freebsd", ""];
+  for (const platform of platforms) {
+    assert.equal(isPanelCycleKey(chord("Ctrl+Tab")), true, platform);
+    assert.equal(isPanelCycleKey(chord("Ctrl+Shift+Tab")), true, platform);
+    assert.equal(isPanelCycleKey({ ...chord("Ctrl+Tab"), repeat: true }), true);
+    for (const text of ["Tab", "Shift+Tab", "Cmd+Tab", "Cmd+Shift+Tab"])
+      assert.equal(isPanelCycleKey(chord(text)), false, platform + " " + text);
+    for (const extra of [
+      { altKey: true },
+      { metaKey: true },
+      { isComposing: true },
+      { defaultPrevented: true },
+      { key: "tab" },
+      { key: "Dead" },
+      { key: "" },
+    ])
+      assert.equal(
+        isPanelCycleKey({ ...chord("Ctrl+Tab"), ...extra }),
+        false,
+        JSON.stringify(extra),
+      );
+    for (const text of ["Ctrl+K", "Ctrl+Shift+P", "Ctrl+Shift+H", "Ctrl+P"])
+      assert.equal(isPanelCycleKey(chord(text)), false, platform + " " + text);
+    const keys = byId(platform)["workspace.cyclePanels"];
+    assert.deepEqual(keys, ["Ctrl+Tab", "Ctrl+Shift+Tab"], platform);
+    for (const key of keys)
+      assert.equal(isPanelCycleKey(chord(key)), true, key);
+    const group = shortcutGroups(platform).find((g) => g.id === "workspace");
+    const ids = group.shortcuts.map((s) => s.id);
+    assert.equal(
+      ids[ids.indexOf("workspace.panels") + 1],
+      "workspace.cyclePanels",
+      platform + " listed right after Find open panels",
+    );
+    assert.equal(ids.filter((id) => id === "workspace.cyclePanels").length, 1);
+    // No terminal, zoom, help or other app chord claims it.
+    for (const key of keys) {
+      for (const selected of [false, true])
+        assert.equal(
+          classifyTerminalKey(chord(key), platform, selected),
+          "pass",
+          platform + " terminal " + key,
+        );
+      assert.equal(zoomAction(chord(key)), null, platform + " zoom " + key);
+      assert.equal(isHelpKey(chord(key), element("BODY"), false), false);
+      assert.equal(isReopenPanelKey(chord(key), platform), false);
+      assert.equal(isMaximizePanelKey(chord(key), platform), false);
+      assert.equal(isFocusModeKey(chord(key), platform), false);
+    }
+    const all = [];
+    for (const entry of shortcutGroups(platform).flatMap((g) => g.shortcuts))
+      for (const key of entry.keys) all.push([entry.id, key]);
+    assert.deepEqual(
+      all.filter(([, key]) => /tab$/i.test(key)),
+      [
+        ["workspace.cyclePanels", "Ctrl+Tab"],
+        ["workspace.cyclePanels", "Ctrl+Shift+Tab"],
+      ],
+      platform + " the only Tab chords",
+    );
+    for (const [id, key] of all) {
+      if (id === "workspace.cyclePanels") continue;
+      assert.equal(isPanelCycleKey(chord(key)), false, id + " " + key);
+    }
+  }
+  assert.equal(
+    labelOf("darwin", "workspace.cyclePanels"),
+    "Switch panels in most recently used order (the Control key; Shift goes back)",
+  );
+  for (const platform of ["win32", "linux", "freebsd", ""])
+    assert.equal(
+      labelOf(platform, "workspace.cyclePanels"),
+      "Switch panels in most recently used order (Shift goes back)",
+      platform,
+    );
+
+  // The terminal would get a plain Tab from xterm and Monaco binds no Control Tab: read from the installed packages, so an upgrade re-audits this.
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const modules = path.join(__dirname, "..", "node_modules");
+  const xterm = fs.readFileSync(
+    path.join(modules, "@xterm", "xterm", "lib", "xterm.js"),
+    "utf8",
+  );
+  assert.match(
+    xterm,
+    /case 9:if\(\w+\.shiftKey\)\{\w+\.key=\w+\.C0\.ESC\+"\[Z";break\}\w+\.key=\w+\.C0\.HT,\w+\.cancel=!0;break;/,
+    "xterm sends Tab for Ctrl+Tab and Shift+Tab for Ctrl+Shift+Tab: the handler must claim them",
+  );
+  const monaco = path.join(modules, "monaco-editor");
+  const version = JSON.parse(
+    fs.readFileSync(path.join(monaco, "package.json"), "utf8"),
+  ).version;
+  assert.match(
+    version,
+    /^0\.56\./,
+    "Monaco changed to " + version + ": audit Ctrl+Tab again",
+  );
+  const tabLines = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (entry.name.endsWith(".js"))
+        for (const line of fs.readFileSync(file, "utf8").split("\n"))
+          if (line.includes("KeyCode.Tab */")) tabLines.push(line);
+    }
+  };
+  walk(path.join(monaco, "esm", "vs"));
+  assert.ok(tabLines.length > 20, "the scan finds Monaco's Tab bindings");
+  for (const line of tabLines)
+    assert.ok(
+      !/KeyMod\.(CtrlCmd|WinCtrl|Alt) \*\/ \| 2 \/\* KeyCode\.Tab/.test(line),
+      "a Monaco binding uses Control or Alt with Tab: " + line.trim(),
     );
 });

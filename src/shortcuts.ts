@@ -32,6 +32,9 @@ export type MaximizeKeyEvent = ReopenKeyEvent;
 /** The same key event shape serves the focus mode chord. */
 export type FocusModeKeyEvent = ReopenKeyEvent;
 
+/** The same key event shape serves the panel switch chord. */
+export type PanelCycleKeyEvent = ReopenKeyEvent;
+
 /**
  * The shortcut catalog for a platform, rebuilt on every call. It mirrors the
  * App key handler, terminal-keys, terminal-zoom and the editor save command;
@@ -62,6 +65,14 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           id: "workspace.panels",
           label: "Find open panels",
           keys: [`${mod}+Shift+P`],
+        },
+        // The Control key on every platform: Cmd+Tab is the macOS app switcher.
+        {
+          id: "workspace.cyclePanels",
+          label: mac
+            ? "Switch panels in most recently used order (the Control key; Shift goes back)"
+            : "Switch panels in most recently used order (Shift goes back)",
+          keys: ["Ctrl+Tab", "Ctrl+Shift+Tab"],
         },
         {
           id: "workspace.settings",
@@ -286,4 +297,19 @@ export function isFocusModeKey(
 /** Palette hint text for the focus mode shortcut on the given platform. */
 export function focusModeShortcutHint(platform: string): string {
   return platform === "darwin" ? "Cmd Shift D" : "Ctrl Shift D";
+}
+
+/**
+ * True for Tab with the Control key and no Cmd or Alt, with or without Shift:
+ * the chord that switches panels in most recently used order, on every
+ * platform (Cmd+Tab belongs to macOS). xterm sends a plain Tab for it, so the
+ * handler must claim it before a terminal sees it; Monaco binds only plain Tab
+ * and Shift+Tab. A held key (repeat) still matches so it is claimed, and the
+ * caller decides to act once per press; composing or already handled events
+ * never match.
+ */
+export function isPanelCycleKey(event: PanelCycleKeyEvent): boolean {
+  if (event.altKey || event.isComposing || event.defaultPrevented) return false;
+  if (event.key !== "Tab") return false;
+  return event.ctrlKey && !event.metaKey;
 }
