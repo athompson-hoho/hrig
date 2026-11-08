@@ -4334,3 +4334,22 @@ button:hover {
     opacity: 1;
   }
 }
+/* Floats over the whole stage (absolute, so no layout shift and no PTY resize), takes no clicks, and fades out in the time the component keeps it mounted; the global reduced-motion rules remove the fade, leaving a short static outline. */
+.terminal-bell-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow:
+    inset 0 0 0 2px var(--mint),
+    inset 0 0 18px var(--mint);
+  animation: terminal-bell-flash 0.16s ease-out forwards;
+}
+@keyframes terminal-bell-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

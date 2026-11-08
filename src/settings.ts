@@ -32,6 +32,7 @@ export const defaults = {
   "terminal.copyOnSelect": false,
   "terminal.confirmMultilinePaste": false,
   "terminal.showSizeOnResize": true,
+  "terminal.bellStyle": "none",
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -328,6 +329,14 @@ export const schema: Setting[] = [
     label: "Show size on resize",
     description:
       "Briefly show the terminal size as columns x rows after it is resized. Display only; nothing is sent to the shell or the seat.",
+  },
+  {
+    key: "terminal.bellStyle",
+    category: "Terminal",
+    label: "Bell style",
+    description:
+      "What a terminal bell does inside HRig: none (the default) or visual, a brief highlight on the terminal. Desktop notifications for a bell are the separate Terminal bell alerts setting under Notifications; both can apply. No sound is played and nothing is sent to the shell or the seat.",
+    options: options("none", "visual"),
   },
   {
     key: "workspace.refreshInterval",

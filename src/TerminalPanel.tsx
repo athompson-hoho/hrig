@@ -15,6 +15,7 @@ import {
 } from "./terminal-reconnect";
 import TerminalScrollback from "./TerminalScrollback";
 import TerminalSize from "./TerminalSize";
+import TerminalBell from "./TerminalBell";
 import TerminalAlerts from "./TerminalAlerts";
 import { useTerminalZoom } from "./useTerminalZoom";
 import { effectiveFontSize } from "./terminal-zoom";
@@ -474,6 +475,10 @@ export default function TerminalPanel({
           scrollback={preferences["terminal.scrollback"]}
         />
         <TerminalSize
+          terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+        />
+        <TerminalBell
           terminal={terminalRef}
           generation={attempt * 2 + (ready ? 1 : 0)}
         />
