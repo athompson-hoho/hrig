@@ -2454,6 +2454,23 @@ button:hover {
 .session-toolbar.host-tinted {
   box-shadow: inset 0 2px 0 0 var(--host-tint);
 }
+.host-tint-rows {
+  display: grid;
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.host-tint-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 110px;
+  gap: 8px;
+  align-items: center;
+}
+.host-tint-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .host-tint-label {
   max-width: 120px;
   padding: 0 5px;

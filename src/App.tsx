@@ -83,6 +83,7 @@ import Sidebar from "./Sidebar";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
 import { HostTintContext } from "./HostTint";
+import HostTintDialog from "./HostTintDialog";
 import { normalizeHostTints } from "./host-tint";
 import {
   safeOverrides,
@@ -216,6 +217,7 @@ type ModalKind =
   | "guide"
   | "tools"
   | "shortcuts"
+  | "hostTint"
   | null;
 type PendingAction = {
   title: string;
@@ -1750,6 +1752,10 @@ export default function App() {
     window.focus();
     setModal("shortcuts");
   };
+  const openHostTint = () => {
+    projectIntent.current++;
+    setModal("hostTint");
+  };
   // Go to line opens Monaco's own prompt in the editor that has text focus once
   // the command center has handed the focus back; nothing is typed or sent.
   const goToLine = () => {
@@ -1967,6 +1973,12 @@ export default function App() {
       hint: "WSL / SSH",
       icon: <Network size={16} />,
       action: openConnect,
+    },
+    {
+      name: "Set host label and tint",
+      hint: "Mark production or development hosts in terminal headers",
+      icon: <Network size={16} />,
+      action: openHostTint,
     },
     {
       name: "Open project folder",
@@ -3266,6 +3278,18 @@ export default function App() {
         )}
         {modal === "shortcuts" && (
           <ShortcutSheet platform={window.hrig.platform} onClose={() => setModal(null)} />
+        )}
+        {modal === "hostTint" && (
+          <HostTintDialog
+            connections={state.connections}
+            tints={hostTints}
+            onSave={(next) => {
+              setState((s) => ({ ...s, hostTints: next }));
+              setModal(null);
+              notify("Host labels and tints saved");
+            }}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal === "guide" && (
           <Modal

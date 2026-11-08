@@ -665,3 +665,328 @@ test("host-tint wiring: the tint lives in the saved workspace state and the term
         "not in " + file,
       );
 });
+
+// A small react runtime: useState keeps slots and a state change renders again at once.
+function dialogHarness(connections, tints, extra = {}) {
+  const slots = [];
+  let cursor = 0;
+  let tree = null;
+  const calls = { saved: [], closed: 0 };
+  const react = {
+    useState(initial) {
+      const i = cursor++;
+      if (!(i in slots))
+        slots[i] = typeof initial === "function" ? initial() : initial;
+      return [
+        slots[i],
+        (value) => {
+          slots[i] = typeof value === "function" ? value(slots[i]) : value;
+          render();
+        },
+      ];
+    },
+  };
+  const jsx = (type, props) => ({ type, props });
+  const Dialog = load("src/HostTintDialog.tsx", {
+    react,
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
+    "./components": { Modal: "Modal" },
+  }).default;
+  const props = {
+    connections,
+    tints,
+    onSave: (next) => calls.saved.push(next),
+    onClose: () => {
+      calls.closed++;
+    },
+    ...extra,
+  };
+  function render() {
+    cursor = 0;
+    tree = Dialog(props);
+  }
+  render();
+  const all = (node, out = []) => {
+    if (Array.isArray(node)) node.forEach((n) => all(n, out));
+    else if (node && typeof node === "object") {
+      out.push(node);
+      all(node.props && node.props.children, out);
+    }
+    return out;
+  };
+  const find = (type, label) =>
+    all(tree).find(
+      (n) => n.type === type && (!label || n.props["aria-label"] === label),
+    );
+  const button = (text) =>
+    all(tree).find((n) => n.type === "button" && n.props.children === text);
+  return {
+    calls,
+    tree: () => tree,
+    all: () => all(tree),
+    find,
+    button,
+    value: (type, label) => find(type, label).props.value,
+    set: (type, label, value) =>
+      find(type, label).props.onChange({ target: { value } }),
+  };
+}
+
+test("host-tint dialog: the real dialog lists every connection, keeps edits to itself until Save and saves only clean labels and palette colors", () => {
+  const connections = [
+    { id: "local", name: "This computer", kind: "local", root: "." },
+    { id: "ssh:prod", name: "Prod DB", kind: "ssh", host: "prod", root: "~" },
+    { id: "ssh:dev", name: "Dev box", kind: "ssh", host: "dev", root: "~" },
+  ];
+  const saved = Object.freeze({
+    "ssh:prod": Object.freeze({ label: "PROD", color: "red" }),
+    "ssh:gone": Object.freeze({ label: "old", color: "gray" }),
+  });
+  const d = dialogHarness(connections, saved);
+
+  // One row per connection, filled from what is saved; nothing set shows empty.
+  assert.equal(d.tree().type, "Modal");
+  assert.equal(d.tree().props.title, "Host label and tint");
+  assert.equal(typeof d.tree().props.onClose, "function");
+  const inputs = d.all().filter((n) => n.type === "input");
+  const selects = d.all().filter((n) => n.type === "select");
+  assert.deepEqual(
+    inputs.map((n) => n.props["aria-label"]),
+    ["Label for This computer", "Label for Prod DB", "Label for Dev box"],
+  );
+  assert.deepEqual(
+    selects.map((n) => n.props["aria-label"]),
+    ["Tint for This computer", "Tint for Prod DB", "Tint for Dev box"],
+  );
+  assert.deepEqual(
+    inputs.map((n) => n.props.value),
+    ["", "PROD", ""],
+  );
+  assert.deepEqual(
+    selects.map((n) => n.props.value),
+    ["", "red", ""],
+  );
+  for (const input of inputs) assert.equal(input.props.maxLength, 24);
+  const options = d
+    .all()
+    .filter((n) => n.type === "option" && n.props.value !== "")
+    .slice(0, 6)
+    .map((n) => n.props.value);
+  assert.deepEqual(options, Object.keys(pure().TINT_COLORS));
+  assert.equal(
+    d.all().filter((n) => n.type === "option" && n.props.value === "").length,
+    3,
+    "each row can choose no tint",
+  );
+  assert.deepEqual(
+    d
+      .all()
+      .filter((n) => n.type === "option")
+      .slice(0, 7)
+      .map((n) => n.props.children),
+    ["No tint", "Red", "Amber", "Green", "Blue", "Violet", "Gray"],
+  );
+
+  // Typing changes the row, not the saved map: nothing is saved until Save.
+  d.set("input", "Label for Dev box", "  QA  ");
+  d.set("select", "Tint for Dev box", "amber");
+  assert.equal(d.value("input", "Label for Dev box"), "  QA  ");
+  assert.equal(d.value("select", "Tint for Dev box"), "amber");
+  assert.equal(d.calls.saved.length, 0);
+  assert.equal(d.calls.closed, 0);
+
+  // Save writes the cleaned map and keeps the tint of a connection that is no longer listed.
+  d.button("Save").props.onClick();
+  assert.equal(d.calls.saved.length, 1);
+  assert.deepEqual(d.calls.saved[0], {
+    "ssh:prod": { label: "PROD", color: "red" },
+    "ssh:gone": { label: "old", color: "gray" },
+    "ssh:dev": { label: "QA", color: "amber" },
+  });
+  assert.deepEqual(
+    saved["ssh:prod"],
+    { label: "PROD", color: "red" },
+    "the saved map prop is never changed",
+  );
+
+  // Clearing a row removes it; a hostile label and an unknown color are never saved.
+  const e = dialogHarness(connections, saved);
+  e.set("input", "Label for Prod DB", "");
+  e.set("select", "Tint for Prod DB", "");
+  e.set(
+    "input",
+    "Label for This computer",
+    "L" + char(7) + "o" + char(0x202e) + "cal",
+  );
+  e.set("select", "Tint for This computer", "red; background: url(x)");
+  e.set("input", "Label for Dev box", "x".repeat(60));
+  e.button("Save").props.onClick();
+  assert.deepEqual(e.calls.saved[0], {
+    "ssh:gone": { label: "old", color: "gray" },
+    local: { label: "Local" },
+    "ssh:dev": { label: "x".repeat(24) },
+  });
+
+  // Saving without a change keeps every saved entry; Cancel saves nothing and just closes.
+  const f = dialogHarness(connections, saved);
+  f.button("Save").props.onClick();
+  assert.deepEqual(f.calls.saved[0], {
+    "ssh:prod": { label: "PROD", color: "red" },
+    "ssh:gone": { label: "old", color: "gray" },
+  });
+  const g = dialogHarness(connections, undefined);
+  assert.deepEqual(
+    g
+      .all()
+      .filter((n) => n.type === "input")
+      .map((n) => n.props.value),
+    ["", "", ""],
+  );
+  g.set("input", "Label for Prod DB", "PROD");
+  g.button("Cancel").props.onClick();
+  assert.equal(g.calls.saved.length, 0);
+  assert.equal(g.calls.closed, 1);
+  g.button("Save").props.onClick();
+  g.calls.saved.length = 0;
+  const h = dialogHarness(connections, undefined);
+  h.button("Save").props.onClick();
+  assert.deepEqual(
+    h.calls.saved[0],
+    {},
+    "an untouched dialog on a fresh install saves an empty map",
+  );
+
+  // The dialog source: the pure helpers and the shared Modal only; no bridge, storage or terminal access.
+  const source = read("src/HostTintDialog.tsx");
+  assert.ok(!/[^\n -~]/.test(source), "dialog is printable ASCII");
+  const code = tight(stripComments(source));
+  assert.deepEqual(
+    [...code.matchAll(/from "([^"]+)"/g)].map((m) => m[1]),
+    ["react", "./components", "./host-tint", "./types"],
+  );
+  assert.ok(
+    !/localStorage|sessionStorage|window\.|hrig|saveState|writeTerminal|sendTerminalCommand|document\./.test(
+      code,
+    ),
+  );
+  assert.equal(count(code, "maxLength={MAX_TINT_LABEL}"), 1);
+
+  // The App: one palette command, one modal kind, and Save writes the map into the workspace state.
+  const app = tight(stripComments(read("src/App.tsx")));
+  assert.equal(count(app, '| "hostTint" | null;'), 1);
+  assert.equal(count(app, 'import HostTintDialog from "./HostTintDialog";'), 1);
+  assert.equal(count(app, 'name: "Set host label and tint"'), 1);
+  assert.ok(
+    app.includes(
+      'hint: "Mark production or development hosts in terminal headers", icon: <Network size={16} />, action: openHostTint }',
+    ),
+  );
+  assert.ok(
+    app.includes(
+      'const openHostTint = () => { projectIntent.current++; setModal("hostTint"); };',
+    ),
+  );
+  const block = between(
+    app,
+    '{modal === "hostTint" && (',
+    '{modal === "guide" && (',
+  );
+  assert.equal(
+    collapse(block),
+    '{modal === "hostTint" && (<HostTintDialog connections={state.connections} tints={hostTints} onSave={(next) => { setState((s) => ({ ...s, hostTints: next })); setModal(null); notify("Host labels and tints saved"); }} onClose={() => setModal(null)} />)}',
+  );
+  assert.equal(
+    count(app, "hostTints: next"),
+    1,
+    "the workspace state gets the tints in one place",
+  );
+  assert.ok(
+    !/window\.hrig\.[a-zA-Z]+\(/.test(block),
+    "saving calls nothing outside the state",
+  );
+});
+
+test("host-tint docs: TERMINALS.md and SETTINGS.md say it is opt-in, header only, saved per connection and not a setting", () => {
+  for (const file of ["TERMINALS.md", "SETTINGS.md"]) {
+    const text = read(file);
+    assert.ok(text.charCodeAt(0) !== 0xfeff, file + " has no byte order mark");
+    assert.ok(
+      text.endsWith("\n") && !text.endsWith("\n\n"),
+      file + " ends with one line feed",
+    );
+    assert.ok(!text.includes("\r"), file + " has no carriage return");
+  }
+  const lines = (file) => read(file).split("\n");
+
+  const terminals = lines("TERMINALS.md");
+  const at = terminals.findIndex((l) =>
+    l.startsWith("Host label and tint is off until you set one"),
+  );
+  assert.ok(at > 0, "TERMINALS.md has the paragraph");
+  assert.equal(
+    terminals.filter((l) => l.startsWith("Host label and tint")).length,
+    1,
+  );
+  assert.ok(
+    terminals[at - 1] === "" && terminals[at + 1] === "",
+    "blank lines around it",
+  );
+  assert.ok(
+    terminals[at - 2].startsWith("Seat terminals show the seat name"),
+    "right after the seat header paragraph",
+  );
+  assert.ok(
+    terminals[at + 2].startsWith(
+      "Command center lists Focus, Clear, Find, Reconnect",
+    ),
+    "right before the command center paragraph",
+  );
+  assert.ok(!/[^ -~]/.test(terminals[at]), "the paragraph is printable ASCII");
+  for (const part of [
+    "is off until you set one, and it changes nothing else",
+    "Run Set host label and tint in the command center",
+    "short label (up to " + pure().MAX_TINT_LABEL + " characters",
+    "red, amber, green, blue, violet or gray",
+    "shows the label beside the connection name in its header",
+    "a thin colored line along the top of the header",
+    "Only the header changes: terminal text, colors and size, the panel layout and the tab titles stay as they are",
+    "the header keeps its height",
+    "choose No tint to remove it",
+    "saved per connection in HRig's workspace file, not in the settings and not in the Settings export",
+    "never sent to a terminal, a host or a seat",
+    "a connection with nothing set looks exactly as before",
+    "HRig does not guess which host is production; you choose.",
+  ])
+    assert.ok(terminals[at].includes(part), "TERMINALS.md must say: " + part);
+
+  const settings = lines("SETTINGS.md");
+  const row = settings.findIndex((l) =>
+    l.startsWith("Host label and tint: there is no settings row for it."),
+  );
+  assert.ok(row > 0, "SETTINGS.md has the paragraph");
+  assert.equal(
+    settings.filter((l) => l.includes("Host label and tint")).length,
+    1,
+  );
+  assert.ok(settings[row - 1] === "" && settings[row + 1] === "");
+  assert.ok(
+    settings[row - 2].startsWith("Terminal bell: `terminal.bellStyle`"),
+    "after the bell paragraph",
+  );
+  assert.ok(
+    settings[row + 2].startsWith("## Follow-up ideas"),
+    "before the follow-up ideas",
+  );
+  for (const part of [
+    "not in the table above, not in the user or project scopes and not in the Settings JSON export or import",
+    "Run Set host label and tint in the command center",
+    "saved under `hostTints` in workspace.json, keyed by connection ID",
+    "a connection without one is not marked at all",
+    "See TERMINALS.md",
+  ])
+    assert.ok(settings[row].includes(part), "SETTINGS.md must say: " + part);
+  assert.ok(!/[^ -~]/.test(settings[row]));
+  // No setting was added: the catalog has no tint key and the settings module never mentions one.
+  assert.ok(!settings.some((l) => /^\| `[a-z.]*[tT]int[a-zA-Z.]*` \|/.test(l)));
+  assert.ok(!/tint/i.test(read("src/settings.ts")));
+});

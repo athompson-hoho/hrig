@@ -81,6 +81,8 @@ Terminal zoom: Ctrl/Cmd `+`, `-`, `0` and Ctrl+wheel change the font size of one
 
 Terminal bell: `terminal.bellStyle` chooses only what a bell does inside HRig (`none` or `visual`). A third choice, a desktop notification, is deliberately not a value of this setting because it already exists as Terminal bell alerts (`notifications.terminalBell`, which needs `notifications.desktop`); the two settings are independent and can both apply.
 
+Host label and tint: there is no settings row for it. A label and color belong to one connection, not to a preference, so they are not in the table above, not in the user or project scopes and not in the Settings JSON export or import. Run Set host label and tint in the command center to give a connection a short label and a palette color; they are saved under `hostTints` in workspace.json, keyed by connection ID, and a connection without one is not marked at all. See TERMINALS.md for what the terminal header shows.
+
 ## Follow-up ideas
 
 Future candidates: custom VS Code/terminal theme imports, named profiles, remappable shortcuts, per-language editor settings, settings-file synchronization, and signed automatic updates. These are not exposed as working controls in this release. Agent credentials, provider models, permissions, extension installation, and OpenRig policies stay under the owning harness rather than being silently changed by desktop preferences.
