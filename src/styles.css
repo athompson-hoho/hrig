@@ -4242,7 +4242,7 @@ button:hover {
 @media (max-width: 700px) { .designer-account-budgets { grid-template-columns: 1fr; } }
 
 .session-row { display: flex; align-items: center; margin: 3px 9px; gap: 2px; border-radius: 6px; }
-.pod-disclosure { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 0 8px; padding: 4px 8px; min-height: 32px; border-radius: 4px; color: var(--color-929caf); font: inherit; font-size: 11px; text-align: left; }
+.pod-disclosure { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 0 8px; padding: 4px 8px; min-height: 32px; border-radius: 4px; color: var(--color-a9b0c0); font: inherit; font-size: 11px; text-align: left; }
 .pod-disclosure:hover { background: var(--color-272c34); }
 .pod-disclosure:disabled { cursor: default; }
 .pod-disclosure > svg, .pod-disclosure > .count { flex-shrink: 0; }
