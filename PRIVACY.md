@@ -1,6 +1,6 @@
 # HRig privacy statement
 
-Updated: 2026-10-27
+Updated: 2026-11-08
 
 HRig is a desktop workspace for OpenRig. It does not operate a hosted project-storage service, include advertising, or automatically upload product analytics or crash reports to the maintainer. It stores workspace data locally and communicates with hosts, services and agents selected by the operator.
 
@@ -32,6 +32,16 @@ Community theme palettes are bundled locally. Selecting a bundled theme does not
 ## Support and control
 
 Disable or disconnect optional integrations, close configured connections/panels, and revoke mobile devices when they should no longer exchange information. Agent processes and remote services can continue independently of the HRig window; stop them through their own controls when appropriate. For privacy questions, contact the maintainer through the [project repository](https://github.com/athompson-hoho/hrig). Public issues must not contain credentials, private source code or personal information.
+
+## Redacted diagnostics export
+
+In Connection doctor, Export redacted diagnostics… explicitly saves a bounded local JSON file. Its log contribution is a represented check-status snapshot for eight fixed check labels, not raw application/host logs, historical logs or fresh host verification. Missing, invalid or duplicate check statuses become unknown. Absent, checking, failed, obsolete, malformed or oversized reports make check statuses unavailable; valid local versions and selected settings can still be exported.
+
+The bundle includes only recognized numeric versions of the local HRig application, Electron, Chromium and Node.js, plus valid values from nine effective settings: `appearance.density`, `appearance.reduceMotion`, `editor.fontSize`, `editor.tabSize`, `editor.wordWrap`, `terminal.fontSize`, `terminal.cursorStyle`, `terminal.scrollback` and `workspace.refreshInterval`. Unknown version formats are unavailable; invalid settings are omitted. Settings accept only their fixed enum, boolean or bounded integer domains. No new preference is added.
+
+The export omits check details, terminal text/recordings, arbitrary logs, environment values, workspace history, connection/account/project/pairing identities, credentials, budgets and free-form settings such as paths, fonts or commands. It constructs only the selected fixed fields; it does not scrub arbitrary logs or certify arbitrary content as secret-free. Export adds no diagnosis, host/network collection, polling, terminal reads/input, agent lifecycle action or upload. Opening Doctor and explicitly selecting Run checks retain their separate existing diagnosis behavior.
+
+The native Save dialog chooses the destination. Choose a new file name: existing files are never replaced. Canceling saves no file. A failed write, existing destination or unsupported filesystem produces a generic error without a path or raw error; explicitly retry with a new name in a writable folder. Saved is reported only after the completed new file is published. Permission behavior, hard-link support and crash durability depend on the platform/filesystem and remain unverified on a real desktop; synthetic filesystem checks do not establish universal confidentiality or durability. HRig does not upload or automatically delete the saved bundle.
 
 ## Optional terminal logs
 
