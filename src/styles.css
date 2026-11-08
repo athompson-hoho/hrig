@@ -4303,3 +4303,34 @@ button:hover {
   min-width: 160px;
   z-index: 200;
 }
+/* Floats top-center inside the stage so it never resizes the PTY and stays clear of the reconnect notice (top-right) and Jump to latest (bottom-right); the global reduced-motion rules remove the fade-in. */
+.terminal-size {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  user-select: none;
+  z-index: 4;
+  animation: terminal-size-in 0.12s ease-out;
+}
+.terminal-size:empty {
+  display: none;
+}
+@keyframes terminal-size-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

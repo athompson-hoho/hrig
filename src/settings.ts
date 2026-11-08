@@ -31,6 +31,7 @@ export const defaults = {
   "terminal.autoReconnect": true,
   "terminal.copyOnSelect": false,
   "terminal.confirmMultilinePaste": false,
+  "terminal.showSizeOnResize": true,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -320,6 +321,13 @@ export const schema: Setting[] = [
     label: "Confirm multi-line paste",
     description:
       "Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm.",
+  },
+  {
+    key: "terminal.showSizeOnResize",
+    category: "Terminal",
+    label: "Show size on resize",
+    description:
+      "Briefly show the terminal size as columns x rows after it is resized. Display only; nothing is sent to the shell or the seat.",
   },
   {
     key: "workspace.refreshInterval",
