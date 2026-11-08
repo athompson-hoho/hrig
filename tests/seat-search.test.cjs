@@ -84,3 +84,64 @@ test('Sidebar input filters actual rows and count by pod, then clearing restores
   assert.equal(view.count(), 2);
   assert.deepEqual(view.calls, []);
 });
+
+const filter = (...args) => load('../src/seat-search.ts').filterSeats(...args);
+const ids = (result) => Array.from(result.seats, item => item.id);
+
+for (const field of ['name', 'rigName', 'runtime', 'pod', 'model', 'session']) {
+  test(`matches ${field} independently with literal case-insensitive trimmed text`, () => {
+    const input = Object.freeze([seat('match', { [field]: 'Unique[.*]Value' }), seat('other')]);
+    const result = filter(input, 'r1', '  uNiQuE[.*]vAlUe  ');
+    assert.deepEqual(ids(result), ['match']);
+    assert.equal(result.seats[0], input[0]);
+    assert.equal(result.scopedCount, 2);
+    assert.equal(result.hasQuery, true);
+    assert.equal(result.noMatches, false);
+  });
+}
+
+test('scopes to selected rig before matching and permits all rigs when unselected', () => {
+  assert.deepEqual(ids(filter(seats, 'r1', 'Other')), []);
+  assert.equal(filter(seats, 'r1', 'Other').noMatches, true);
+  assert.deepEqual(ids(filter(seats, '', 'Other')), ['c']);
+  const emptyScope = filter(seats, 'missing', 'Alice');
+  assert.equal(emptyScope.scopedCount, 0);
+  assert.equal(emptyScope.noMatches, false);
+});
+
+test('empty and whitespace queries restore frozen scoped objects in original equal-value order', () => {
+  const input = Object.freeze([seat('z'), seat('a'), seat('other', { rigId: 'r2' })]);
+  for (const query of ['', '  \t\n', 'Alice']) {
+    const result = filter(input, 'r1', query);
+    assert.deepEqual(ids(result), ['z', 'a']);
+    assert.equal(result.seats[0], input[0]);
+    assert.equal(result.seats[1], input[1]);
+    assert.equal(result.hasQuery, query === 'Alice');
+    assert.equal(result.noMatches, false);
+  }
+  assert.deepEqual(input.map(item => item.id), ['z', 'a', 'other']);
+});
+
+test('empty and single inventories and absent metadata are safe without invented text', () => {
+  const partial = Object.freeze([seat('partial', {
+    name: undefined, rigName: undefined, runtime: undefined,
+    pod: undefined, model: undefined, session: null,
+  })]);
+  for (const query of ['', 'anything']) {
+    const result = filter(Object.freeze([]), '', query);
+    assert.deepEqual(ids(result), []);
+    assert.equal(result.scopedCount, 0);
+    assert.equal(result.noMatches, false);
+  }
+  assert.equal(filter(partial, '', '').seats[0], partial[0]);
+  for (const query of ['null', 'undefined', 'anything']) {
+    assert.deepEqual(ids(filter(partial, '', query)), []);
+  }
+});
+
+test('does not join metadata fields or interpret query as regular expression', () => {
+  const input = Object.freeze([seat('a', { name: 'alpha', rigName: 'beta' })]);
+  for (const query of ['alpha beta', '.*', '[']) {
+    assert.deepEqual(ids(filter(input, '', query)), []);
+  }
+});
