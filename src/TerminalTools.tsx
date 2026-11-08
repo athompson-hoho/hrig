@@ -36,6 +36,9 @@ export default function TerminalTools({
   const { effective } = useSettings();
   const copyOnSelect = useRef(effective["terminal.copyOnSelect"]);
   copyOnSelect.current = effective["terminal.copyOnSelect"];
+  // Find selects each match; copying those would overwrite the clipboard while searching.
+  const findOpen = useRef(false);
+  findOpen.current = open;
   // paste() runs from the key handler registered in the [generation] effect, so it closes over an old render; only a ref is current at paste time.
   const confirmMultiline = useRef(effective["terminal.confirmMultilinePaste"]);
   confirmMultiline.current = effective["terminal.confirmMultilinePaste"];
@@ -132,7 +135,7 @@ export default function TerminalTools({
     // Clipboard write only; success is silent, failure uses the existing notice.
     const copyOnSelectScheduler = createCopyOnSelect({
       delayMs: COPY_SELECT_DELAY_MS,
-      enabled: () => copyOnSelect.current,
+      enabled: () => copyOnSelect.current && !findOpen.current,
       read: () => term.getSelection(),
       copy: (text) => navigator.clipboard.writeText(text),
       onError: (e) => setNotice((e as Error).message),
