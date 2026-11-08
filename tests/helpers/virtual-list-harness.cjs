@@ -85,6 +85,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
     if (Array.isArray(value)) return value.flatMap((v, i) => render(v, `${location}/${v?.key ?? i}`, parent, seenInstances, seenDom));
     if (value == null || typeof value === 'boolean') return [];
     if (typeof value !== 'object') return [String(value)];
+    // A keyed single child remounts too, not only keyed array children.
+    if (value.key != null) location = `${location}/key:${value.key}`;
     if (typeof value.type === 'function') {
       let instance = instances.get(location);
       if (!instance || instance.type !== value.type) {

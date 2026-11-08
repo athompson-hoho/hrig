@@ -146,3 +146,153 @@ test('real pure geometry exports normalize empty one and nonfinite inputs withou
   assert.deepEqual(Array.from(sparseRetainedIndices(one)), [0]);
   assert.ok(Number.isNaN(sizes[0]) && sizes[3] === Infinity);
 });
+
+// Task 2 uses the same real nested component renderer and controlled DOM. Events
+// explicitly supply bubbling targets; the helper does not invent browser Tab.
+function nativeList() {
+  const calls = [];
+  const rows = Object.freeze(Array.from({ length: 200 }, (_, id) => Object.freeze({ id })));
+  const element = (type, props) => ({ type, props });
+  const h = mountComponent('src/VirtualList.tsx', 'VirtualList', {
+    rows, itemKey: row => `native-${row.id}`, label: 'Synthetic native actions', scopeKey: 'owner-a',
+    estimateHeight: 55,
+    renderRow: row => element('div', {
+      'data-row-id': row.id,
+      children: [0, 1].map(action => element('button', {
+        disabled: row.id === 10 || (row.id === 9 && action === 1),
+        'data-action': action, onClick: () => calls.push([row.id, action]),
+        draggable: true, onDragStart: event => event.dataTransfer.setData('text/plain', `synthetic:${row.id}`),
+        children: `Action ${row.id}/${action}`,
+      })),
+    }),
+  }, { height: 330, rowHeight: 55 });
+  const viewport = () => h.nodes().find(n => n.props['aria-label'] === 'Synthetic native actions');
+  const mounted = () => h.nodes().filter(n => n.props['data-row-id'] != null);
+  const row = id => mounted().find(n => n.props['data-row-id'] === id);
+  const controls = id => row(id)?.children.filter(n => n.type === 'button') || [];
+  const key = (value, target = viewport(), shiftKey = false) =>
+    h.event(viewport(), 'onKeyDown', { key: value, target, shiftKey });
+  const scroll = top => { viewport().scrollTop = top; h.event(viewport(), 'onScroll'); };
+  const focus = node => { node.focus(); h.event(viewport(), 'onFocusCapture', { target: node }); };
+  return { ...h, calls, rows, viewport, mounted, row, controls, key, scroll, focus };
+}
+
+test('actual viewport End Home Page and Arrow navigation mounts and focuses native controls without activation', () => {
+  const h = nativeList();
+  h.focus(h.viewport());
+  assert.equal(h.key('End').defaultPrevented, true, 'viewport End handles local navigation');
+  assert.equal(h.document.activeElement, h.controls(199)[0], 'End reaches last actual native action');
+  for (const [key, id] of [['Home', 0], ['ArrowDown', 1], ['ArrowUp', 0], ['PageDown', 6], ['PageUp', 0]]) {
+    h.focus(h.viewport());
+    h.key(key);
+    assert.equal(h.document.activeElement, h.controls(id)[0], `${key} reaches logical row ${id}`);
+    assert.ok(h.mounted().length <= 16, 'visible + eight overscan + at most two extras');
+  }
+  const child = h.controls(0)[0];
+  assert.equal(h.key('End', child).defaultPrevented, false, 'child native keys remain native');
+  assert.equal(h.key('Enter', child).defaultPrevented, false);
+  assert.equal(h.key(' ', child).defaultPrevented, false);
+  assert.deepEqual(h.calls, []);
+  h.event(child, 'onClick');
+  assert.deepEqual(h.calls, [[0, 0]], 'positive explicit activation control');
+  h.unmount();
+});
+
+test('actual viewport boundary Tab skips disabled rows and preserves within-row order and external exits', () => {
+  const h = nativeList();
+  const first = h.controls(0)[0], second = h.controls(0)[1];
+  h.focus(first);
+  assert.equal(h.key('Tab', first, true).defaultPrevented, false, 'true start leaves externally');
+  assert.equal(h.key('Tab', first).defaultPrevented, false, 'native sibling order stays native');
+  h.focus(second);
+  assert.equal(h.key('Tab', second).defaultPrevented, false, 'mounted next native row needs no interception');
+  const boundary = h.controls(9)[0];
+  h.focus(boundary);
+  assert.equal(h.key('Tab', boundary).defaultPrevented, true, 'window boundary reaches next enabled offscreen row');
+  assert.equal(h.document.activeElement, h.controls(11)[0], 'disabled logical row is skipped');
+  h.scroll(100 * 55);
+  const backward = h.controls(96)[0];
+  h.focus(backward);
+  assert.equal(h.key('Tab', backward, true).defaultPrevented, true);
+  assert.equal(h.document.activeElement, h.controls(95)[1], 'reverse boundary reaches last enabled control');
+  h.focus(h.viewport()); h.key('End');
+  const last = h.controls(199)[1]; h.focus(last);
+  assert.equal(h.key('Tab', last).defaultPrevented, false, 'true end leaves externally');
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+});
+
+test('actual viewport preserves top key and fractional within-row offset when preceding measurements change', () => {
+  const h = nativeList();
+  h.scroll(100 * 55 + 7.25);
+  const preceding = h.row(96), anchor = h.row(100);
+  h.resize(preceding, 110);
+  assert.equal(h.viewport().scrollTop, 100 * 55 + 7.25 + 55,
+    'changed preceding extent preserves key 100 and its 7.25px within-row offset');
+  assert.equal(h.row(100), anchor);
+  const observers = [...h.observers];
+  h.resize(preceding, 110);
+  assert.equal(h.viewport().scrollTop, 5562.25, 'identical size produces no repeated correction');
+  assert.ok([...h.observers].every((observer, index) => observer === observers[index]) &&
+    h.observers.size === observers.length, 'unchanged measurement does not rebuild observers');
+  h.scroll(Number.MAX_SAFE_INTEGER);
+  assert.ok(h.row(199), 'measured end remains reachable');
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+});
+
+test('actual viewport retains distant focused and dragged native roots sparsely then releases both', () => {
+  const h = nativeList();
+  const focusedRoot = h.row(0), focused = h.controls(0)[1];
+  const draggedRoot = h.row(1), dragged = h.controls(1)[0];
+  h.focus(focused);
+  const payload = [];
+  const dataTransfer = { setData: (...args) => payload.push(args) };
+  h.event(dragged, 'onDragStart', { dataTransfer });
+  h.event(h.viewport(), 'onDragStartCapture', { target: dragged, dataTransfer });
+  h.scroll(150 * 55);
+  assert.ok(h.row(0) === focusedRoot, 'focused distant native root is retained');
+  assert.ok(h.row(1) === draggedRoot, 'dragged distant native root is retained');
+  assert.equal(h.document.activeElement, focused);
+  assert.ok(h.mounted().length <= 16, 'retention adds at most two isolated rows');
+  assert.deepEqual(payload, [['text/plain', 'synthetic:1']], 'consumer drag payload is preserved');
+  const external = { type: 'button', focus() { h.document.activeElement = this; } };
+  external.focus();
+  h.event(h.viewport(), 'onBlurCapture', { target: focused, relatedTarget: external });
+  assert.equal(h.row(0), undefined, 'blur releases old focused row');
+  h.event(h.viewport(), 'onDragEndCapture', { target: dragged });
+  assert.equal(h.row(1), undefined, 'drag end releases old dragged row');
+  assert.ok(h.mounted().length <= 14);
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+});
+
+test('actual viewport restores removed-row focus locally and does not steal modal focus', () => {
+  const h = nativeList();
+  const focused = h.controls(0)[0]; h.focus(focused);
+  h.update({ rows: h.rows.slice(1) });
+  assert.ok(h.document.activeElement === h.viewport(), 'removed focused row returns to labelled viewport');
+  const next = h.controls(1)[0]; h.focus(next);
+  const modalInput = { type: 'input' };
+  h.document.activeElement = modalInput;
+  h.update({ rows: h.rows.slice(2) });
+  assert.equal(h.document.activeElement, modalInput, 'external modal retains current focus');
+  assert.equal(h.key('End', modalInput).defaultPrevented, false);
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+});
+
+test('actual viewport ignores obsolete observers after scope replacement and disconnects on unmount', () => {
+  const h = nativeList();
+  const old = h.row(0), previous = [...h.observers];
+  h.update({ scopeKey: 'owner-b', rows: h.rows.slice(100) });
+  assert.ok(!h.mounted().includes(old));
+  for (const observer of previous) observer.callback([{ target: old, contentRect: { height: 900 } }]);
+  h.flush();
+  assert.equal(h.viewport().scrollTop, 0);
+  assert.equal(h.mounted().length, 10);
+  assert.ok(previous.every(observer => observer.targets.size === 0));
+  h.unmount();
+  assert.equal(h.observers.size, 0);
+  assert.deepEqual(h.calls, []);
+});
