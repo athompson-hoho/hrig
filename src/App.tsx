@@ -2404,6 +2404,18 @@ export default function App() {
               </button>
             </div>
             <div>
+              {droppedNow.length > 0 && (
+                <>
+                  <button
+                    onClick={reconnectDropped}
+                    title="Re-attach every ended or errored terminal. Connected terminals are not touched."
+                  >
+                    <RefreshCw size={11} />
+                    {droppedLabel(droppedNow.length)}
+                  </button>
+                  <span className="status-divider" />
+                </>
+              )}
               <span>
                 {tabCount} {tabCount === 1 ? "session" : "sessions"} open
               </span>
