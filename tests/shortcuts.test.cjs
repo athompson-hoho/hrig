@@ -18,6 +18,7 @@ function load(file) {
 
 const shortcuts = load("src/shortcuts.ts");
 const { shortcutGroups, isHelpKey, hasOpenDialog } = shortcuts;
+const { isReopenPanelKey, reopenShortcutHint } = shortcuts;
 const { classifyTerminalKey, TERMINAL_PANEL_SELECTOR } = load(
   "src/terminal-keys.ts",
 );
@@ -99,6 +100,8 @@ test("shortcuts tracer: a bare question mark on the page opens, in a field or un
   assert.deepEqual(Object.keys(shortcuts).sort(), [
     "hasOpenDialog",
     "isHelpKey",
+    "isReopenPanelKey",
+    "reopenShortcutHint",
     "shortcutGroups",
   ]);
 });
@@ -132,6 +135,7 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.sidebar",
       "workspace.settings",
       "workspace.newShell",
+      "workspace.reopenPanel",
       "workspace.shortcuts",
       "terminal.clear",
       "editor.save",
@@ -150,6 +154,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.openProject": ["Cmd+O"],
     "workspace.sidebar": ["Cmd+B"],
     "workspace.newShell": ["Cmd+Shift+T"],
+    "workspace.reopenPanel": ["Cmd+Shift+H"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Cmd+F"],
     "terminal.copy": ["Cmd+C"],
@@ -169,6 +174,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.openProject": ["Ctrl+O"],
     "workspace.sidebar": ["Ctrl+B"],
     "workspace.newShell": ["Ctrl+Shift+T"],
+    "workspace.reopenPanel": ["Ctrl+Shift+H"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Ctrl+F"],
     "terminal.copy": ["Ctrl+Shift+C"],
@@ -386,4 +392,144 @@ test("shortcuts catalog is rebuilt on every call", () => {
   assert.notEqual(shortcutGroups("linux"), shortcutGroups("linux"));
   const [help] = byId("linux")["workspace.shortcuts"];
   assert.equal(isHelpKey(press(help), element("DIV"), false), true);
+});
+
+function reopenEvent(extra = {}) {
+  return {
+    key: "H",
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: true,
+    ...extra,
+  };
+}
+
+test("shortcuts reopen chord is Shift+H with Cmd on macOS or Ctrl elsewhere and nothing else", () => {
+  for (const platform of PLATFORMS) {
+    const [text, ...more] = byId(platform)["workspace.reopenPanel"];
+    assert.equal(more.length, 0);
+    assert.equal(text, platform === "darwin" ? "Cmd+Shift+H" : "Ctrl+Shift+H");
+    assert.equal(isReopenPanelKey(chord(text), platform), true, platform);
+    assert.equal(reopenShortcutHint(platform), text.split("+").join(" "));
+    assert.match(
+      labelOf(platform, "workspace.reopenPanel"),
+      /Reopen the file or seat panel closed last/,
+    );
+  }
+  assert.equal(reopenShortcutHint(""), "Ctrl Shift H");
+  assert.equal(reopenShortcutHint("freebsd"), "Ctrl Shift H");
+  const lower = { key: "h", metaKey: true, ctrlKey: false };
+  assert.equal(isReopenPanelKey(reopenEvent(lower), "darwin"), true);
+  assert.equal(isReopenPanelKey(reopenEvent({ key: "h" }), "linux"), true);
+  for (const platform of ["win32", "linux", "freebsd", ""]) {
+    assert.equal(isReopenPanelKey(reopenEvent(), platform), true, platform);
+    for (const extra of [
+      { metaKey: true },
+      { ctrlKey: false },
+      { ctrlKey: false, metaKey: true },
+    ])
+      assert.equal(
+        isReopenPanelKey(reopenEvent(extra), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+  }
+  for (const extra of [
+    { ctrlKey: true, metaKey: false },
+    { ctrlKey: true, metaKey: true },
+    { ctrlKey: false, metaKey: false },
+  ])
+    assert.equal(
+      isReopenPanelKey(reopenEvent(extra), "darwin"),
+      false,
+      "darwin " + JSON.stringify(extra),
+    );
+  for (const platform of PLATFORMS) {
+    const mod =
+      platform === "darwin"
+        ? { ctrlKey: false, metaKey: true }
+        : { ctrlKey: true, metaKey: false };
+    assert.equal(isReopenPanelKey(reopenEvent(mod), platform), true);
+    for (const extra of [
+      { shiftKey: false },
+      { altKey: true },
+      { altKey: true, ctrlKey: true },
+      { isComposing: true },
+      { repeat: true },
+      { defaultPrevented: true },
+      { key: "T" },
+      { key: "E" },
+      { key: "G" },
+      { key: "" },
+      { key: "Process" },
+      { key: undefined },
+      { key: 72 },
+    ])
+      assert.equal(
+        isReopenPanelKey(reopenEvent({ ...mod, ...extra }), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+    for (const key of "abcdefgijklmnopqrstuvwxyz0123456789,.-=") {
+      assert.equal(
+        isReopenPanelKey(reopenEvent({ ...mod, key }), platform),
+        false,
+        platform + key,
+      );
+    }
+  }
+});
+
+test("shortcuts reopen chord is claimed by no terminal, zoom, help, editor or app binding", () => {
+  for (const platform of PLATFORMS) {
+    const text = byId(platform)["workspace.reopenPanel"][0];
+    for (const selected of [false, true])
+      assert.equal(
+        classifyTerminalKey(chord(text), platform, selected),
+        "pass",
+        platform + " terminal " + selected,
+      );
+    assert.equal(zoomAction(chord(text)), null, platform + " zoom");
+    assert.equal(isHelpKey(chord(text), element("BODY"), false), false);
+    const all = [];
+    for (const group of shortcutGroups(platform))
+      for (const entry of group.shortcuts)
+        for (const key of entry.keys) all.push([entry.id, key]);
+    assert.deepEqual(
+      all.filter(([, key]) => key.toLowerCase() === text.toLowerCase()),
+      [["workspace.reopenPanel", text]],
+      platform + " the chord is listed once",
+    );
+    for (const [id, key] of all) {
+      if (id === "workspace.reopenPanel" || !key.includes("+")) continue;
+      assert.equal(
+        isReopenPanelKey(chord(key), platform),
+        false,
+        platform + " " + id + " " + key,
+      );
+    }
+  }
+  assert.deepEqual(
+    classifyTerminalKey(chord("Ctrl+H"), "linux", false),
+    "pass",
+    "plain Ctrl+H is not the reopen chord",
+  );
+  assert.equal(isReopenPanelKey(chord("Ctrl+H"), "linux"), false);
+  assert.equal(isReopenPanelKey(chord("Ctrl+Shift+H"), "darwin"), false);
+  const editor = require("node:fs").readFileSync(
+    require("node:path").join(__dirname, "..", "src", "EditorPanel.tsx"),
+    "utf8",
+  );
+  assert.equal(
+    editor.split("editor.addCommand(").length - 1,
+    1,
+    "the editor registers one command of its own",
+  );
+  assert.ok(
+    /editor\.addCommand\(\s*monaco\.KeyMod\.CtrlCmd \| monaco\.KeyCode\.KeyS,/.test(
+      editor,
+    ),
+    "and it is Save, so Ctrl+Shift+H is never a Monaco command",
+  );
 });

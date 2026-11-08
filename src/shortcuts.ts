@@ -22,6 +22,10 @@ export interface HelpKeyEvent {
   defaultPrevented?: boolean;
 }
 
+export interface ReopenKeyEvent extends HelpKeyEvent {
+  shiftKey: boolean;
+}
+
 /**
  * The shortcut catalog for a platform, rebuilt on every call. It mirrors the
  * App key handler, terminal-keys, terminal-zoom and the editor save command;
@@ -72,6 +76,11 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           id: "workspace.newShell",
           label: "Open a new shell",
           keys: [`${mod}+Shift+T`],
+        },
+        {
+          id: "workspace.reopenPanel",
+          label: "Reopen the file or seat panel closed last",
+          keys: [`${mod}+Shift+H`],
         },
         {
           id: "workspace.shortcuts",
@@ -176,4 +185,28 @@ export function hasOpenDialog(target: unknown): boolean {
   const doc = (node.ownerDocument ?? target) as { querySelector?: unknown };
   if (typeof doc.querySelector !== "function") return false;
   return Boolean(doc.querySelector('[aria-modal="true"]'));
+}
+
+/**
+ * True for Shift+H with Cmd on macOS or Ctrl elsewhere and no other modifier,
+ * the chord that reopens the panel closed last. Ctrl+Shift+T stays New shell.
+ * A held key (repeat), composing or already handled events never match, so one
+ * press reopens one panel; plain Ctrl+H and macOS Ctrl+Shift+H are untouched.
+ */
+export function isReopenPanelKey(
+  event: ReopenKeyEvent,
+  platform: string,
+): boolean {
+  if (event.altKey || event.isComposing || event.repeat) return false;
+  if (event.defaultPrevented || !event.shiftKey) return false;
+  if (typeof event.key !== "string" || event.key.toLowerCase() !== "h")
+    return false;
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
+/** Palette hint text for the reopen shortcut on the given platform. */
+export function reopenShortcutHint(platform: string): string {
+  return platform === "darwin" ? "Cmd Shift H" : "Ctrl Shift H";
 }

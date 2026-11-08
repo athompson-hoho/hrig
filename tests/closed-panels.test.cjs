@@ -581,3 +581,185 @@ test("closed-panels reopenable kinds are files, diffs and seat panels only, a pl
   ])
     assert.ok(!forbidden.test(code), "the module must stay pure: " + forbidden);
 });
+
+function sourceFiles() {
+  return fs
+    .readdirSync(path.join(root, "src"), { withFileTypes: true })
+    .filter((e) => e.isFile() && /\.tsx?$/.test(e.name))
+    .map((e) => e.name)
+    .sort();
+}
+function filesWith(pattern) {
+  return sourceFiles().filter((file) =>
+    pattern.test(stripComments(read("src/" + file))),
+  );
+}
+
+test("closed-panels close routes: the one tab delete and the one close action both record first, and no other way to close a panel exists", () => {
+  const app = appText();
+  assert.equal(count(app, "Actions.deleteTab("), 1, "one delete, in closeTab");
+  assert.equal(count(app, "Actions.DELETE_TAB"), 1, "one intercepted close");
+  assert.equal(count(app, "rememberClosed("), 2);
+  assert.deepEqual(filesWith(/\.deleteTab\(/), ["App.tsx"]);
+  assert.deepEqual(filesWith(/\bDELETE_TAB\b/), ["App.tsx"]);
+  for (const route of [
+    /deleteTabset/,
+    /DELETE_TABSET/,
+    /Actions\.group\(/,
+    /Actions\.GROUP/,
+    /onContextMenu=/,
+    /onAuxMouseClick/,
+    /[tT]abSetEnableClose/,
+    /enableCloseButton/,
+    /closeAll/,
+  ])
+    assert.deepEqual(
+      filesWith(route),
+      [],
+      "a new way to close panels needs rememberClosed: " + route,
+    );
+  const layout = tight(stripComments(read("src/layout.ts")));
+  assert.equal(count(layout, "enableClose: true"), 1, "only the welcome tab");
+  for (const replace of [
+    "const applyPreset = (preset: string) => {",
+    "const openAll = () => {",
+    "const travel = (direction:",
+  ]) {
+    const body = between(app, replace, "const ");
+    assert.ok(!body.includes("rememberClosed"), replace);
+  }
+  // Closing a seat tab already ends only the local attach client; reopening
+  // goes through openSeat, which never starts a seat.
+  const sidebarSeat = between(
+    app,
+    "const openSeat = (seat: Seat) => {",
+    "const openShell = () => {",
+  );
+  assert.ok(
+    has(
+      sidebarSeat,
+      'addPanel("terminal", seat.name, { seat, terminalId: id }, id);',
+    ),
+  );
+  const reopen = between(
+    app,
+    "const reopenClosedPanel = () => {",
+    "const commands = [",
+  );
+  for (const forbidden of [
+    "addPanel(",
+    "openShell",
+    "writeTerminal",
+    "createTerminal",
+    "closeTerminal",
+    "sendTerminalCommand",
+    "rigControl",
+    "window.hrig",
+    "sendMessage",
+    "rigAction",
+  ])
+    assert.ok(
+      !reopen.includes(forbidden),
+      "reopen must not touch " + forbidden,
+    );
+  assert.equal(count(reopen, "openFile("), 1);
+  assert.equal(count(reopen, "openSeat("), 1);
+});
+
+test("closed-panels chord and docs: the shortcut is claimed before the generic chords, acts only with no dialog open, and NAVIGATION.md says what is and is not reopened", () => {
+  const app = appText();
+  assert.ok(
+    has(
+      app,
+      'import { hasOpenDialog, isHelpKey, isReopenPanelKey, reopenShortcutHint, } from "./shortcuts";',
+    ),
+  );
+  assert.ok(
+    app.includes(
+      "Latest closed file or seat " +
+        String.fromCharCode(183) +
+        " ${reopenShortcutHint(window.hrig.platform)}",
+    ),
+    "the palette hint shows the platform chord",
+  );
+  const handler = between(
+    app,
+    "const handler = (event: KeyboardEvent) => {",
+    "const windows = [",
+  );
+  const help = handler.indexOf(tight("if (isHelpKey("));
+  const reopen = handler.indexOf(
+    tight("if (isReopenPanelKey(event, window.hrig.platform)) {"),
+  );
+  const generic = handler.indexOf(
+    tight("if (event.ctrlKey || event.metaKey) {"),
+  );
+  assert.ok(help > 0 && reopen > help && generic > reopen, "claim order");
+  assert.ok(
+    has(
+      handler,
+      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
+    ),
+    "claimed always, acts only with no dialog open",
+  );
+  assert.ok(
+    has(
+      handler,
+      "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
+    ),
+    "Alt and Option presses are still ignored first",
+  );
+  assert.ok(
+    has(
+      handler,
+      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
+    ),
+    "the existing claimed chords are unchanged",
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
+    ),
+    "Ctrl+Shift+T is still New shell",
+  );
+  assert.equal(count(app, "reopenClosedPanel"), 3);
+  assert.deepEqual(filesWith(/isReopenPanelKey\(/), [
+    "App.tsx",
+    "shortcuts.ts",
+  ]);
+
+  const doc = read("NAVIGATION.md")
+    .split("\n")
+    .filter((line) =>
+      line.startsWith("The command center entry Reopen closed panel"),
+    );
+  assert.equal(doc.length, 1);
+  for (const fragment of [
+    "Ctrl+Shift+H (Cmd+Shift+H on macOS)",
+    "file, diff or seat panel you closed most recently in the current workspace",
+    "up to 10 closed panels",
+    "in memory only",
+    "forgotten when the app restarts",
+    "never file contents, terminal output or commands",
+    "keeps only the newest copy",
+    "exactly as if you had chosen it in Quick Open or the sidebar",
+    "deleted file shows the usual error",
+    "edits you discarded when closing are not restored",
+    "Open seat, which attaches to the seat's existing session",
+    "never launches, relaunches or restarts an agent",
+    "nothing is typed or sent",
+    "Shells, rig-control terminals, settings and tool panels are not remembered",
+    "Ctrl+Shift+T (Cmd+Shift+T) still opens a new shell",
+    "a short message says why",
+    "stays in the list",
+    "Nothing to reopen",
+    "ignored while a dialog is open",
+    "does not repeat while held",
+    "no longer reaches the shell",
+  ])
+    assert.ok(doc[0].includes(fragment), "NAVIGATION.md must say: " + fragment);
+  assert.ok(
+    read("NAVIGATION.md").startsWith(String.fromCharCode(0xfeff) + "# Project"),
+  );
+});

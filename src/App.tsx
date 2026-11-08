@@ -130,7 +130,12 @@ import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import ShortcutSheet from "./ShortcutSheet";
-import { hasOpenDialog, isHelpKey } from "./shortcuts";
+import {
+  hasOpenDialog,
+  isHelpKey,
+  isReopenPanelKey,
+  reopenShortcutHint,
+} from "./shortcuts";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1881,7 +1886,7 @@ export default function App() {
     },
     {
       name: "Reopen closed panel",
-      hint: "Latest closed file or seat",
+      hint: `Latest closed file or seat · ${reopenShortcutHint(window.hrig.platform)}`,
       icon: <PanelTop size={16} />,
       action: reopenClosedPanel,
     },
@@ -1964,6 +1969,13 @@ export default function App() {
         event.preventDefault();
         event.stopPropagation();
         openShortcuts();
+        return;
+      }
+      // Claimed always so it never reaches a shell; acts only with no dialog open.
+      if (isReopenPanelKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel();
         return;
       }
       if (event.ctrlKey || event.metaKey) {
