@@ -127,6 +127,7 @@ import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
+import { filterCommands, pickFirst } from "./palette";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -1689,6 +1690,12 @@ export default function App() {
       icon: <Settings2 size={16} />,
       action: openSettings,
     },
+    {
+      name: "Toggle sidebar",
+      hint: "Ctrl B",
+      icon: <PanelLeft size={16} />,
+      action: () => setSidebar((v) => !v),
+    },
     ...[
       ["Visual workspace arranger", "arranger"],
       ["Task boards and integrations", "workItems"],
@@ -2920,11 +2927,7 @@ export default function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    const item = commands.find((c) =>
-                      `${c.name} ${c.hint}`
-                        .toLowerCase()
-                        .includes(search.toLowerCase()),
-                    );
+                    const item = pickFirst(commands, search);
                     if (item) {
                       setModal(null);
                       item.action();
@@ -2938,12 +2941,7 @@ export default function App() {
               <kbd>ESC</kbd>
             </div>
             <div className="command-list">
-              {commands
-                .filter((c) =>
-                  `${c.name} ${c.hint}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-                )
+              {filterCommands(commands, search)
                 .map((c) => (
                   <button
                     key={c.name + c.hint}
