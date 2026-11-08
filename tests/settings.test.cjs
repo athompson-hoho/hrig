@@ -195,3 +195,27 @@ test("terminal.confirmMultilinePaste is an opt-in boolean Terminal setting that 
     false,
   );
 });
+test("terminal.showSizeOnResize is an on-by-default boolean Terminal setting that rejects non-booleans", () => {
+  const key = "terminal.showSizeOnResize";
+  assert.equal(settings.defaults[key], true);
+  assert.equal(settings.resolveSettings()[key], true);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.equal(rows[0].options, undefined);
+  assert.equal(rows[0].min, undefined);
+  assert.equal(rows[0].max, undefined);
+  for (const value of [true, false]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of ["true", "yes", 1, 0, null, {}]) {
+    assert.throws(() => settings.validateOverrides({ [key]: value }));
+  }
+  assert.equal(settings.resolveSettings({ [key]: false })[key], false);
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+});
