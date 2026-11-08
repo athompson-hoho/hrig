@@ -471,3 +471,216 @@ test("terminal.copytrim trimTrailingWhitespace removes only the spaces and tabs 
     assert.ok(!pattern.test(code), "the module must stay pure: " + pattern);
   }
 });
+
+test("terminal.copytrim every route that copies terminal text trims it when the setting is on and copies it as selected when off, while export and paste stay untouched", async () => {
+  const rawBuffer = "$ make  \nok\t\n  done  ";
+  for (const on of [false, true]) {
+    const mode = on ? "setting on" : "setting off";
+    const ctx = mount({ "terminal.copyOnSelect": true });
+    try {
+      ctx.effective[KEY] = on;
+      ctx.render();
+      ctx.view.selection = SELECTION;
+      ctx.view.lines = BUFFER;
+      const want = on ? TRIMMED : SELECTION;
+
+      ctx.press();
+      await tick();
+      assert.equal(ctx.out.written.length, 1, mode);
+      assert.equal(ctx.out.written[0], want, mode + ": keyboard copy");
+
+      ctx.control(byTitle("Copy terminal selection"));
+      await tick();
+      assert.equal(ctx.out.written.length, 2, mode);
+      assert.equal(
+        ctx.out.written[1],
+        want,
+        mode + ": Copy terminal selection button",
+      );
+      assert.ok(ctx.states.includes("Selection copied."), mode);
+
+      ctx.control(byLabel("Copy output"));
+      await tick();
+      assert.equal(ctx.out.written.length, 3, mode);
+      assert.equal(
+        ctx.out.written[2],
+        on ? BUFFER_TRIMMED : rawBuffer,
+        mode + ": Copy output button",
+      );
+      assert.ok(ctx.states.includes("Output copied."), mode);
+
+      const timers = ctx.settleSelection();
+      assert.equal(timers.length, 1, mode + ": one settle timer");
+      assert.equal(timers[0].ms, 250, mode);
+      timers[0].fn();
+      await tick();
+      assert.equal(ctx.out.written.length, 4, mode);
+      assert.equal(ctx.out.written[3], want, mode + ": copy on select");
+
+      const event = {
+        clipboardData: {
+          setData: (type, text) => ctx.out.sets.push([type, text]),
+        },
+        preventDefault: () => {
+          ctx.out.prevented++;
+        },
+      };
+      ctx.listeners.copy(event);
+      assert.deepEqual(
+        ctx.out.sets,
+        [["text/plain", want]],
+        mode + ": native copy event",
+      );
+      assert.equal(ctx.out.prevented, 1, mode);
+      ctx.view.selection = "";
+      ctx.listeners.copy(event);
+      assert.equal(
+        ctx.out.sets.length,
+        1,
+        mode + ": no selection, nothing set",
+      );
+      assert.equal(ctx.out.prevented, 1, mode);
+      ctx.view.selection = SELECTION;
+
+      ctx.control(byTitle("Export terminal output"));
+      await tick();
+      assert.deepEqual(
+        ctx.out.exported,
+        [rawBuffer],
+        mode + ": export keeps every blank",
+      );
+
+      ctx.press({ key: "V" });
+      await tick();
+      assert.deepEqual(
+        ctx.out.pasted,
+        ["echo  \n"],
+        mode + ": paste is not converted",
+      );
+      assert.equal(
+        ctx.out.written.length,
+        4,
+        mode + ": export and paste write nothing to the clipboard",
+      );
+    } finally {
+      ctx.restore();
+    }
+  }
+});
+
+test("terminal.copytrim source tripwire: every write of terminal text to the clipboard goes through clipboardText, nothing else in the app writes there, and paste and export are not routed through it", () => {
+  const tools = tight(stripComments(read("src/TerminalTools.tsx")));
+  assert.deepEqual(
+    filesWith(/\.writeText\(/),
+    ["TeamAssessment.tsx", "TerminalTools.tsx"],
+    "a new file writes to the clipboard: route terminal text through copyTextForClipboard",
+  );
+  const assessment = tight(stripComments(read("src/TeamAssessment.tsx")));
+  assert.ok(
+    assessment.includes("navigator.clipboard.writeText(brief.prompt)"),
+    "src/TeamAssessment.tsx copies the assessment prompt, which is not terminal text",
+  );
+  assert.equal(count(assessment, /\.writeText\(/g), 1);
+  assert.deepEqual(filesWith(/\.setData\(/), ["TerminalTools.tsx"]);
+  assert.deepEqual(filesWith(/getSelection\(\)/), ["TerminalTools.tsx"]);
+  assert.deepEqual(filesWith(/\bterminalText\(/), [
+    "TerminalTools.tsx",
+    "terminal-output.ts",
+  ]);
+  assert.deepEqual(filesWith(/terminal-copy-text/), ["TerminalTools.tsx"]);
+  assert.deepEqual(filesWith(/"terminal\.copyTrimTrailingWhitespace"/), [
+    "TerminalTools.tsx",
+    "settings.ts",
+  ]);
+  for (const file of [
+    "terminal-copy-select.ts",
+    "terminal-paste.ts",
+    "terminal-keys.ts",
+    "terminal-output.ts",
+    "TerminalPanel.tsx",
+    "SettingsPage.tsx",
+  ]) {
+    const code = stripComments(read("src/" + file));
+    for (const word of [
+      "copyTextForClipboard",
+      "trimTrailingWhitespace",
+      "copyTrim",
+    ]) {
+      assert.ok(!code.includes(word), file + " must not mention " + word);
+    }
+  }
+  assert.equal(
+    count(tools, /\.writeText\(/g),
+    3,
+    "each clipboard write in TerminalTools must pass its text through clipboardText",
+  );
+  assert.equal(count(tools, /\.writeText\(clipboardText\(/g), 3);
+  assert.equal(count(tools, /\.setData\(/g), 1);
+  assert.equal(
+    count(
+      tools,
+      /\.setData\("text\/plain", clipboardText\(term\.getSelection\(\)\)\)/g,
+    ),
+    1,
+  );
+  assert.equal(count(tools, /clipboardText\(/g), 4);
+  assert.equal(
+    count(tools, /getSelection\(\)/g),
+    4,
+    "a new read of the terminal selection needs its own route through clipboardText",
+  );
+  assert.equal(count(tools, /copyTextForClipboard\(/g), 1);
+  for (const fragment of [
+    'import { copyTextForClipboard } from "./terminal-copy-text";',
+    'const trimCopy = useRef(effective["terminal.copyTrimTrailingWhitespace"]); trimCopy.current = effective["terminal.copyTrimTrailingWhitespace"];',
+    "const clipboardText = (text: string) => copyTextForClipboard(text, trimCopy.current);",
+    "else void copySelection();",
+    "onClick={choose(copySelection)}",
+    "read: () => term.getSelection(),",
+    "copy: (text) => navigator.clipboard.writeText(clipboardText(text)),",
+    'const text = action === "selection" ? term.getSelection() : terminalText(term);',
+    "await window.hrig.exportTerminal(text);",
+    "if (!event.clipboardData || !term.hasSelection()) return;",
+    'host?.addEventListener("copy", nativeCopy);',
+    'host?.removeEventListener("copy", nativeCopy);',
+  ]) {
+    assert.ok(
+      tools.includes(fragment),
+      "TerminalTools.tsx must keep: " + fragment,
+    );
+  }
+  assert.equal(
+    count(tools, /effective\["terminal\.copyTrimTrailingWhitespace"\]/g),
+    2,
+    "handlers close over old renders, so only the ref may read the setting",
+  );
+  assert.equal(count(tools, /target\?\.paste\(text\)/g), 1);
+  assert.equal(count(tools, /terminal\.current\?\.paste\(text\)/g), 1);
+  assert.ok(
+    !/paste\(clipboardText\(/.test(tools),
+    "paste must never be converted",
+  );
+  assert.ok(
+    !tools.includes("writeTerminal"),
+    "the copy routes never send anything to the terminal process",
+  );
+  const walk = (dir) =>
+    fs
+      .readdirSync(path.join(root, dir), { withFileTypes: true })
+      .flatMap((e) => {
+        if (e.name === "node_modules") return [];
+        if (e.isDirectory()) return walk(dir + "/" + e.name);
+        return /\.(cjs|mjs|js|ts|tsx|html)$/.test(e.name)
+          ? [dir + "/" + e.name]
+          : [];
+      });
+  for (const dir of ["electron", "mobile", "public"]) {
+    for (const file of walk(dir)) {
+      const code = read(file);
+      assert.ok(
+        !/clipboard\.write|\.writeText\(|execCommand/.test(code),
+        file + " must not write to the clipboard",
+      );
+    }
+  }
+});

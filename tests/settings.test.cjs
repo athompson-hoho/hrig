@@ -1054,3 +1054,144 @@ test("terminal.wordSeparator is documented in SETTINGS.md and TERMINALS.md", () 
     );
   }
 });
+test("terminal.copyTrimTrailingWhitespace is an off-by-default boolean Terminal setting that sits next to Copy on select, rejects non-booleans and follows project-over-user precedence", () => {
+  const key = "terminal.copyTrimTrailingWhitespace";
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.category, "Terminal");
+  assert.equal(row.label, "Trim trailing spaces on copy");
+  for (const field of ["options", "min", "max", "step"]) {
+    assert.equal(row[field], undefined, field);
+  }
+  const keys = settings.schema.map((r) => r.key);
+  assert.equal(keys.indexOf(key), keys.indexOf("terminal.copyOnSelect") + 1);
+  for (const fragment of [
+    "spaces and tabs at the end of each line",
+    "Copy output",
+    "Copy on select",
+    "Line breaks",
+    "leading spaces",
+    "blank lines",
+    "Off by default",
+    "leave it off when trailing blanks matter",
+    "Applies at once",
+    "nothing is sent to the shell or the seat",
+    "Paste and Export are unchanged",
+  ]) {
+    assert.ok(
+      row.description.includes(fragment),
+      "description must mention: " + fragment,
+    );
+  }
+  assert.deepEqual(settings.validateOverrides({ [key]: true }), {
+    [key]: true,
+  });
+  assert.deepEqual(settings.validateOverrides({ [key]: false }), {
+    [key]: false,
+  });
+  for (const bad of ["true", "false", "yes", "on", "", 1, 0, null, {}, []]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: bad }),
+      /Wrong value type for terminal\.copyTrimTrailingWhitespace/,
+      JSON.stringify(bad),
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: "true" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(settings.resolveSettings({ [key]: true }, {})[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  assert.equal(settings.defaults["terminal.copyOnSelect"], false);
+  assert.equal(settings.defaults["terminal.confirmMultilinePaste"], false);
+  const page = readSrc("SettingsPage.tsx").replace(/\s+/g, " ");
+  assert.ok(
+    page.includes(
+      'typeof value === "boolean" ? ( <label className="setting-toggle">',
+    ),
+    "a boolean setting renders as a toggle with no UI change",
+  );
+  assert.ok(
+    !page.includes("copyTrim"),
+    "SettingsPage.tsx needs no special case for this setting",
+  );
+});
+test("terminal.copyTrimTrailingWhitespace is documented in SETTINGS.md and TERMINALS.md", () => {
+  const root = path.join(srcDir, "..");
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) =>
+    line.startsWith("| `terminal.copyTrimTrailingWhitespace` | `false` |"),
+  );
+  assert.ok(
+    at > 0,
+    "SETTINGS.md must have a terminal.copyTrimTrailingWhitespace row showing the default false",
+  );
+  assert.ok(
+    lines[at - 1].startsWith("| `terminal.copyOnSelect` |"),
+    "the row sits right after terminal.copyOnSelect",
+  );
+  assert.ok(
+    lines[at + 1].startsWith("| `terminal.confirmMultilinePaste` |"),
+    "the row sits right before terminal.confirmMultilinePaste",
+  );
+  for (const fragment of [
+    "spaces and tabs at the end of each line",
+    "the Copy and Copy output buttons",
+    "the keyboard and right-click copy",
+    "Copy in the macOS Edit menu",
+    "Copy on select",
+    "Line breaks, leading spaces, blank lines and spaces inside a line are kept",
+    "only spaces and tabs is copied as it is",
+    "leave it off when trailing blanks matter",
+    "Applies at once",
+    "nothing is sent to the shell or the seat",
+    "Paste and Export are unchanged",
+  ]) {
+    assert.ok(
+      lines[at].includes(fragment),
+      "SETTINGS.md row must mention: " + fragment,
+    );
+  }
+  const terminalsDoc = fs.readFileSync(path.join(root, "TERMINALS.md"), "utf8");
+  const paragraph = terminalsDoc
+    .split("\n")
+    .find((line) =>
+      line.startsWith("The terminal.copyTrimTrailingWhitespace setting"),
+    );
+  assert.ok(
+    paragraph,
+    "TERMINALS.md must have a paragraph about terminal.copyTrimTrailingWhitespace",
+  );
+  for (const fragment of [
+    "is off by default",
+    "exactly as the terminal shows it",
+    "remove the spaces and tabs at the end of every line",
+    "the Copy button and Copy output in the terminal toolbar",
+    "Copy in the right-click menu",
+    "Copy in the Edit menu on macOS",
+    "Copy on select when terminal.copyOnSelect is on",
+    "line breaks, leading spaces, blank lines and spaces inside a line are kept",
+    "made only of spaces and tabs is copied as it is",
+    "Leave it off when trailing blanks matter, such as a Markdown hard line break",
+    "can be set for all projects or overridden for one project",
+    "no reconnect and no restart",
+    "never what you paste into a terminal",
+    "nothing is typed or sent",
+    "Exporting terminal output to a file is not changed",
+  ]) {
+    assert.ok(
+      paragraph.includes(fragment),
+      "TERMINALS.md must mention: " + fragment,
+    );
+  }
+});

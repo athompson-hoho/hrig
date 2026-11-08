@@ -145,7 +145,7 @@ export default function TerminalTools({
       delayMs: COPY_SELECT_DELAY_MS,
       enabled: () => copyOnSelect.current && !findOpen.current,
       read: () => term.getSelection(),
-      copy: (text) => navigator.clipboard.writeText(text),
+      copy: (text) => navigator.clipboard.writeText(clipboardText(text)),
       onError: (e) => setNotice((e as Error).message),
     });
     const selectionListener = term.onSelectionChange(() => copyOnSelectScheduler.notify());
@@ -157,8 +157,16 @@ export default function TerminalTools({
       setMenu({ x: event.clientX, y: event.clientY, selection: term.hasSelection() });
     };
     host?.addEventListener("contextmenu", contextmenu);
+    // xterm answers a native copy event, for example from the macOS Edit menu, with the raw selection; this listener runs after its handler and replaces that text.
+    const nativeCopy = (event: ClipboardEvent) => {
+      if (!event.clipboardData || !term.hasSelection()) return;
+      event.clipboardData.setData("text/plain", clipboardText(term.getSelection()));
+      event.preventDefault();
+    };
+    host?.addEventListener("copy", nativeCopy);
     return () => {
       host?.removeEventListener("contextmenu", contextmenu);
+      host?.removeEventListener("copy", nativeCopy);
       selectionListener.dispose();
       copyOnSelectScheduler.cancel();
       listener.dispose();
@@ -224,7 +232,7 @@ export default function TerminalTools({
         const saved = await window.hrig.exportTerminal(text);
         setNotice(saved.saved ? "Output exported." : "Export canceled.");
       } else {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(clipboardText(text));
         setNotice(
           action === "selection" ? "Selection copied." : "Output copied.",
         );
