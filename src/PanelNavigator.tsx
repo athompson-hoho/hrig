@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Modal } from "./components";
 import { fuzzyScore } from "../electron/fuzzy.mjs";
+import { recentRank } from "./recent-files";
 export interface NavigablePanel {
   id: string;
   name: string;
@@ -55,8 +56,7 @@ export default function PanelNavigator({
         .sort((a, b) =>
           query
             ? b.score! - a.score!
-            : (recent.indexOf(a.panel.id) + 1 || 999) -
-              (recent.indexOf(b.panel.id) + 1 || 999),
+            : recentRank(recent, a.panel.id) - recentRank(recent, b.panel.id),
         )
         .map((item) => item.panel),
     [panels, query, recent],

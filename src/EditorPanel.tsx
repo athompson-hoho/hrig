@@ -77,6 +77,7 @@ export default function EditorPanel({
   onDirty,
   onSaved,
   onReady,
+  onLoadFailed,
 }: {
   id: string;
   config: PanelConfig;
@@ -84,6 +85,7 @@ export default function EditorPanel({
   onDirty: (id: string, dirty: boolean) => void;
   onSaved: () => void;
   onReady?: (id: string) => boolean;
+  onLoadFailed?: () => void;
 }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
@@ -234,7 +236,10 @@ export default function EditorPanel({
         if (!diff) onDirty(id, isDirty);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (!active) return;
+        setError(e.message);
+        // A file that cannot be read drops out of the Quick Open recents.
+        if (!diff) onLoadFailed?.();
       });
     return () => {
       active = false;

@@ -129,7 +129,12 @@ import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import { filterCommands, pickFirst } from "./palette";
-import { recentKey, recentsFor, recordRecent } from "./recent-files";
+import {
+  recentKey,
+  recentsFor,
+  recordRecent,
+  removeRecent,
+} from "./recent-files";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -1590,6 +1595,18 @@ export default function App() {
               onSaved={() => {
                 setFileRevision((n) => n + 1);
                 notify("File saved");
+              }}
+              onLoadFailed={() => {
+                const failed = config.path;
+                if (failed)
+                  setState((s) => ({
+                    ...s,
+                    recentFiles: removeRecent(
+                      s.recentFiles,
+                      recentKey(config.connection.id, config.root),
+                      failed,
+                    ),
+                  }));
               }}
             />
           </Suspense>
