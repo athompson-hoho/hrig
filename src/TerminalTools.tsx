@@ -9,6 +9,7 @@ import TerminalPasteConfirm from "./TerminalPasteConfirm";
 import { classifyTerminalKey } from "./terminal-keys";
 import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
+import { copyTextForClipboard } from "./terminal-copy-text";
 
 export default function TerminalTools({
   terminal,
@@ -42,11 +43,16 @@ export default function TerminalTools({
   // paste() runs from the key handler registered in the [generation] effect, so it closes over an old render; only a ref is current at paste time.
   const confirmMultiline = useRef(effective["terminal.confirmMultilinePaste"]);
   confirmMultiline.current = effective["terminal.confirmMultilinePaste"];
+  // Copy runs from handlers registered in the [generation] effect that close over an old render, so only a ref is current at copy time.
+  const trimCopy = useRef(effective["terminal.copyTrimTrailingWhitespace"]);
+  trimCopy.current = effective["terminal.copyTrimTrailingWhitespace"];
+  // Every write of terminal text to the clipboard goes through this function; paste and export never do.
+  const clipboardText = (text: string) => copyTextForClipboard(text, trimCopy.current);
   const copySelection = async () => {
     const text = terminal.current?.getSelection();
     if (!text) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(clipboardText(text));
       setNotice("Selection copied.");
     } catch (e) {
       setNotice((e as Error).message);

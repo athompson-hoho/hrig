@@ -31,6 +31,7 @@ export const defaults = {
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
   "terminal.copyOnSelect": false,
+  "terminal.copyTrimTrailingWhitespace": false,
   "terminal.confirmMultilinePaste": false,
   "terminal.showSizeOnResize": true,
   "terminal.bellStyle": "none",
@@ -319,6 +320,13 @@ export const schema: Setting[] = [
     label: "Copy on select",
     description:
       "Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell.",
+  },
+  {
+    key: "terminal.copyTrimTrailingWhitespace",
+    category: "Terminal",
+    label: "Trim trailing spaces on copy",
+    description:
+      "Remove the spaces and tabs at the end of each line of terminal text you copy: the Copy and Copy output buttons, the keyboard and right-click copy, Copy in the macOS Edit menu and Copy on select. Line breaks, leading spaces, blank lines and spaces inside a line are kept. Off by default, so copied text is exactly what the terminal shows; leave it off when trailing blanks matter, such as a Markdown hard line break. Applies at once to every open terminal. Changes only what is placed on the clipboard; nothing is sent to the shell or the seat, and Paste and Export are unchanged.",
   },
   {
     key: "terminal.confirmMultilinePaste",
