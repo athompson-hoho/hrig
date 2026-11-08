@@ -391,7 +391,7 @@ test("snippet-draft tracer: the real right-click menu turns a one-line selection
       .all()
       .some((n) =>
         textOf(n).includes(
-          "Nothing is saved or sent until you press Save snippet",
+          "Nothing is saved until you press Save snippet, and nothing is sent to the terminal unless you press Insert or Run",
         ),
       ),
     "the dialog says nothing is saved or sent yet",
