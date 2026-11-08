@@ -4,7 +4,8 @@ import { SearchAddon } from "@xterm/addon-search";
 import { ArrowDown, ArrowUp, Copy, Download, Search, X } from "lucide-react";
 import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
-import { pasteClipboard } from "./terminal-paste";
+import { pasteClipboard, pastePreview, endsWithLineBreak } from "./terminal-paste";
+import TerminalPasteConfirm from "./TerminalPasteConfirm";
 import { classifyTerminalKey } from "./terminal-keys";
 import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
@@ -35,6 +36,9 @@ export default function TerminalTools({
   const { effective } = useSettings();
   const copyOnSelect = useRef(effective["terminal.copyOnSelect"]);
   copyOnSelect.current = effective["terminal.copyOnSelect"];
+  // paste() runs from the key handler registered in the [generation] effect, so it closes over an old render; only a ref is current at paste time.
+  const confirmMultiline = useRef(effective["terminal.confirmMultilinePaste"]);
+  confirmMultiline.current = effective["terminal.confirmMultilinePaste"];
   const copySelection = async () => {
     const text = terminal.current?.getSelection();
     if (!text) return;
@@ -49,9 +53,33 @@ export default function TerminalTools({
   // reaches the shell only through the terminal's normal input path.
   const [hasImage,setHasImage]=useState(false);
   const pasteImage=async()=>{try{const text=await window.hrig.pasteClipboardImage(terminalId);if(text)terminal.current?.paste(text);}catch(e){setNotice((e as Error).message);}terminal.current?.focus();};
+  // Component state holds only the count, the truncated preview and a boolean; the clipboard text stays in pasteClipboard's local variable.
+  const [pasteAsk, setPasteAsk] = useState<{
+    lines: number;
+    preview: string;
+    endsWithBreak: boolean;
+    answer: (ok: boolean) => void;
+  } | null>(null);
+  const pendingAnswer = useRef<((ok: boolean) => void) | null>(null);
+  const askPaste = (text: string, lines: number) => {
+    // Never leave two questions open: a newer paste cancels the older one.
+    pendingAnswer.current?.(false);
+    return new Promise<boolean>((resolve) => {
+      const answer = (ok: boolean) => {
+        if (pendingAnswer.current !== answer) return;
+        pendingAnswer.current = null;
+        setPasteAsk(null);
+        resolve(ok);
+      };
+      pendingAnswer.current = answer;
+      setPasteAsk({ lines, preview: pastePreview(text), endsWithBreak: endsWithLineBreak(text), answer });
+    });
+  };
+  // An unmounted dialog must not leave a paste pending.
+  useEffect(() => () => pendingAnswer.current?.(false), []);
   const paste = async () => {
     try {
-      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>terminal.current?.paste(text),pasteImage});
+      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>terminal.current?.paste(text),pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
     } catch (e) {
       setNotice((e as Error).message);
     }
@@ -234,6 +262,14 @@ export default function TerminalTools({
             <span>Select all</span>
           </button>
         </div>
+      )}
+      {pasteAsk && (
+        <TerminalPasteConfirm
+          lines={pasteAsk.lines}
+          preview={pasteAsk.preview}
+          endsWithBreak={pasteAsk.endsWithBreak}
+          onAnswer={pasteAsk.answer}
+        />
       )}
     <div
       className="terminal-tools"

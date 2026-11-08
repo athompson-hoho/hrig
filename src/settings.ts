@@ -30,6 +30,7 @@ export const defaults = {
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
   "terminal.copyOnSelect": false,
+  "terminal.confirmMultilinePaste": false,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -312,6 +313,13 @@ export const schema: Setting[] = [
     label: "Copy on select",
     description:
       "Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell.",
+  },
+  {
+    key: "terminal.confirmMultilinePaste",
+    category: "Terminal",
+    label: "Confirm multi-line paste",
+    description:
+      "Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm.",
   },
   {
     key: "workspace.refreshInterval",
