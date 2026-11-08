@@ -149,6 +149,8 @@ import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
 import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";
 import { isPanelCycleKey } from "./shortcuts";
 import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
+import PanelContextMenu, { type PanelMenu } from "./PanelContextMenu";
+import { dirtyPrompt, panelKind } from "./panel-close-targets";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -283,6 +285,7 @@ export default function App() {
   // In memory only: closed panels are forgotten when the app restarts.
   const closedPanels = useRef<ClosedPanel[]>([]);
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
+  const [tabMenu, setTabMenu] = useState<PanelMenu | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
   const inventoryHealth = useRef<{
@@ -1336,6 +1339,30 @@ export default function App() {
     rememberClosed(id);
     model.doAction(Actions.deleteTab(id));
     modelChanged(model);
+  };
+  // Closes panels one by one through closeTab. A panel with unsaved edits asks first, like its tab button; Cancel stops the run and leaves the rest open.
+  const closePanels = (ids: string[]) => {
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const node = model.getNodeById(id) as TabNode | undefined;
+      if (!node) continue;
+      if (dirtyTabs.current.has(id)) {
+        const rest = ids.slice(i + 1);
+        setPending({
+          title: "Save your changes?",
+          description: dirtyPrompt(node.getName(), rest.length),
+          tabId: id,
+          run: () => {
+            closeTab(id);
+            // Deferred: the dialog clears its own state right after run.
+            setTimeout(() => closePanels(rest), 0);
+          },
+        });
+        setActionError("");
+        return;
+      }
+      closeTab(id);
+    }
   };
   const onAction = (action: Action) => {
     if (
@@ -2713,6 +2740,26 @@ export default function App() {
                 )}
                 onModelChange={modelChanged}
                 onAction={onAction}
+                onContextMenu={(node, event) => {
+                  if (!(node instanceof TabNode)) return;
+                  if (event.currentTarget.ownerDocument !== document) return;
+                  let group = node.getParent();
+                  while (group && group.getType() !== "tabset") group = group.getParent();
+                  if (!(group instanceof TabSetNode)) return;
+                  event.preventDefault();
+                  setTabMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    id: node.getId(),
+                    panels: group.getTabNodes().map((tab) => ({
+                      id: tab.getId(),
+                      name: tab.getName(),
+                      kind: panelKind(tab.getComponent(), tab.getConfig()),
+                      dirty: dirtyTabs.current.has(tab.getId()),
+                      locked: tab.isPinned() || !tab.isCloseable(),
+                    })),
+                  });
+                }}
                 realtimeResize
                 onPopoutOpen={(_layout, _window, doc) => {
                   themeDocuments.current.add(doc);
@@ -3438,6 +3485,11 @@ export default function App() {
             </div>
           </Modal>
         )}
+        <PanelContextMenu
+          menu={tabMenu}
+          onDismiss={() => setTabMenu(null)}
+          onClosePanels={closePanels}
+        />
         {pending && (
           <Modal
             title={pending.title}

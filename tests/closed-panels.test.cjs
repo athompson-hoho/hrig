@@ -607,7 +607,6 @@ test("closed-panels close routes: the one tab delete and the one close action bo
     /DELETE_TABSET/,
     /Actions\.group\(/,
     /Actions\.GROUP/,
-    /onContextMenu=/,
     /onAuxMouseClick/,
     /[tT]abSetEnableClose/,
     /enableCloseButton/,
@@ -618,6 +617,9 @@ test("closed-panels close routes: the one tab delete and the one close action bo
       [],
       "a new way to close panels needs rememberClosed: " + route,
     );
+  // The one tab menu opens from the Layout hook in App.tsx and closes only through closeTab.
+  assert.deepEqual(filesWith(/onContextMenu=/), ["App.tsx"]);
+  assert.equal(count(app, "onContextMenu="), 1);
   const layout = tight(stripComments(read("src/layout.ts")));
   assert.equal(count(layout, "enableClose: true"), 1, "only the welcome tab");
   for (const replace of [
