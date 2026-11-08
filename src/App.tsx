@@ -97,7 +97,7 @@ import {
 import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
-import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped } from "./terminal-dropped";
+import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
@@ -1652,7 +1652,8 @@ export default function App() {
   });
   const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
   const reconnectDropped = () => {
-    reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
+    const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
+    if (count > 0) notify(reconnectNotice(count));
   };
   const commands = [
     {

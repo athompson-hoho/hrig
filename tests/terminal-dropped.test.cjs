@@ -79,9 +79,22 @@ test("markDropped adds and removes one id without mutating its input", () => {
   assert.deepEqual([...one], ["a"]);
 });
 
+test("markDropped returns the same instance when membership is unchanged", () => {
+  const one = m.markDropped(new Set(), "a", true);
+  assert.equal(m.markDropped(one, "a", true), one);
+  const empty = new Set();
+  assert.equal(m.markDropped(empty, "a", false), empty);
+});
+
+test("markDropped ignores an empty id", () => {
+  const empty = new Set();
+  assert.equal(m.markDropped(empty, "", true), empty);
+});
+
 test("droppedIds keeps only open ids in open order and prunes closed terminals", () => {
   const reg = new Set(["c", "a", "gone"]);
   assert.deepEqual(m.droppedIds(reg, ["a", "b", "c"]), ["a", "c"]);
+  assert.deepEqual(m.droppedIds(reg, ["a", "a", "c"]), ["a", "c"]);
   assert.deepEqual(m.droppedIds(reg), ["c", "a", "gone"]);
 });
 
@@ -92,6 +105,41 @@ test("reconnectAllDropped sends each id once in order and returns the count", ()
     2,
   );
   assert.deepEqual(sent, ["a", "b"]);
+});
+
+test("reconnectAllDropped skips duplicates and empty ids", () => {
+  const sent = [];
+  assert.equal(
+    m.reconnectAllDropped(["a", "", "a", "b", 7], (id) => sent.push(id)),
+    2,
+  );
+  assert.deepEqual(sent, ["a", "b"]);
+});
+
+test("labels and notice wording", () => {
+  assert.equal(m.droppedLabel(2), "Reconnect all dropped (2)");
+  assert.equal(m.droppedLabel(0), "");
+  assert.equal(m.reconnectNotice(0), "");
+  assert.equal(m.reconnectNotice(1), "Reconnecting 1 terminal");
+  assert.equal(m.reconnectNotice(3), "Reconnecting 3 terminals");
+});
+
+test("onTerminalDropped ignores malformed events and stops after unsubscribe", () => {
+  globalThis.window = new EventTarget();
+  const seen = [];
+  const off = m.onTerminalDropped((id, dropped) => seen.push([id, dropped]));
+  const fire = (detail) =>
+    window.dispatchEvent(new CustomEvent(m.TERMINAL_DROPPED_EVENT, { detail }));
+  fire({ id: "a", dropped: true });
+  fire({ id: "", dropped: true });
+  fire({ id: 5, dropped: true });
+  fire({ id: "b", dropped: "yes" });
+  fire(null);
+  fire({});
+  assert.deepEqual(seen, [["a", true]]);
+  off();
+  fire({ id: "c", dropped: true });
+  assert.deepEqual(seen, [["a", true]]);
 });
 
 test("end to end: reconnect-dropped re-attaches only dropped, self-checking panels", () => {

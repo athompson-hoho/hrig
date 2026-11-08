@@ -24,6 +24,8 @@ export function markDropped(
   id: string,
   dropped: boolean,
 ): ReadonlySet<string> {
+  // Same instance when nothing changes, so React skips the render.
+  if (!id || current.has(id) === dropped) return current;
   const next = new Set(current);
   if (dropped) next.add(id);
   else next.delete(id);
@@ -36,7 +38,7 @@ export function droppedIds(
   open?: readonly string[],
 ): string[] {
   if (!open) return [...current];
-  return open.filter((id) => current.has(id));
+  return [...new Set(open)].filter((id) => current.has(id));
 }
 
 /** Calls send once per id and returns how many were sent. */
@@ -44,13 +46,24 @@ export function reconnectAllDropped(
   ids: readonly string[],
   send: (id: string) => void,
 ): number {
-  for (const id of ids) send(id);
-  return ids.length;
+  const sent = new Set<string>();
+  for (const id of ids) {
+    if (typeof id !== "string" || !id || sent.has(id)) continue;
+    sent.add(id);
+    send(id);
+  }
+  return sent.size;
 }
 
 /** Palette label for the reconnect-all entry. */
 export function droppedLabel(count: number): string {
-  return `Reconnect all dropped (${count})`;
+  return count < 1 ? "" : `Reconnect all dropped (${count})`;
+}
+
+/** Status notice shown after the reconnect-all action. */
+export function reconnectNotice(count: number): string {
+  if (count < 1) return "";
+  return `Reconnecting ${count} terminal${count === 1 ? "" : "s"}`;
 }
 
 /** Announces one panel's dropped state on the window. */
@@ -67,7 +80,10 @@ export function onTerminalDropped(
 ): () => void {
   if (typeof window === "undefined") return () => {};
   const handler = (event: Event) => {
+    // Any script can dispatch this event, so only well-formed payloads reach the registry.
     const detail = (event as CustomEvent).detail;
+    if (!detail || typeof detail.id !== "string" || !detail.id) return;
+    if (typeof detail.dropped !== "boolean") return;
     listener(detail.id, detail.dropped);
   };
   window.addEventListener(TERMINAL_DROPPED_EVENT, handler);
