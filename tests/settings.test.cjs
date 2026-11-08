@@ -465,3 +465,102 @@ test("terminal.bellStyle leaves the existing bell notification setting alone and
     "SETTINGS.md must record why notification is not a value of terminal.bellStyle",
   );
 });
+test("terminal.minimumContrastRatio is a 1-by-default Terminal number from 1 to 21 in steps of 0.5 that rejects anything else", () => {
+  const key = "terminal.minimumContrastRatio";
+  assert.equal(settings.defaults[key], 1);
+  assert.equal(settings.resolveSettings()[key], 1);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.equal(rows[0].options, undefined);
+  assert.equal(rows[0].min, 1);
+  assert.equal(rows[0].max, 21);
+  assert.equal(rows[0].step, 0.5);
+  for (const ok of [1, 1.5, 3, 4.5, 7, 12.5, 21]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: ok }), { [key]: ok });
+  }
+  for (const bad of [
+    0,
+    0.5,
+    0.99,
+    -1,
+    21.01,
+    22,
+    100,
+    NaN,
+    Infinity,
+    -Infinity,
+  ]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: bad }),
+      /Value out of range for terminal\.minimumContrastRatio/,
+      "the value " + String(bad) + " must be out of range",
+    );
+  }
+  for (const bad of ["4.5", "", true, null, {}, [4.5]]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: bad }),
+      /Wrong value type for terminal\.minimumContrastRatio/,
+      "the value " + JSON.stringify(bad) + " must be the wrong type",
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: 22 }), {});
+  assert.deepEqual(settings.safeOverrides({ [key]: "4.5" }), {});
+  assert.equal(settings.resolveSettings({ [key]: 4.5 })[key], 4.5);
+  assert.equal(settings.resolveSettings({ [key]: 4.5 }, { [key]: 7 })[key], 7);
+  assert.equal(settings.resolveSettings({ [key]: 4.5 }, { [key]: 1 })[key], 1);
+});
+test("terminal.minimumContrastRatio is one of exactly two numeric settings that accept fractions", () => {
+  const accepting = [];
+  for (const [key, value] of Object.entries(settings.defaults)) {
+    if (typeof value !== "number") continue;
+    const row = settings.schema.find((r) => r.key === key);
+    assert.ok(row, key + " must have a schema row");
+    try {
+      settings.validateOverrides({ [key]: (row.min ?? 0) + 0.5 });
+      accepting.push(key);
+    } catch {}
+  }
+  assert.deepEqual(
+    accepting.sort(),
+    ["terminal.lineHeight", "terminal.minimumContrastRatio"],
+    "only terminal.lineHeight and terminal.minimumContrastRatio may take non-integer values and every other number must stay an integer",
+  );
+});
+test("terminal.minimumContrastRatio is documented in SETTINGS.md and TERMINALS.md", () => {
+  const root = path.join(srcDir, "..");
+  const settingsDoc = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  const row = settingsDoc
+    .split("\n")
+    .find((line) =>
+      line.startsWith("| `terminal.minimumContrastRatio` | `1` |"),
+    );
+  assert.ok(
+    row,
+    "SETTINGS.md must have a terminal.minimumContrastRatio row with default 1",
+  );
+  assert.ok(row.includes("from 1 to 21"));
+  assert.ok(row.includes("Backgrounds are never changed"));
+  const terminalsDoc = fs.readFileSync(path.join(root, "TERMINALS.md"), "utf8");
+  const paragraph = terminalsDoc
+    .split("\n")
+    .find((line) => line.startsWith("The terminal.minimumContrastRatio"));
+  assert.ok(
+    paragraph,
+    "TERMINALS.md must have a paragraph about terminal.minimumContrastRatio",
+  );
+  for (const fragment of [
+    "from 1 to 21",
+    "steps of 0.5",
+    "the default, 1,",
+    "4.5",
+    "WCAG",
+    "background colors are never changed",
+    "no reconnect and no restart",
+  ]) {
+    assert.ok(
+      paragraph.includes(fragment),
+      "TERMINALS.md must mention: " + fragment,
+    );
+  }
+});
