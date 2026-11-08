@@ -405,6 +405,11 @@ export default function App() {
         return next;
       }),
   };
+  const saveShortcutOverrides = (text: string) => {
+    const scope = Object.hasOwn(projectPreferences, "shortcuts.overrides") ? "project" : "user";
+    if (text === "") settingsContext.reset(scope, "shortcuts.overrides");
+    else settingsContext.update(scope, "shortcuts.overrides", text);
+  };
   const workspace = `${connection.id}::${root}::${state.activeRig}`;
   const sameConnection = (c: Connection) =>
     JSON.stringify([c.id, c.kind, c.host, c.port, c.distro, c.rigBinary]) ===
@@ -3312,7 +3317,12 @@ export default function App() {
           </Modal>
         )}
         {modal === "shortcuts" && (
-          <ShortcutSheet platform={window.hrig.platform} onClose={() => setModal(null)} />
+          <ShortcutSheet
+            platform={window.hrig.platform}
+            overrides={overridesText}
+            onSave={saveShortcutOverrides}
+            onClose={() => setModal(null)}
+          />
         )}
         {modal === "hostTint" && (
           <HostTintDialog
