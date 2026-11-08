@@ -556,6 +556,34 @@ test('TaskBoard spread columns keep complete filtered counts and exact current r
   view.unmount();
 });
 
+test('TaskBoard filter changes intentionally remount columns and reset scroll without effects', async () => {
+  const items = Array.from({ length: 200 }, (_, i) => task(i));
+  const view = board(items);
+  await view.settle();
+  const baseline = view.calls.slice();
+  for (const [label, value, count] of [
+    ['Filter tasks', 'Synthetic task', 200],
+    ['Filter tasks', 'Synthetic task ', 200],
+    ['Filter task owner', 'Seat 0000@Rig 0', 100],
+    ['Filter task state', 'pending', 100],
+  ]) {
+    const before = viewport(view, taskLabels[0]);
+    scroll(view, before, 5500);
+    assert.ok(before.scrollTop > 0);
+    view.event(view.nodes().find(n => n.props['aria-label'] === label), 'onChange', { target: { value } });
+    const after = viewport(view, taskLabels[0]);
+    assert.notEqual(after, before, `${label}: new filtered collection viewport`);
+    assert.equal(after.scrollTop, 0);
+    assert.deepEqual(columnCounts(view), [count, 0, 0, 0]);
+    assert.deepEqual(view.calls, baseline);
+  }
+  const original = items[0];
+  view.event(buttonText(view, original.title + original.destination + original.status), 'onClick');
+  await view.settle();
+  assert.deepEqual(view.calls.at(-1), ['rigAction', connection, { op: 'taskShow', id: original.id }]);
+  view.unmount();
+});
+
 test('TaskBoard selected original survives background reorder refresh and navigation without activation', async () => {
   const items = Object.freeze(Array.from({ length: 1000 }, (_, i) => task(i)));
   const view = board(items);
