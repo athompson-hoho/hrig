@@ -51,9 +51,25 @@ test('explicit pod setters are immutable idempotent and retain absent choices wh
   assert.deepEqual(Array.from(collapsed), [absent, identity]);
   assert.deepEqual(Array.from(pods.setPodCollapsed(collapsed, identity, true)), [absent, identity]);
   assert.deepEqual(Array.from(pods.setPodCollapsed(collapsed, identity, false)), [absent]);
+  assert.deepEqual(Array.from(pods.setPodCollapsed(
+    pods.setPodCollapsed(collapsed, identity, false), identity, false)), [absent]);
   assert.deepEqual(Array.from(pods.togglePodCollapsed(pods.togglePodCollapsed(input, identity), identity)), [absent]);
   assert.deepEqual(Array.from(pods.setPodCollapsed(input, 'invalid', true)), [absent]);
   assert.deepEqual(input, [absent]);
+});
+
+test('pod normalization preserves valid port boundaries and exact punctuation whitespace and fallback tags', () => {
+  const identities = [1, 65535].flatMap(port => [
+    pods.podIdentity({ ...host, port }, { ...seat, rigId: ' [],:" ', pod: ' Pod ' }),
+    pods.podIdentity({ ...host, port }, { ...seat, rigId: '', rigName: ' [],:" ', pod: ' Pod ' }),
+    pods.podIdentity({ ...host, port }, { ...seat, rigId: '', rigName: ' [],:" ', pod: ' pod ' }),
+  ]);
+  assert.equal(new Set(identities).size, 6);
+  const frozen = Object.freeze(identities);
+  assert.deepEqual(Array.from(pods.normalizeCollapsedPods(frozen)), identities);
+  assert.deepEqual(Array.from(pods.normalizeCollapsedPods(Object.freeze([
+    'legacy/pod', ...identities, ...identities,
+  ]))), identities);
 });
 
 test('ordinary pod grouping preserves first appearance duplicate references and exact fallback labels', () => {
