@@ -869,3 +869,188 @@ test("terminal.macOptionIsMeta is documented in SETTINGS.md and TERMINALS.md", (
     );
   }
 });
+test("terminal.wordSeparator is a Terminal text setting that defaults to xterm's own list and accepts any printable list of up to 64 characters but not empty text, control characters or longer text", () => {
+  const key = "terminal.wordSeparator";
+  const words = bundled("src/terminal-words.ts");
+  const ch = (code) => String.fromCharCode(code);
+  const astral = String.fromCodePoint(0x1f600);
+  assert.equal(settings.defaults[key], words.DEFAULT_WORD_SEPARATOR);
+  assert.equal(settings.resolveSettings()[key], words.DEFAULT_WORD_SEPARATOR);
+  const rows = settings.schema.filter((s) => s.key === key);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.category, "Terminal");
+  assert.equal(row.label, "Word separators");
+  assert.equal(row.options, undefined);
+  assert.equal(row.min, undefined);
+  assert.equal(row.max, undefined);
+  assert.equal(row.step, undefined);
+  for (const fragment of [
+    "double-click",
+    "xterm's own",
+    "Up to 64 characters",
+    "Keep a space in the list",
+    "nothing is sent to the shell or the seat",
+  ]) {
+    assert.ok(
+      row.description.includes(fragment),
+      "the description must mention: " + fragment,
+    );
+  }
+
+  const accepted = [
+    ["the default", words.DEFAULT_WORD_SEPARATOR],
+    ["a lone space", " "],
+    ["a dash", "-"],
+    ["space, double quote and single quote", " \"'"],
+    ["space, comma, semicolon, braces and angle brackets", " ,;{}<>"],
+    ["brackets", "()[]{}"],
+    ["64 ASCII characters", "x".repeat(64)],
+    ["64 astral characters", astral.repeat(64)],
+    ["typographic characters", ch(0x2500) + ch(0x2018) + ch(0x2019)],
+  ];
+  for (const [name, value] of accepted) {
+    assert.deepEqual(
+      settings.validateOverrides({ [key]: value }),
+      { [key]: value },
+      "must be accepted: " + name,
+    );
+  }
+  const invalid = [
+    ["empty text", ""],
+    ["a lone line feed", ch(10)],
+    ["a line feed inside", "a" + ch(10) + "b"],
+    ["a carriage return inside", "a" + ch(13) + "b"],
+    ["a lone tab", ch(9)],
+    ["NUL", ch(0)],
+    ["DEL", ch(0x7f)],
+    ["a C1 control", ch(0x85)],
+    ["a line separator", ch(0x2028)],
+    ["a paragraph separator", ch(0x2029)],
+    ["65 ASCII characters", "x".repeat(65)],
+    ["65 astral characters", astral.repeat(65)],
+  ];
+  for (const [name, value] of invalid) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Invalid text for terminal\.wordSeparator/,
+      "must be refused: " + name,
+    );
+  }
+  const wrongType = [1, 0, true, false, null, undefined, {}, [], [" "]];
+  for (const value of wrongType) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Wrong value type for terminal\.wordSeparator/,
+      "must be refused as the wrong type: " + JSON.stringify(value),
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: "" }), {});
+  assert.deepEqual(settings.safeOverrides({ [key]: 5 }), {});
+  assert.equal(settings.resolveSettings({ [key]: "-" })[key], "-");
+  assert.equal(settings.resolveSettings({ [key]: "-" }, {})[key], "-");
+  assert.equal(
+    settings.resolveSettings({ [key]: "-" }, { [key]: " " })[key],
+    " ",
+  );
+  assert.equal(
+    settings.resolveSettings({}, { [key]: words.DEFAULT_WORD_SEPARATOR })[key],
+    words.DEFAULT_WORD_SEPARATOR,
+  );
+});
+test("terminal.wordSeparator relaxes the text rule for its own key only, and the Settings page edits it as plain text", () => {
+  const key = "terminal.wordSeparator";
+  const others = settings.schema.filter(
+    (s) =>
+      s.key !== key &&
+      typeof settings.defaults[s.key] === "string" &&
+      !s.options,
+  );
+  assert.ok(others.length >= 4, "the free-text settings must be found");
+  const samples = [
+    ["a;b", "a;b"],
+    ["a{b}", "a{b}"],
+    ["a<b>", "a<b>"],
+    ["a lone space", " "],
+    ["empty text", ""],
+    ["a line feed inside", "a" + String.fromCharCode(10) + "b"],
+    ["301 x characters", "x".repeat(301)],
+  ];
+  for (const other of others) {
+    for (const [name, value] of samples) {
+      assert.throws(
+        () => settings.validateOverrides({ [other.key]: value }),
+        (error) => error.message === "Invalid text for " + other.key,
+        other.key + " must keep the generic text rule for " + name,
+      );
+    }
+  }
+  const page = readSrc("SettingsPage.tsx").replace(/\s+/g, " ");
+  assert.ok(
+    !page.includes("wordSeparator"),
+    "the Settings page must render this setting with the generic text row, with no special case",
+  );
+  assert.ok(
+    page.includes('type={typeof value === "number" ? "number" : "text"}'),
+    "a string setting must render as a text input",
+  );
+  assert.ok(
+    page.includes("? Number(draft) : NaN : draft,"),
+    "a text draft must be committed exactly as typed because the default list starts with a space",
+  );
+});
+test("terminal.wordSeparator is documented in SETTINGS.md and TERMINALS.md", () => {
+  const root = path.join(srcDir, "..");
+  const settingsDoc = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  const row = settingsDoc
+    .split("\n")
+    .find((line) =>
+      line.startsWith(
+        "| `terminal.wordSeparator` | space, `()[]{}',\"` and backtick |",
+      ),
+    );
+  assert.ok(
+    row,
+    "SETTINGS.md must have a terminal.wordSeparator row showing the default list",
+  );
+  for (const fragment of [
+    "double-click",
+    "the default is xterm's own list",
+    "Up to 64 characters",
+    "cannot be empty",
+    "Keep a space in the list",
+    "a space, a double quote and a single quote",
+    "Applies at once",
+    "nothing is sent to the shell or the seat",
+  ]) {
+    assert.ok(
+      row.includes(fragment),
+      "SETTINGS.md row must mention: " + fragment,
+    );
+  }
+  const terminalsDoc = fs.readFileSync(path.join(root, "TERMINALS.md"), "utf8");
+  const paragraph = terminalsDoc
+    .split("\n")
+    .find((line) => line.startsWith("The terminal.wordSeparator"));
+  assert.ok(
+    paragraph,
+    "TERMINALS.md must have a paragraph about terminal.wordSeparator",
+  );
+  for (const fragment of [
+    "double-click",
+    "xterm's own list",
+    "so nothing changes until you edit it",
+    "a space, a double quote and a single quote",
+    "up to 64 characters",
+    "it cannot be empty",
+    "Keep a space in the list",
+    "can be set for all projects or overridden for one project",
+    "no reconnect and no restart",
+    "nothing is typed or sent",
+  ]) {
+    assert.ok(
+      paragraph.includes(fragment),
+      "TERMINALS.md must mention: " + fragment,
+    );
+  }
+});
