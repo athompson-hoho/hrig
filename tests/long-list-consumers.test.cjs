@@ -31,6 +31,45 @@ const classNodes = (view, name) => view.nodes().filter(n => n.props.className?.s
 const seatRows = view => classNodes(view, 'session-row');
 const disclosureRows = view => classNodes(view, 'pod-disclosure');
 
+test('Sidebar notice scroll policy preserves a usable finite inner viewport', () => {
+  // Source contract only: controlled geometry cannot prove native CSS reachability.
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/styles.css'), 'utf8');
+  const rule = selector => css.slice(css.lastIndexOf(selector + ' {')).split('}')[0];
+  assert.match(rule('.sidebar-session-container'), /overflow: auto/);
+  assert.match(rule('.sidebar-session-container > :not(.sidebar-session-viewport)'), /flex-shrink: 0/);
+  assert.match(rule('.sidebar-session-viewport'), /min-height: 110px/);
+  assert.match(rule('.sidebar-session-viewport'), /flex: 1 0 110px/);
+});
+
+test('Sidebar recovery notices and empty guidance preserve explicit callbacks', () => {
+  const items = Array.from({ length: 20 }, (_, i) => seat(i));
+  const view = sidebar(items, [], { inventoryError: 'Synthetic stale error '.repeat(100) }, { height: 55 });
+  assert.ok(view.text(classNodes(view, 'sidebar-session-container')[0]).includes('Stale inventory'));
+  assert.ok(classNodes(view, 'seat-row').every(n => n.props.disabled && !n.props.draggable));
+  assert.deepEqual(view.calls, []);
+  view.event(buttonText(view, 'Retry connection'), 'onClick');
+  assert.deepEqual(view.calls.map(call => call[0]), ['onRefresh']);
+  // Use the actual exported sentinel, rather than inventing a refresh state.
+  const checking = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/inventory-health.ts'), 'utf8').match(/CHECKING_SNAPSHOT\s*=\s*["']([^"']+)/)[1];
+  view.update({ inventoryError: checking });
+  assert.ok(view.text(classNodes(view, 'sidebar-session-container')[0]).includes('Refreshing · showing the last known snapshot'));
+  view.update({ inventory: null, inventoryError: 'Synthetic unavailable '.repeat(100) });
+  assert.ok(view.text(classNodes(view, 'sidebar-session-container')[0]).includes('Rig unavailable'));
+  view.event(buttonText(view, 'Connection settings'), 'onClick');
+  assert.deepEqual(view.calls.map(call => call[0]), ['onRefresh', 'onConnect']);
+  view.update({ inventory: { rigs: [], seats: [] }, inventoryError: '' });
+  assert.ok(view.text(classNodes(view, 'sidebar-session-container')[0]).includes('No seats yet'));
+  view.update({ inventory: { rigs: [], seats: items } });
+  const input = view.nodes().find(n => n.props['aria-label'] === 'Filter sessions');
+  view.event(input, 'onChange', { target: { value: 'missing synthetic match' } });
+  assert.ok(view.text(classNodes(view, 'sidebar-session-container')[0]).includes('No matching sessions'));
+  view.event(input, 'onChange', { target: { value: '' } });
+  assert.ok(viewport(view, 'Sessions'));
+  assert.ok(seatRows(view).length + disclosureRows(view).length <= 16);
+  assert.deepEqual(view.calls.map(call => call[0]), ['onRefresh', 'onConnect']);
+  view.unmount();
+});
+
 test('Sidebar disclosure names real pod content without false empty control relationships', () => {
   const original = seat(0);
   const view = sidebar([original]);
