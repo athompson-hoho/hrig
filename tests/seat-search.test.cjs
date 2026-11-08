@@ -62,14 +62,54 @@ function sidebar(overrides = {}) {
     return result;
   };
   const input = () => nodes().find(n => n.type === 'input' && n.props['aria-label'] === 'Filter sessions');
+  const statusSelect = () => nodes().find(n => n.type === 'select' &&
+    n.props['aria-label'] === 'Filter session status');
   render();
-  return { calls, props, nodes, input, render, health,
+  return { calls, props, nodes, input, statusSelect, render, health,
     query(value) { input().props.onChange({ target: { value } }); render(); },
+    status(value) {
+      assert.ok(statusSelect(), 'Sidebar exposes the native Filter session status select');
+      statusSelect().props.onChange({ target: { value } });
+      render();
+    },
     rows: () => nodes().filter(n => n.props?.className === 'session-row'),
     count: () => nodes().find(n => n.props?.className === 'section-label' &&
       n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
   };
 }
+
+test('Sidebar status select offers five ordered choices and reversibly filters actual rows', () => {
+  const inventorySeats = Object.freeze([
+    seat('working', { status: 'working' }),
+    seat('idle', { status: 'idle' }),
+    seat('attention', { status: 'attention' }),
+    seat('stopped', { status: 'stopped' }),
+    seat('exited', { status: 'exited' }),
+    seat('failed', { status: 'failed' }),
+    seat('running', { status: 'running' }),
+    seat('unknown', { status: 'unknown' }),
+    seat('missing', { status: undefined, session: null, activity: 'working' }),
+  ]);
+  const view = sidebar({ inventory: { rigs: [], seats: inventorySeats, sampledAt: new Date().toISOString() } });
+  const select = view.statusSelect();
+  assert.ok(select, 'Sidebar exposes the native Filter session status select');
+  assert.equal(select.props.value, 'all');
+  assert.equal(select.props.className, 'sidebar-status-filter');
+  assert.deepEqual(Array.from(select.props.children, option => [option.props.value, option.props.children]), [
+    ['all', 'All statuses'], ['working', 'Working'], ['idle', 'Idle'],
+    ['attention', 'Needs input'], ['stopped', 'Stopped'],
+  ]);
+  for (const [value, expected] of [
+    ['working', ['working']], ['idle', ['idle']], ['attention', ['attention']],
+    ['stopped', ['stopped', 'exited', 'failed']], ['all', inventorySeats.map(item => item.id)],
+  ]) {
+    view.status(value);
+    assert.deepEqual(view.rows().map(row => row.key), expected);
+    assert.equal(view.count(), expected.length);
+    assert.equal(view.statusSelect().props.value, value);
+  }
+  assert.deepEqual(view.calls, []);
+});
 
 test('Sidebar input filters actual rows and count by pod, then clearing restores scope without actions', () => {
   const view = sidebar();
