@@ -55,8 +55,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       react,
       'react/jsx-runtime': { jsx: element, jsxs: element, Fragment: 'fragment' },
       'lucide-react': new Proxy({}, { get: (_, key) => String(key) }),
-      './SettingsContext': { useSettings: () => ({ effective: { 'appearance.density': 'compact' } }) },
-      './components': { ErrorBox: 'error-box', Loading: 'loading', StatusDot: 'status-dot', Empty: 'empty' },
+      './SettingsContext': { useSettings: () => options.settings || ({ effective: { 'appearance.density': 'compact' } }) },
+      './components': options.actualComponents ? load('src/components.tsx') : { ErrorBox: 'error-box', Loading: 'loading', StatusDot: 'status-dot', Empty: 'empty' },
       './RigDesigner': { default: 'rig-designer', DeleteRig: 'delete-rig' },
       '../electron/diagnostics-bundle.mjs': {},
     };
@@ -65,6 +65,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
     }).outputText;
     vm.runInNewContext(compiled, {
       exports, document, ResizeObserver,
+      // Timers stay inert; synthetic consumers never poll real hosts.
+      setInterval: () => 1, clearInterval() {},
       window: { hrig: options.api || {} },
       require(id) {
         if (id in dependencies) return dependencies[id];
