@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("hrig", {
   openWorkLink: invoke('integrations:open'),
   drafts: (request) => ipcRenderer.sendSync('drafts:operation', request),
   doctor: invoke("connection:doctor"),
+  exportDiagnostics: invoke('diagnostics:export'),
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
   designRig: invoke("rig:design"),

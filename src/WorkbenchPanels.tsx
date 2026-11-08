@@ -1,4 +1,6 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { useSettings } from "./SettingsContext";
+import { projectDiagnosticsRequest } from "../electron/diagnostics-bundle.mjs";
 import {
   Activity,
   AlertCircle,
@@ -21,32 +23,74 @@ import { attentionSeats, attentionJumpEligibility } from "./attention-inbox";
 import { pinConnectionIdentity } from "./seat-pins";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
 export function DoctorPanel({ connection }: { connection: Connection }) {
+  const { effective } = useSettings();
+  // Keep full raw identity internal. No display normalization grants authority.
+  const owner = JSON.stringify([connection.id, connection.name, connection.kind, connection.host, connection.port, connection.distro, connection.root, connection.rigBinary]);
+  const current = useRef({ owner, mounted: true, generation: 0 });
+  if (current.current.owner !== owner) {
+    current.current = { owner, mounted: current.current.mounted, generation: current.current.generation + 1 };
+  }
+  const reportOwner = useRef<{ owner: string; generation: number } | null>(null);
+  const inFlight = useRef(false);
+  const doctorRequest = useRef(0);
+  const [exportState, setExportState] = useState({ owner, generation: current.current.generation, busy: false, notice: '' });
+  const descriptionId = useId();
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [checking, setChecking] = useState(false);
   useEffect(() => {
+    current.current.mounted = true;
+    return () => { current.current.mounted = false; current.current.generation++; };
+  }, []);
+  useEffect(() => {
     let active = true;
+    const generation = current.current.generation;
+    const request = ++doctorRequest.current;
+    const isCurrent = () => active && doctorRequest.current === request && current.current.mounted && current.current.owner === owner && current.current.generation === generation;
+    reportOwner.current = null;
     setReport(null);
     setError("");
     setChecking(true);
     window.hrig
       .doctor(connection)
       .then((r) => {
-        if (active) setReport(r);
+        if (isCurrent()) { reportOwner.current = { owner, generation }; setReport(r); }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (isCurrent()) setError(e.message);
       })
       .finally(() => {
-        if (active) setChecking(false);
+        if (isCurrent()) setChecking(false);
       });
     return () => {
       active = false;
     };
-  }, [connection.id, revision]);
+  }, [owner, revision]);
+  const eligible = reportOwner.current?.owner === owner && reportOwner.current.generation === current.current.generation && !checking && !error;
+  const available = JSON.parse(projectDiagnosticsRequest(report, effective, eligible)).checks.availability === 'available';
+  const exportCurrent = exportState.owner === owner && exportState.generation === current.current.generation;
+  const busy = exportCurrent && exportState.busy;
+  const exportDiagnostics = async () => {
+    if (inFlight.current || !current.current.mounted || current.current.owner !== owner) return;
+    inFlight.current = true;
+    const generation = current.current.generation;
+    const isCurrent = () => current.current.mounted && current.current.owner === owner && current.current.generation === generation;
+    setExportState({ owner, generation, busy: true, notice: 'Preparing diagnostics export…' });
+    let notice = 'Could not save diagnostics. Try again with a new file name in a writable folder.';
+    try {
+      const request = projectDiagnosticsRequest(report, effective, eligible);
+      const result = await window.hrig.exportDiagnostics(request);
+      if (result?.status === 'saved') notice = 'Diagnostics saved.';
+      else if (result?.status === 'canceled') notice = 'Export canceled. No file was saved.';
+    } catch { /* Only fixed copy crosses into this region. */ }
+    finally {
+      inFlight.current = false;
+      if (isCurrent()) setExportState({ owner, generation, busy: false, notice });
+    }
+  };
   return (
-    <div className="tool-panel">
+    <div className="tool-panel doctor-panel">
       <div className="tool-panel-heading">
         <Network />
         <div>
@@ -56,6 +100,9 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
         <button
           className="small-button"
           onClick={() => {
+            doctorRequest.current++;
+            reportOwner.current = null;
+            setChecking(true);
             setError("");
             setRevision((n) => n + 1);
           }}
@@ -64,6 +111,18 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
           Run checks
         </button>
       </div>
+      <section className="diagnostics-export">
+        <div className="diagnostics-export-actions">
+          <button type="button" className="small-button diagnostics-export-action" disabled={busy} aria-busy={busy}
+            aria-describedby={`${descriptionId}-scope ${descriptionId}-new-file ${descriptionId}-snapshot`} onClick={exportDiagnostics}>
+            {busy ? 'Exporting…' : 'Export redacted diagnostics…'}
+          </button>
+        </div>
+        <p id={`${descriptionId}-scope`}>Includes represented Connection doctor check statuses, local HRig and runtime versions, and selected settings. Excludes check details, terminal text, connection names, host identities and free-form settings.</p>
+        <p id={`${descriptionId}-new-file`}>Choose a new file name. Existing files are not replaced.</p>
+        <p id={`${descriptionId}-snapshot`}>{available ? 'Uses the represented check-status snapshot; exporting does not run checks. Missing or invalid check statuses are recorded as unknown.' : 'Check statuses are unavailable. You can still export local versions and selected settings.'}</p>
+        <p className="diagnostics-export-result" role="status" aria-live="polite" aria-atomic={true}>{exportCurrent ? exportState.notice : ''}</p>
+      </section>
       {error && <ErrorBox error={error} />}{" "}
       {checking ? (
         <Loading text="Checking connection and dependencies…" />
@@ -77,7 +136,7 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
               ? "Connection is ready"
               : "Some checks need attention"}
           </div>
-          {report.checks.map((check: any) => (
+          {(Array.isArray(report.checks) ? report.checks : []).filter((check: any) => check && typeof check === 'object').map((check: any) => (
             <div className="diagnostic-check" key={check.name}>
               {check.ok ? <Check size={16} /> : <AlertCircle size={16} />}
               <section>

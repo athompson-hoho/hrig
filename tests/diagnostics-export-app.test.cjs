@@ -34,9 +34,10 @@ async function harness(api = {}) {
   const policy = fs.existsSync('electron/diagnostics-bundle.mjs') ? await import('../electron/diagnostics-bundle.mjs') : {};
   const values = [], effects = [], pending = [], calls = [];
   let cursor = 0, nextId = 0, unmounted = false, lateUpdates = 0;
-  const doctorRequests = [];
+  const doctorRequests = [], doctorRejects = [];
   const scope = {
     ...policy,
+    JSON, TextEncoder,
     React: { createElement(type, props, ...children) { return { type, props: { ...props, children } }; } },
     useSettings: () => ({ effective: preferences }),
     useId: () => { const i = cursor++; return values[i] ??= `diagnostics-${nextId++}`; },
@@ -56,7 +57,7 @@ async function harness(api = {}) {
       }
     },
     window: { hrig: {
-      doctor: connection => { calls.push(['doctor', connection]); return new Promise(resolve => doctorRequests.push(resolve)); },
+      doctor: connection => { calls.push(['doctor', connection]); return new Promise((resolve, reject) => { doctorRequests.push(resolve); doctorRejects.push(reject); }); },
       exportDiagnostics: request => { calls.push(['export', request]); return Promise.resolve({ status: 'saved' }); },
       ...api,
     } },
@@ -68,7 +69,7 @@ async function harness(api = {}) {
   }).outputText, context);
   let connection = { ...host };
   return {
-    calls, doctorRequests, scope,
+    calls, doctorRequests, doctorRejects, scope,
     render() { cursor = 0; return context.component({ connection }); },
     flush() { while (pending.length) pending.shift()(); },
     repoint(change) { connection = { ...connection, ...change }; },
@@ -130,3 +131,132 @@ if (require.main === module) test('actual Doctor synchronously guards duplicate 
 });
 
 module.exports = { harness, flatten, exportButton, notice, tick, host, preferences, unique };
+
+if (require.main === module) test('actual Doctor through preload trusted main and native Save publishes only its finite click snapshot', async () => {
+  const { nativeHarness } = require('./diagnostics-export.test.cjs');
+  const native = await nativeHarness({ composed: true });
+  const h = await harness({ exportDiagnostics: native.preload.exportDiagnostics });
+  h.render(); h.flush();
+  h.doctorRequests[0]({ checks: [{ name: 'Node.js', ok: true, detail: 'SYNTHETIC_PRIVATE_CANARY' }, { name: 'tmux', ok: false }] });
+  await tick();
+  assert.deepEqual(native.effects, [], 'mount diagnosis never opens Save');
+  await exportButton(h.render()).props.onClick();
+  assert.equal(notice(h.render()), 'Diagnostics saved.');
+  assert.equal(native.files.size, 1);
+  const bytes = native.files.get(native.destination);
+  const bundle = JSON.parse(bytes);
+  assert.equal(bundle.checks.entries.find(row => row.name === 'Node.js').status, 'ok');
+  assert.equal(bundle.checks.entries.find(row => row.name === 'tmux').status, 'failed');
+  assert.equal(bundle.versions.node, '24.1.0');
+  assert.equal(bundle.settings['terminal.scrollback'], 1001);
+  assert.equal(Object.keys(bundle.settings).length, 9);
+  assert.ok(!bytes.includes('SYNTHETIC_PRIVATE_CANARY'));
+  assert.equal(h.calls.filter(c => c[0] === 'doctor').length, 1);
+  assert.deepEqual(native.effects.map(e => e[0]), ['dialog', 'versions', 'open', 'write', 'sync', 'close', 'link', 'unlink']);
+});
+
+if (require.main === module) test('Run checks invalidates old callbacks synchronously before effect cleanup', async () => {
+  const h = await harness(); h.render(); h.flush();
+  const run = flatten(h.render()).find(n => n?.type === 'button' && flatten(n.props.children).includes('Run checks'));
+  run.props.onClick(); h.render();
+  h.doctorRequests[0]({ checks: [{ name: 'Node.js', ok: true }] }); await tick();
+  await exportButton(h.render()).props.onClick();
+  assert.equal(JSON.parse(h.calls.at(-1)[1]).checks.availability, 'unavailable');
+});
+
+if (require.main === module) test('actual Doctor stays busy until native no-clobber publication completes', async () => {
+  const { nativeHarness } = require('./diagnostics-export.test.cjs');
+  let release, arrived;
+  const publication = new Promise(resolve => { arrived = resolve; });
+  const native = await nativeHarness({ composed: true, beforeLink: () => { arrived(); return new Promise(resolve => { release = resolve; }); } });
+  const h = await harness({ exportDiagnostics: native.preload.exportDiagnostics });
+  h.render(); h.flush();
+  const pending = exportButton(h.render()).props.onClick();
+  await publication;
+  assert.equal(notice(h.render()), 'Preparing diagnostics export…');
+  assert.equal(exportButton(h.render()).props.disabled, true);
+  assert.ok(!native.files.has(native.destination));
+  release(); await pending;
+  assert.equal(notice(h.render()), 'Diagnostics saved.');
+  assert.ok(native.files.has(native.destination));
+});
+
+if (require.main === module) test('actual Doctor malformed zero and oversized represented collections show unavailable copy and finite unknown checks', async () => {
+  for (const checks of [undefined, 'invalid', [], Array(33).fill({ name: 'Node.js', ok: true }), [null]]) {
+    const h = await harness(); h.render(); h.flush();
+    h.doctorRequests[0]({ checks }); await tick();
+    const tree = h.render();
+    await exportButton(tree).props.onClick();
+    const request = JSON.parse(h.calls.at(-1)[1]);
+    assert.ok(request.checks.entries.every(row => row.status === 'unknown'));
+    if (checks?.length !== 1) {
+      assert.equal(request.checks.availability, 'unavailable');
+      assert.ok(flatten(tree).includes('Check statuses are unavailable. You can still export local versions and selected settings.'));
+    }
+    assert.equal(request.settings['editor.fontSize'], 14);
+  }
+});
+
+if (require.main === module) test('actual Doctor suppresses foreign reports before effect cleanup for every raw owner field', async () => {
+  for (const change of [{ id: 'different' }, { name: 'different' }, { kind: 'wsl' }, { host: 'FAKE.invalid' }, { host: 'fake.invalid ' }, { port: 22 }, { distro: 'fake' }, { root: '/synthetic/' }, { rigBinary: 'rig' }]) {
+    const h = await harness(); h.render(); h.flush();
+    h.doctorRequests[0]({ checks: [{ name: 'Node.js', ok: true }] }); await tick(); h.render();
+    h.repoint(change);
+    await exportButton(h.render()).props.onClick();
+    const request = JSON.parse(h.calls.find(c => c[0] === 'export')[1]);
+    assert.equal(request.checks.availability, 'unavailable');
+    assert.equal(request.settings['terminal.scrollback'], 1001);
+  }
+});
+
+if (require.main === module) test('actual Doctor ignores late report and export callbacks after repoint and unmount', async () => {
+  let complete;
+  const h = await harness({ exportDiagnostics: () => new Promise(resolve => { complete = resolve; }) });
+  h.render(); h.flush();
+  const pending = exportButton(h.render()).props.onClick();
+  h.repoint({ root: '/other' }); h.render();
+  h.doctorRequests[0]({ checks: [{ name: 'Node.js', ok: true }] }); await tick();
+  complete({ status: 'saved' }); await pending;
+  assert.equal(notice(h.render()), '');
+  h.flush();
+  const next = exportButton(h.render()).props.onClick();
+  h.unmount(); complete({ status: 'saved' });
+  h.doctorRequests.at(-1)({ checks: [] }); await next; await tick();
+  assert.equal(h.lateUpdates, 0);
+});
+
+if (require.main === module) test('actual Doctor errors invalid results and cancellation clear busy and allow explicit retry', async () => {
+  for (const result of [null, {}, { status: 'unexpected', error: 'SYNTHETIC_PRIVATE_CANARY' }, { status: 'error' }, 'reject', { status: 'canceled' }]) {
+    let count = 0;
+    const h = await harness({ exportDiagnostics: async () => {
+      count++;
+      if (count > 1) return { status: 'saved' };
+      if (result === 'reject') throw Error('SYNTHETIC_PRIVATE_CANARY');
+      return result;
+    } });
+    h.render(); h.flush();
+    await exportButton(h.render()).props.onClick();
+    const text = notice(h.render());
+    assert.equal(text, result?.status === 'canceled' ? 'Export canceled. No file was saved.' : 'Could not save diagnostics. Try again with a new file name in a writable folder.');
+    assert.ok(!text.includes('SYNTHETIC_PRIVATE_CANARY'));
+    assert.equal(exportButton(h.render()).props.disabled, false);
+    await exportButton(h.render()).props.onClick();
+    assert.equal(notice(h.render()), 'Diagnostics saved.');
+    assert.equal(count, 2);
+  }
+});
+
+if (require.main === module) test('actual Doctor unavailable states still export settings and Run checks keeps its explicit effect', async () => {
+  const h = await harness(); let tree = h.render(); h.flush();
+  await exportButton(tree).props.onClick();
+  assert.equal(JSON.parse(h.calls.at(-1)[1]).checks.availability, 'unavailable');
+  h.doctorRejects[0](Error('synthetic doctor failure')); await tick();
+  await exportButton(h.render()).props.onClick();
+  assert.equal(JSON.parse(h.calls.at(-1)[1]).checks.availability, 'unavailable');
+  const run = flatten(h.render()).find(n => n?.type === 'button' && flatten(n.props.children).includes('Run checks'));
+  run.props.onClick(); h.render(); h.flush();
+  assert.equal(h.doctorRequests.length, 2);
+  h.doctorRequests[1]({ checks: [{ name: 'tmux', ok: false }] }); await tick();
+  await exportButton(h.render()).props.onClick();
+  assert.equal(JSON.parse(h.calls.at(-1)[1]).checks.entries.find(row => row.name === 'tmux').status, 'failed');
+});

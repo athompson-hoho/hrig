@@ -41,6 +41,11 @@ function handle(channel, fn) {
 }
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
 require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
+require('./diagnostics-export.cjs').registerDiagnosticsExport({
+  handle, dialog, getWindow: () => mainWindow, fs,
+  randomUUID: require('node:crypto').randomUUID,
+  getVersions: () => ({ hrig: app.getVersion(), electron: process.versions.electron, chromium: process.versions.chrome, node: process.versions.node }),
+});
 const terminalLogs = require('./terminal-logging.cjs').createTerminalLogs({notify: state => {
   if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal:log-state', state);
 }});
