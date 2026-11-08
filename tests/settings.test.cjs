@@ -627,3 +627,245 @@ test("terminal.macOptionIsMeta tracer: the default is off, a stored true resolve
     "changing the setting must never rebuild or re-attach the terminal",
   );
 });
+test("terminal.macOptionIsMeta is an off-by-default boolean Terminal setting, labelled macOS only, that rejects non-booleans and follows project-over-user precedence", () => {
+  const key = "terminal.macOptionIsMeta";
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const rows = settings.schema.filter((r) => r.key === key);
+  assert.equal(rows.length, 1, "exactly one schema row");
+  const row = rows[0];
+  assert.equal(row.category, "Terminal");
+  for (const field of ["options", "min", "max", "step"]) {
+    assert.equal(row[field], undefined, "a boolean row has no " + field);
+  }
+  assert.ok(row.label.includes("macOS"), "the label must say macOS");
+  assert.ok(
+    row.description.startsWith("macOS only"),
+    "the description must open with macOS only",
+  );
+  assert.ok(row.description.includes("no effect on Windows or Linux"));
+  assert.deepEqual(settings.validateOverrides({ [key]: true }), {
+    [key]: true,
+  });
+  assert.deepEqual(settings.validateOverrides({ [key]: false }), {
+    [key]: false,
+  });
+  for (const value of ["true", "false", "yes", "on", "", 1, 0, null, {}, []]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Wrong value type for terminal\.macOptionIsMeta/,
+      JSON.stringify(value) + " must be rejected",
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: "true" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(settings.resolveSettings({ [key]: true }, {})[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  const typings = fs.readFileSync(
+    path.join(
+      srcDir,
+      "..",
+      "node_modules",
+      "@xterm",
+      "xterm",
+      "typings",
+      "xterm.d.ts",
+    ),
+    "utf8",
+  );
+  assert.ok(
+    typings.includes("macOptionIsMeta?: boolean;"),
+    "the installed xterm must still expose macOptionIsMeta as a boolean option",
+  );
+  assert.ok(
+    typings.includes("Whether to treat option as the meta key."),
+    "the installed xterm must still document macOptionIsMeta as Option acting as Meta",
+  );
+});
+test("terminal.macOptionIsMeta is not undermined by the key handlers: Option and Alt chords pass through classifyTerminalKey on macOS and the app and terminal handlers leave them to xterm", () => {
+  const keys = bundled("src/terminal-keys.ts");
+  const { classifyTerminalKey, terminalOwnsKey } = keys;
+  const event = (key, mods = {}) => ({
+    type: "keydown",
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...mods,
+  });
+  const chars = [
+    "b",
+    "f",
+    "d",
+    "B",
+    "F",
+    "v",
+    "c",
+    "k",
+    "K",
+    ".",
+    "1",
+    "`",
+    " ",
+    "Backspace",
+    "ArrowLeft",
+    "ArrowRight",
+    "Enter",
+    "Escape",
+    "Dead",
+    "∫",
+    "ƒ",
+    "∂",
+    "å",
+  ];
+  const modifierSets = [
+    {},
+    { shiftKey: true },
+    { ctrlKey: true },
+    { metaKey: true },
+    { metaKey: true, shiftKey: true },
+    { ctrlKey: true, shiftKey: true },
+    { ctrlKey: true, metaKey: true },
+  ];
+  for (const platform of ["darwin", "win32", "linux"]) {
+    for (const hasSelection of [false, true]) {
+      for (const key of chars) {
+        for (const mods of modifierSets) {
+          const chord = { ...mods, altKey: true };
+          assert.equal(
+            classifyTerminalKey(event(key, chord), platform, hasSelection),
+            "pass",
+            platform +
+              " Option or Alt chord " +
+              JSON.stringify(key) +
+              " " +
+              JSON.stringify(chord) +
+              " (selection " +
+              hasSelection +
+              ") must pass to xterm",
+          );
+        }
+      }
+    }
+  }
+  assert.equal(
+    classifyTerminalKey(event("f", { metaKey: true }), "darwin", false),
+    "find",
+  );
+  assert.equal(
+    classifyTerminalKey(event("v", { metaKey: true }), "darwin", false),
+    "paste",
+  );
+  assert.equal(
+    classifyTerminalKey(event("c", { metaKey: true }), "darwin", true),
+    "copy",
+  );
+  assert.equal(
+    classifyTerminalKey(event("k", { metaKey: true }), "darwin", false),
+    "clear",
+  );
+  const target = {
+    closest: (selector) =>
+      selector === keys.TERMINAL_PANEL_SELECTOR ? {} : null,
+  };
+  assert.equal(
+    terminalOwnsKey(event("k", { metaKey: true }), "darwin", target),
+    true,
+  );
+  assert.equal(
+    terminalOwnsKey(
+      event("k", { metaKey: true, altKey: true }),
+      "darwin",
+      target,
+    ),
+    false,
+  );
+  assert.equal(
+    terminalOwnsKey(event("b", { altKey: true }), "darwin", target),
+    false,
+  );
+  const collapse = (file) => readSrc(file).replace(/\s+/g, " ");
+  const tools = collapse("TerminalTools.tsx");
+  assert.equal(
+    tools.split("attachCustomKeyEventHandler(").length - 1,
+    1,
+    "TerminalTools.tsx must install exactly one custom key handler",
+  );
+  assert.ok(
+    tools.includes('if (action === "pass") return true;'),
+    "a pass result must return true so xterm still receives the key",
+  );
+  const handlerFiles = fs
+    .readdirSync(srcDir)
+    .filter(
+      (file) =>
+        fs.statSync(path.join(srcDir, file)).isFile() &&
+        readSrc(file).includes("attachCustomKeyEventHandler("),
+    );
+  assert.deepEqual(
+    handlerFiles,
+    ["TerminalTools.tsx"],
+    "no other file directly in src may install a custom key handler",
+  );
+  assert.ok(
+    collapse("App.tsx").includes(
+      "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
+    ),
+    "the app shortcut handler must ignore every Alt or Option key press",
+  );
+});
+test("terminal.macOptionIsMeta is documented in SETTINGS.md and TERMINALS.md", () => {
+  const root = path.join(srcDir, "..");
+  const settingsDoc = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  const row = settingsDoc
+    .split("\n")
+    .find((line) =>
+      line.startsWith("| `terminal.macOptionIsMeta` | `false` |"),
+    );
+  assert.ok(
+    row,
+    "SETTINGS.md must have a terminal.macOptionIsMeta row with default false",
+  );
+  for (const fragment of [
+    "macOS only",
+    "no effect on Windows or Linux",
+    "Option+B and Option+F",
+    "special characters",
+  ]) {
+    assert.ok(
+      row.includes(fragment),
+      "SETTINGS.md row must mention: " + fragment,
+    );
+  }
+  const terminalsDoc = fs.readFileSync(path.join(root, "TERMINALS.md"), "utf8");
+  const paragraph = terminalsDoc
+    .split("\n")
+    .find((line) => line.startsWith("The terminal.macOptionIsMeta"));
+  assert.ok(
+    paragraph,
+    "TERMINALS.md must have a paragraph about terminal.macOptionIsMeta",
+  );
+  for (const fragment of [
+    "for macOS only",
+    "off by default",
+    "Option+B and Option+F",
+    "no longer types special characters",
+    "such as @ and brackets on a German keyboard",
+    "On Windows and Linux the setting has no effect",
+    "no reconnect and no restart",
+    "nothing is typed or sent unless you press a key",
+  ]) {
+    assert.ok(
+      paragraph.includes(fragment),
+      "TERMINALS.md must mention: " + fragment,
+    );
+  }
+});
