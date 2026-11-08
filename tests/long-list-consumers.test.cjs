@@ -89,6 +89,30 @@ function scroll(view, node, top) {
   view.event(node, 'onScroll');
 }
 
+test('Sidebar long fully disabled stale inventory settles Home and End without actions or unbounded mounts', () => {
+  const items = Object.freeze(Array.from({ length: 2000 }, (_, i) => seat(i)));
+  const view = sidebar(items, [], { inventoryError: 'Synthetic disconnected', pinsAvailable: false, podsAvailable: false });
+  const list = viewport(view, 'Sessions');
+  for (const key of ['Home', 'End']) {
+    list.focus();
+    view.event(list, 'onKeyDown', { key });
+    let frames = 0;
+    while (view.animationFrames.size && frames++ < 64) {
+      view.flushAnimationFrame();
+      assert.ok(seatRows(view).length + disclosureRows(view).length <= 16, 'disabled scan preserves global bounds');
+    }
+    assert.equal(view.animationFrames.size, 0, 'scan exhausts a finite list within a bounded frame budget');
+    assert.equal(view.document.activeElement, list, 'no eligible action leaves viewport focus');
+    assert.deepEqual(view.calls, []);
+  }
+  view.update({ pinsAvailable: true });
+  view.event(list, 'onKeyDown', { key: 'Home' });
+  assert.ok(view.document.activeElement.props['aria-label'].startsWith('Pin session'), 'fresh eligible-pin positive contrast');
+  assert.deepEqual(view.calls, []);
+  view.unmount();
+  assert.equal(view.animationFrames.size, 0);
+});
+
 test('Sidebar huge pod mounts bounded rows with full count and exact middle/end actions', () => {
   const items = Object.freeze(Array.from({ length: 2000 }, (_, i) => seat(i)));
   const view = sidebar(items);

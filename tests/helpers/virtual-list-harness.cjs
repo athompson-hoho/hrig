@@ -10,7 +10,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const mountId = ++mountSerial;
   const instances = new Map(), dom = new Map(), modules = new Map();
   const observers = new Set(), pending = [];
-  const intervals = new Map(), listeners = new Map();
+  const intervals = new Map(), listeners = new Map(), animationFrames = new Map();
   let timerSerial = 0;
   const document = { activeElement: null };
   let current, dirty = true, tree, props = initialProps, serial = 0;
@@ -72,6 +72,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       // Timers stay inert; synthetic consumers never poll real hosts.
       setInterval(fn, delay) { const id = ++timerSerial; intervals.set(id, { fn, delay }); return id; },
       clearInterval(id) { intervals.delete(id); },
+      requestAnimationFrame(fn) { const id = ++timerSerial; animationFrames.set(id, fn); return id; },
+      cancelAnimationFrame(id) { animationFrames.delete(id); },
       window: { hrig: options.api || {},
         addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
         removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
@@ -162,7 +164,12 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const nodes = () => tree.flatMap(descendants).filter(n => typeof n === 'object');
   flush();
   return {
-    nodes, flush, document, observers, intervals, listeners,
+    nodes, flush, document, observers, intervals, listeners, animationFrames,
+    flushAnimationFrame() {
+      const work = [...animationFrames.values()]; animationFrames.clear();
+      for (const fn of work) fn(0);
+      flush(); return work.length;
+    },
     tickIntervals() { for (const { fn } of [...intervals.values()]) fn(); flush(); },
     text(node) { return descendants(node).filter(n => typeof n === 'string').join(''); },
     update(next) { props = { ...props, ...next }; dirty = true; flush(); },

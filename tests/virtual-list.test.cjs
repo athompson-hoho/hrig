@@ -190,6 +190,57 @@ function nativeList() {
   return { ...h, calls, rows, viewport, mounted, row, controls, key, scroll, focus };
 }
 
+function disabledRun() {
+  const calls = [], rows = Array.from({ length: 2000 }, (_, id) => ({ id }));
+  const h = mountComponent('src/VirtualList.tsx', 'VirtualList', {
+    rows, scopeKey: 'disabled-owner', label: 'Long disabled run', itemKey: row => String(row.id),
+    renderRow: row => ({ type: 'button', props: { disabled: row.id !== 1999,
+      'data-row-id': row.id, children: String(row.id), onClick: () => calls.push(row.id) } }),
+  }, { height: 330, rowHeight: 55 });
+  const list = () => h.nodes().find(n => n.props['aria-label'] === 'Long disabled run');
+  return { ...h, rows, calls, list };
+}
+
+test('long disabled run reaches a later enabled action with bounded work and zero activation', () => {
+  const h = disabledRun();
+  h.list().focus(); h.event(h.list(), 'onKeyDown', { key: 'Home' });
+  let frames = 0;
+  while (h.animationFrames.size && frames++ < 64) {
+    h.flushAnimationFrame();
+    assert.ok(h.nodes().filter(n => n.props['data-row-id'] != null).length <= 16);
+  }
+  assert.equal(h.animationFrames.size, 0);
+  assert.equal(h.document.activeElement.props['data-row-id'], 1999);
+  assert.deepEqual(h.calls, []);
+  h.event(h.document.activeElement, 'onClick');
+  assert.deepEqual(h.calls, [1999], 'only explicit activation invokes the original callback');
+  h.unmount();
+});
+
+test('disabled scan cancels on newer navigation, row replacement, outside focus and unmount', () => {
+  for (const change of ['new navigation', 'rows', 'scope', 'blur', 'unmount']) {
+    const h = disabledRun();
+    const list = h.list(); list.focus(); h.event(list, 'onKeyDown', { key: 'Home' });
+    assert.ok(h.animationFrames.size > 0, 'long scan yields before exceeding synchronous update depth');
+    const callbacks = [...h.animationFrames.values()];
+    if (change === 'new navigation') h.event(list, 'onKeyDown', { key: 'End' });
+    else if (change === 'rows') h.update({ rows: h.rows.slice(1999) });
+    else if (change === 'scope') h.update({ scopeKey: 'replacement-owner' });
+    else if (change === 'blur') {
+      const external = { synthetic: 'unrelated focus' }; h.document.activeElement = external;
+      h.event(list, 'onBlurCapture', { relatedTarget: external });
+    } else h.unmount();
+    assert.equal(h.animationFrames.size, 0, `${change} removes queued work`);
+    const focus = h.document.activeElement;
+    for (const callback of callbacks) callback(0); // A cancelled callback arriving late must be inert.
+    h.flush();
+    assert.equal(h.document.activeElement, focus, `${change} never restores an old scan focus`);
+    assert.equal(h.animationFrames.size, 0);
+    assert.deepEqual(h.calls, []);
+    h.unmount();
+  }
+});
+
 test('actual viewport End Home Page and Arrow navigation mounts and focuses native controls without activation', () => {
   const h = nativeList();
   h.focus(h.viewport());
