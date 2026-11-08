@@ -219,3 +219,156 @@ test("terminal.showSizeOnResize is an on-by-default boolean Terminal setting tha
     true,
   );
 });
+const fs = require("node:fs");
+const path = require("node:path");
+const srcDir = path.join(__dirname, "..", "src");
+function readSrc(file) {
+  return fs.readFileSync(path.join(srcDir, file), "utf8");
+}
+function collapsedTerminalPanel() {
+  return readSrc("TerminalPanel.tsx").replace(/\s+/g, " ");
+}
+test("terminal.cursor tracer: defaults keep the blinking bar, a stored override resolves, and TerminalPanel maps the resolved values onto xterm live", () => {
+  assert.equal(settings.defaults["terminal.cursorStyle"], "bar");
+  assert.equal(settings.defaults["terminal.cursorBlink"], true);
+  assert.equal(settings.resolveSettings()["terminal.cursorStyle"], "bar");
+  assert.equal(settings.resolveSettings()["terminal.cursorBlink"], true);
+  const stored = JSON.parse(
+    '{"terminal.cursorStyle":"underline","terminal.cursorBlink":false}',
+  );
+  const resolved = settings.resolveSettings(settings.safeOverrides(stored));
+  assert.equal(resolved["terminal.cursorStyle"], "underline");
+  assert.equal(resolved["terminal.cursorBlink"], false);
+  const corrupt = JSON.parse('{"terminal.cursorStyle":"beam"}');
+  assert.deepEqual(settings.safeOverrides(corrupt), {});
+  assert.equal(
+    settings.resolveSettings(settings.safeOverrides(corrupt))[
+      "terminal.cursorStyle"
+    ],
+    "bar",
+  );
+  const source = collapsedTerminalPanel();
+  const styleStatement =
+    'term.options.cursorStyle = preferences["terminal.cursorStyle"] as "bar" | "block" | "underline";';
+  const blinkStatement =
+    'term.options.cursorBlink = preferences["terminal.cursorBlink"] && !preferences["appearance.reduceMotion"];';
+  assert.ok(
+    source.includes(styleStatement),
+    "the cursor shape must come from the effective terminal.cursorStyle preference",
+  );
+  assert.ok(
+    source.includes(blinkStatement),
+    "the cursor may blink only when terminal.cursorBlink is on and appearance.reduceMotion is off",
+  );
+  const afterBlink = source.slice(
+    source.indexOf(blinkStatement) + blinkStatement.length,
+  );
+  const deps = /\}, \[([^\]]*)\]\);/.exec(afterBlink);
+  assert.ok(deps, "the preferences effect must end with a dependency list");
+  assert.ok(
+    deps[1]
+      .split(",")
+      .map((entry) => entry.trim())
+      .includes("preferences"),
+    "the effect must re-run when the effective preferences change",
+  );
+});
+test("terminal.cursorStyle is a bar-by-default Terminal select of exactly bar, block and underline that rejects anything else", () => {
+  const key = "terminal.cursorStyle";
+  assert.equal(settings.defaults[key], "bar");
+  assert.equal(settings.resolveSettings()[key], "bar");
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.deepEqual(
+    rows[0].options.map((option) => option.value),
+    ["bar", "block", "underline"],
+  );
+  assert.equal(rows[0].min, undefined);
+  assert.equal(rows[0].max, undefined);
+  for (const value of ["bar", "block", "underline"]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of [
+    "Bar",
+    "BLOCK",
+    "beam",
+    "line",
+    "",
+    " ",
+    " bar",
+    "block ",
+    "bar;",
+  ]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Unsupported option for terminal\.cursorStyle/,
+    );
+  }
+  for (const value of [true, 1, 0, null, {}, ["bar"]]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      /Wrong value type for terminal\.cursorStyle/,
+    );
+  }
+  assert.deepEqual(settings.safeOverrides({ [key]: "beam" }), {});
+  assert.equal(settings.resolveSettings({ [key]: "block" })[key], "block");
+  assert.equal(
+    settings.resolveSettings({ [key]: "block" }, { [key]: "underline" })[key],
+    "underline",
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: "block" }, { [key]: "bar" })[key],
+    "bar",
+  );
+});
+test("terminal.cursorBlink is an on-by-default boolean Terminal setting that rejects non-booleans", () => {
+  const key = "terminal.cursorBlink";
+  assert.equal(settings.defaults[key], true);
+  assert.equal(settings.resolveSettings()[key], true);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].category, "Terminal");
+  assert.equal(rows[0].options, undefined);
+  assert.equal(rows[0].min, undefined);
+  assert.equal(rows[0].max, undefined);
+  for (const value of [true, false]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of ["true", "false", "yes", "", 1, 0, null, {}, []]) {
+    assert.throws(() => settings.validateOverrides({ [key]: value }));
+  }
+  assert.equal(settings.resolveSettings({ [key]: false })[key], false);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+});
+test("terminal.cursor xterm starts at the defaults and TerminalPanel is its only construction site", () => {
+  const source = collapsedTerminalPanel();
+  assert.ok(
+    source.includes(
+      `cursorBlink: ${settings.defaults["terminal.cursorBlink"]},`,
+    ),
+    "xterm must start with the default blink value",
+  );
+  assert.ok(
+    source.includes(
+      `cursorStyle: "${settings.defaults["terminal.cursorStyle"]}",`,
+    ),
+    "xterm must start with the default cursor style",
+  );
+  const constructors = fs
+    .readdirSync(srcDir)
+    .filter((name) => /\.tsx?$/.test(name))
+    .filter((name) => readSrc(name).includes("new Terminal("));
+  assert.deepEqual(constructors, ["TerminalPanel.tsx"]);
+});
