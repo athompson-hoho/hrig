@@ -30,10 +30,11 @@ function load(file) {
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
-  }).outputText, { exports, require });
+  }).outputText, { exports, require: id => id === './seat-pins' ? pins : require(id) });
   return exports;
 }
-const helpers = load('src/seat-pins.ts');
+const pins = load('src/seat-pins.ts');
+const helpers = { ...pins, ...load('src/seat-pods.ts') };
 const { normalizeHistory } = load('src/project-history.ts');
 const host = Object.freeze({ id: 'host', name: 'Host', kind: 'ssh', host: 'server', root: '~' });
 const local = Object.freeze({ id: 'local', name: 'Local', kind: 'local', root: '~' });

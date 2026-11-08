@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -22,6 +22,7 @@ import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 import { sortSeats } from "./seat-sort";
 import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity } from "./seat-pins";
+import { groupSeatPods, normalizeCollapsedPods } from "./seat-pods";
 import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -164,6 +165,9 @@ export default function Sidebar({
   pinnedSeats,
   pinsAvailable,
   onToggleSeatPin,
+  collapsedPods,
+  podsAvailable,
+  onTogglePod,
   onRig,
   onRefresh,
   onProject,
@@ -184,6 +188,9 @@ export default function Sidebar({
   inventoryError: string;
   busy: boolean;
   selectedRig: string;
+  collapsedPods: readonly string[];
+  podsAvailable: boolean;
+  onTogglePod: (seat: Seat) => void;
   pinnedSeats: readonly string[];
   pinsAvailable: boolean;
   onToggleSeatPin: (seat: Seat) => void;
@@ -200,6 +207,8 @@ export default function Sidebar({
   onDiff: (path: string) => void;
   fileRevision: number;
 }) {
+  const podNamespace = useId();
+  const podTokens = useRef(new Map<string, number>());
   const [query, setQuery] = useState("");
   const { effective, project, update } = useSettings();
   const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
@@ -242,6 +251,55 @@ export default function Sidebar({
   ), connection, pinsAvailable ? pinnedSeats : []);
   const noMatches = searchResult.scopedCount > 0 &&
     (searchResult.hasQuery || statusFilter !== "all") && seats.length === 0;
+  const favorites = seats.filter(s => pins.has(seatPinIdentity(connection, s.id)));
+  const groups = groupSeatPods(seats.filter(s => !pins.has(seatPinIdentity(connection, s.id))), connection);
+  const collapsed = new Set(podsAvailable ? normalizeCollapsedPods(collapsedPods) : []);
+  const renderSeat = (s: Seat) => (
+    <div className="session-row" key={s.id}>
+      <button
+        disabled={!!inventoryError}
+        draggable={!inventoryError}
+        onDragStart={(event) => onDrag(event, s)}
+        onClick={() => onSeat(s)}
+        className="seat-row"
+        key={s.id}
+        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
+      >
+        <span
+          className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
+        >
+          <Bot size={16} />
+        </span>
+        <span className="seat-details">
+          <strong>{s.name}</strong>
+          <small>
+            {s.rigName} · {s.runtime}
+          </small>
+        </span>
+        <StatusDot status={s.status} />
+        <GripVertical size={12} className="grip" />
+      </button>
+      <button
+        type="button"
+        className="icon-button seat-pin"
+        disabled={!pinsAvailable}
+        aria-pressed={pins.has(seatPinIdentity(connection, s.id))}
+        aria-label={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+        title={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+        onClick={() => { if (pinsAvailable) onToggleSeatPin(s); }}
+      >
+        <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
+      </button>
+      {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
+      <IconButton
+        title={`Relaunch session ${s.name}`}
+        disabled={!!inventoryError || !s.session}
+        onClick={() => onRelaunch(s)}
+      >
+        <RotateCw size={13} />
+      </IconButton>
+    </div>
+  );
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -430,7 +488,7 @@ export default function Sidebar({
             ))}
           </div>
           <div className="section-label">
-            <span>SESSIONS</span>
+            <span title="Matching sessions, including favorites and sessions in collapsed pods.">SESSIONS</span>
             <span className="count">{seats.length}</span>
           </div>
           <div className="sidebar-scroll">
@@ -465,52 +523,42 @@ export default function Sidebar({
                 <p>Try another search or clear the filters.</p>
               </div>
             ) : seats.length ? (
-              seats.map((s) => (
-                <div className="session-row" key={s.id}>
-                  <button
-                    disabled={!!inventoryError}
-                    draggable={!inventoryError}
-                    onDragStart={(event) => onDrag(event, s)}
-                    onClick={() => onSeat(s)}
-                    className="seat-row"
-                    key={s.id}
-                    title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
-                  >
-                    <span
-                      className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
-                    >
-                      <Bot size={16} />
-                    </span>
-                    <span className="seat-details">
-                      <strong>{s.name}</strong>
-                      <small>
-                        {s.rigName} · {s.runtime}
-                      </small>
-                    </span>
-                    <StatusDot status={s.status} />
-                    <GripVertical size={12} className="grip" />
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button seat-pin"
-                    disabled={!pinsAvailable}
-                    aria-pressed={pins.has(seatPinIdentity(connection, s.id))}
-                    aria-label={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
-                    title={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
-                    onClick={() => { if (pinsAvailable) onToggleSeatPin(s); }}
-                  >
-                    <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
-                  </button>
-                  {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
-                  <IconButton
-                    title={`Relaunch session ${s.name}`}
-                    disabled={!!inventoryError || !s.session}
-                    onClick={() => onRelaunch(s)}
-                  >
-                    <RotateCw size={13} />
-                  </IconButton>
-                </div>
-              ))
+              <>
+                {favorites.map(renderSeat)}
+                {groups.map((group) => {
+                  if (!podTokens.current.has(group.identity))
+                    podTokens.current.set(group.identity, podTokens.current.size);
+                  const id = `${podNamespace}-pod-${podTokens.current.get(group.identity)}`;
+                  const expanded = !collapsed.has(group.identity);
+                  const label = `${expanded ? "Collapse" : "Expand"} pod ${group.podLabel} in rig ${group.rigLabel}`;
+                  return (
+                    <div className="pod-group" key={group.identity}>
+                      <button
+                        type="button"
+                        className="pod-disclosure"
+                        disabled={!podsAvailable}
+                        aria-expanded={expanded}
+                        aria-controls={id}
+                        aria-describedby={`${id}-description`}
+                        aria-label={label}
+                        title={label}
+                        onClick={() => { if (podsAvailable) onTogglePod(group.seats[0]); }}
+                      >
+                        {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+                        <span className="pod-label">{group.podLabel} · {group.rigLabel}</span>
+                        <span className="count">{group.seats.length}</span>
+                      </button>
+                      <span className="sr-only" id={`${id}-description`}>
+                        {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
+                        {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
+                      </span>
+                      <div className="pod-content" id={id}>
+                        {expanded && group.seats.map(renderSeat)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
             ) : (
               <div className="connection-empty">
                 <Bot size={26} />
@@ -530,7 +578,7 @@ export default function Sidebar({
           </div>
           <div className="sidebar-tip">
             <GripVertical size={14} />
-            <span>Drag sessions into the workspace to arrange them.</span>
+            <span>Drag sessions into the workspace to arrange them. Favorites stay visible when their pod is collapsed.</span>
           </div>
         </>
       )}

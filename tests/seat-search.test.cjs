@@ -37,7 +37,7 @@ function load(file, dependencies = {}) {
   const exports = {};
   const source = fs.readFileSync(require.resolve(file), 'utf8');
   vm.runInNewContext(ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText, { exports, require: (id) => dependencies[id] || require(id) });
   return exports;
 }
@@ -51,14 +51,19 @@ const seats = Object.freeze([seat('a'), seat('b', { name: 'Bob', pod: 'Reviewers
   seat('c', { rigId: 'r2', name: 'Other' })]);
 
 // This harness checks actual element props and retained query state, not native DOM behavior.
+let sidebarInstance = 0;
 function sidebar(overrides = {}, context = preferences()) {
   const state = [];
+  const instance = ++sidebarInstance;
+  const refs = [];
+  let refCursor = 0;
   let cursor = 0;
   const calls = [];
   const action = (...args) => calls.push(args);
   const health = load('../src/inventory-health.ts');
   const Sidebar = load('../src/Sidebar.tsx', {
-    react: { useEffect() {}, useState(initial) {
+    react: { useEffect() {}, useId() { return `sidebar-${instance}`; },
+      useRef(initial) { const i = refCursor++; return refs[i] ||= { current: initial }; }, useState(initial) {
       const index = cursor++;
       if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
       return [state[index], (value) => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
@@ -66,6 +71,7 @@ function sidebar(overrides = {}, context = preferences()) {
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     './components': { ErrorBox: 'ErrorBox', IconButton: 'IconButton', StatusDot: 'StatusDot' },
     './inventory-health': health,
+    './seat-pods': load('../src/seat-pods.ts', { './seat-pins': load('../src/seat-pins.ts') }),
     './seat-status': load('../src/seat-status.ts'),
     './SettingsContext': { useSettings: () => context },
     // Baseline Sidebar does not import this module yet. Never manufacture a
@@ -83,13 +89,14 @@ function sidebar(overrides = {}, context = preferences()) {
     section: 'sessions', connection: { id: 'host', kind: 'ssh', name: 'Host' }, root: '~',
     inventory: { rigs: [], seats, sampledAt: new Date().toISOString() }, inventoryError: '',
     busy: false, selectedRig: 'r1', fileRevision: 0,
+    collapsedPods: [], podsAvailable: true, onTogglePod() {},
     pinnedSeats: [], pinsAvailable: true, onToggleSeatPin() {},
     ...Object.fromEntries(['onRig', 'onRefresh', 'onProject', 'onConnect', 'onManageRigs',
       'onSeat', 'onSeatBeside', 'onRelaunch', 'onDrag', 'onFile', 'onDiff'].map(key => [key, action])),
     ...overrides,
   };
   let tree;
-  const render = () => { cursor = 0; tree = Sidebar(props); return tree; };
+  const render = () => { cursor = 0; refCursor = 0; tree = Sidebar(props); return tree; };
   const nodes = () => {
     const result = [];
     function walk(node) {
@@ -124,6 +131,238 @@ function sidebar(overrides = {}, context = preferences()) {
       n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
   };
 }
+
+test('pod disclosure toggles actual owner state without hiding favorites', () => {
+  const pins = load('../src/seat-pins.ts');
+  const connection = { id: 'host', kind: 'ssh', name: 'Host' };
+  const favorite = seat('favorite', { name: 'Favorite' });
+  const ordinary = seat('ordinary', { name: 'Ordinary' });
+  let workspace = { connections: [connection], activeConnection: 'host',
+    pinnedSeats: [pins.seatPinIdentity(connection, favorite.id)], collapsedPods: [],
+    sidebarWidth: 321 };
+  let actualOnTogglePod;
+  const toggled = [];
+  const view = sidebar({ connection, inventory: { rigs: [], seats: [ordinary, favorite] },
+    pinnedSeats: workspace.pinnedSeats, collapsedPods: workspace.collapsedPods,
+    podsAvailable: true, onTogglePod(original) {
+      toggled.push(original);
+      actualOnTogglePod(original);
+      view.props.collapsedPods = workspace.collapsedPods;
+    } });
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite', 'ordinary']);
+  assert.equal(view.count(), 2);
+  const disclosure = action => view.nodes().find(node => node.type === 'button' &&
+    node.props['aria-label'] === `${action} pod Builders in rig RigNorth`);
+  const collapse = disclosure('Collapse');
+  assert.ok(collapse, 'Sidebar renders native Collapse pod Builders in rig RigNorth disclosure');
+
+  // Resolve future owner/helper seams only after the baseline behavior assertion:
+  // missing imports or callback setup must never masquerade as the intended RED.
+  const pods = load('../src/seat-pods.ts', { './seat-pins': pins });
+  const app = ts.createSourceFile('App.tsx', fs.readFileSync('src/App.tsx', 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const callbacks = [];
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.text === 'onTogglePod') {
+      callbacks.push(node.initializer.expression);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(app);
+  assert.equal(callbacks.length, 1, 'actual App pod callback exists uniquely');
+  const scope = { ...pins, ...pods, podsAvailable: true,
+    pinOwner: pins.pinConnectionIdentity(connection), local: connection,
+    setState(update) { workspace = update(workspace); } };
+  vm.runInNewContext(ts.transpileModule(`callback = (${callbacks[0].getText(app)});`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText, scope);
+  actualOnTogglePod = scope.callback;
+  const identity = pods.podIdentity(connection, ordinary);
+  const controlledId = collapse.props['aria-controls'];
+  const region = () => view.nodes().find(node => node.props?.id === controlledId);
+  assert.equal(collapse.props.type, 'button');
+  assert.equal(collapse.props.title, 'Collapse pod Builders in rig RigNorth');
+  assert.equal(collapse.props['aria-expanded'], true);
+  assert.equal(collapse.props.disabled, false);
+  assert.equal(typeof controlledId, 'string');
+  assert.ok(region(), 'expanded disclosure controls a mounted container');
+  assert.ok(textOf(region()).includes('Ordinary'));
+  assert.equal(textOf(region()).includes('Favorite'), false, 'favorite is outside controlled rows');
+  collapse.props.onClick();
+  view.render();
+  assert.deepEqual(Array.from(workspace.collapsedPods), [identity]);
+  assert.equal(workspace.sidebarWidth, 321);
+  assert.equal(disclosure('Expand').props['aria-expanded'], false);
+  assert.equal(disclosure('Expand').props['aria-controls'], controlledId);
+  assert.ok(region(), 'collapsed disclosure keeps its controlled container mounted');
+  assert.equal(textOf(region()), '', 'collapsed row actions are not rendered');
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite']);
+  assert.equal(view.count(), 2, 'matched count includes collapsed rows');
+  disclosure('Expand').props.onClick();
+  view.render();
+  assert.deepEqual(Array.from(workspace.collapsedPods), []);
+  assert.equal(disclosure('Collapse').props['aria-expanded'], true);
+  assert.equal(disclosure('Collapse').props['aria-controls'], controlledId);
+  assert.deepEqual(view.rows().map(row => row.key), ['favorite', 'ordinary']);
+  assert.equal(view.count(), 2);
+  assert.deepEqual(toggled, [ordinary, ordinary]);
+  assert.deepEqual(view.calls, [], 'pod disclosure never invokes existing host actions');
+});
+
+test('pod controls keep unique opaque IDs across instances toggle filter disappearance and reorder', () => {
+  const first = seat('first', { name: 'A', pod: 'One' });
+  const second = seat('second', { name: 'B', pod: 'Two' });
+  const view = sidebar({ inventory: { rigs: [], seats: [first, second] } });
+  const controls = v => v.nodes().filter(n => n.props?.className === 'pod-disclosure');
+  const before = controls(view).map(n => n.props['aria-controls']);
+  assert.equal(new Set(before).size, 2);
+  const other = sidebar({ inventory: { rigs: [], seats: [first, second] } });
+  assert.ok(controls(other).every(n => !before.includes(n.props['aria-controls'])));
+  for (const id of before) {
+    assert.equal(id.includes('host'), false);
+    assert.equal(id.includes('One'), false);
+    assert.equal(id.includes('r1'), false);
+    assert.ok(view.nodes().some(n => n.props?.id === id));
+  }
+  const pods = load('../src/seat-pods.ts', { './seat-pins': load('../src/seat-pins.ts') });
+  view.props.collapsedPods = [pods.podIdentity(view.props.connection, first)];
+  view.render();
+  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), before);
+  assert.deepEqual(view.rows().map(n => n.key), ['second']);
+  view.query('B');
+  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), [before[1]]);
+  view.query('');
+  view.props.inventory = { rigs: [], seats: [seat('first', { name: 'Z', pod: 'One' }), second] };
+  view.render();
+  assert.deepEqual(controls(view).map(n => n.props['aria-controls']), [before[1], before[0]]);
+  assert.equal(controls(view)[1].props['aria-expanded'], false);
+});
+
+test('pod native disclosure counts hidden matches and withholds foreign membership without weakening host guards', () => {
+  const long = 'Long:[] '.repeat(100);
+  const ordinary = seat('one', { rigName: long, pod: long });
+  const pods = load('../src/seat-pods.ts', { './seat-pins': load('../src/seat-pins.ts') });
+  const calls = [];
+  const view = sidebar({ inventory: { rigs: [], seats: [ordinary] }, onTogglePod: s => calls.push(s) });
+  const control = () => view.nodes().find(n => n.props?.className === 'pod-disclosure');
+  const label = `Collapse pod ${long} in rig ${long}`;
+  assert.equal(control().props['aria-label'], label);
+  assert.equal(control().props.title, label);
+  assert.equal(control().props.onKeyDown, undefined, 'native button owns keyboard activation');
+  assert.ok(textOf(view.nodes().find(n => n.props?.id === control().props['aria-describedby']))
+    .includes('1 matching unpinned session.'));
+  for (const error of [view.health.CHECKING_SNAPSHOT, 'Disconnected']) {
+    view.props.inventoryError = error; view.render();
+    assert.equal(control().props.disabled, false);
+    control().props.onClick();
+    assert.equal(view.rows()[0].props.children[0].props.disabled, true);
+    assert.equal(view.rows()[0].props.children[0].props.draggable, false);
+    assert.equal(beside(view.rows()[0]).props.disabled, true);
+    assert.equal(relaunch(view.rows()[0]).props.disabled, true);
+  }
+  assert.deepEqual(calls, [ordinary, ordinary]);
+  view.props.collapsedPods = [pods.podIdentity(view.props.connection, ordinary)];
+  view.render();
+  assert.equal(view.rows().length, 0);
+  assert.equal(view.count(), 1);
+  assert.equal(control().props['aria-expanded'], false);
+  view.props.podsAvailable = false; view.render();
+  assert.equal(control().props['aria-expanded'], true);
+  assert.equal(control().props.disabled, true);
+  assert.equal(view.rows().length, 1);
+  control().props.onClick();
+  assert.equal(calls.length, 2);
+  assert.ok(textOf(view.nodes().find(n => n.props?.id === control().props['aria-describedby']))
+    .includes('Pod controls unavailable while this snapshot belongs to another connection.'));
+  assert.deepEqual(view.calls, []);
+});
+
+test('pod groups preserve selected-sort ties original actions and stable adjacency in every mode', () => {
+  const a = seat('a', { name: 'Same', pod: 'One', status: 'idle' });
+  const b = seat('b', { name: 'Same', pod: 'Two', status: 'idle' });
+  const c = seat('c', { name: 'Same', pod: 'One', status: 'idle' });
+  const view = sidebar({ inventory: { rigs: [], seats: Object.freeze([a, b, c]) } });
+  for (const mode of ['name', 'activity', 'attention-first']) {
+    view.sort(mode);
+    assert.deepEqual(view.rows().map(n => n.key), ['a', 'c', 'b']);
+    assert.equal(view.count(), 3);
+    const groups = view.nodes().filter(n => n.props?.className === 'pod-group');
+    assert.equal(groups.length, 2);
+    for (const group of groups) {
+      const children = group.props.children;
+      const button = children[0], content = children[2];
+      assert.equal(button.type, 'button');
+      assert.equal(button.props.type, 'button');
+      assert.equal(button.props['aria-controls'], content.props.id);
+      assert.equal(content.props.className, 'pod-content');
+    }
+    view.rows().forEach((row, i) => {
+      row.props.children[0].props.onClick();
+      assert.equal(view.calls.pop()[0], [a, c, b][i]);
+    });
+  }
+  assert.deepEqual(view.calls, []);
+});
+
+test('all collapsed and pin transitions retain counts choices and mounted empty regions across filtering', () => {
+  const pins = load('../src/seat-pins.ts');
+  const pods = load('../src/seat-pods.ts', { './seat-pins': pins });
+  const a = seat('a', { name: 'Alpha', pod: 'One', status: 'working' });
+  const b = seat('b', { name: 'Beta', pod: 'Two', status: 'idle' });
+  const view = sidebar({ inventory: { rigs: [], seats: [a, b] } });
+  const saved = Object.freeze([pods.podIdentity(view.props.connection, a),
+    pods.podIdentity(view.props.connection, b)]);
+  const controls = () => view.nodes().filter(n => n.props?.className === 'pod-disclosure');
+  view.props.collapsedPods = saved; view.render();
+  const ids = controls().map(n => n.props['aria-controls']);
+  assert.equal(view.count(), 2);
+  assert.equal(view.rows().length, 0);
+  assert.equal(controls().length, 2);
+  assert.ok(controls().every(n => n.props['aria-expanded'] === false));
+  for (const id of ids) assert.equal(view.nodes().find(n => n.props?.id === id).props.children, false);
+  assert.ok(!view.nodes().some(n => textOf(n) === 'No matching sessions'));
+  view.props.pinnedSeats = [pins.seatPinIdentity(view.props.connection, a.id)]; view.render();
+  assert.deepEqual(view.rows().map(n => n.key), ['a']);
+  assert.equal(controls().length, 1);
+  view.props.pinnedSeats = [a, b].map(s => pins.seatPinIdentity(view.props.connection, s.id)); view.render();
+  assert.deepEqual(view.rows().map(n => n.key), ['a', 'b']);
+  assert.equal(controls().length, 0);
+  view.query('Alpha'); view.status('idle');
+  assert.equal(view.count(), 0);
+  assert.equal(view.rows().length, 0, 'filtered-out favorites stay absent');
+  assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).includes('No matching sessions')));
+  view.query(''); view.status('all'); view.props.pinnedSeats = []; view.render();
+  assert.equal(view.rows().length, 0);
+  assert.deepEqual(controls().map(n => n.props['aria-controls']), ids);
+  assert.equal(view.props.collapsedPods, saved);
+  view.props.inventory = { rigs: [], seats: [] }; view.props.busy = true; view.render();
+  assert.equal(controls().length, 0);
+  assert.ok(view.nodes().some(n => textOf(n) === 'Discovering seats…'));
+  view.props.busy = false; view.render();
+  assert.ok(view.nodes().some(n => textOf(n) === 'No seats yet'));
+  view.props.inventory = { rigs: [], seats: [a, b] }; view.render();
+  assert.deepEqual(controls().map(n => n.props['aria-controls']), ids);
+  assert.equal(view.count(), 2);
+  assert.deepEqual(view.calls, []);
+});
+
+test('partial pod labels separate empty literal and tagged rig fallback with truthful plural counts', () => {
+  const input = [seat('empty', { rigId: '', rigName: '', pod: '' }),
+    seat('literal', { rigId: '', rigName: '', pod: 'Ungrouped' }),
+    seat('id', { rigId: 'x', rigName: '', pod: '' }),
+    seat('name', { rigId: '', rigName: 'x', pod: '' }),
+    seat('name2', { rigId: '', rigName: 'x', pod: '' })];
+  const view = sidebar({ selectedRig: '', inventory: { rigs: [], seats: input } });
+  const controls = view.nodes().filter(n => n.props?.className === 'pod-disclosure');
+  assert.equal(controls.length, 4);
+  assert.equal(new Set(controls.map(n => n.props['aria-controls'])).size, 4);
+  assert.equal(controls.filter(n => n.props['aria-label'] === 'Collapse pod Ungrouped in rig Unknown rig').length, 2);
+  assert.equal(view.count(), 5);
+  const descriptions = controls.map(n => textOf(view.nodes().find(d => d.props?.id === n.props['aria-describedby'])));
+  assert.equal(descriptions.filter(t => t.includes('1 matching unpinned session.')).length, 3);
+  assert.equal(descriptions.filter(t => t.includes('2 matching unpinned sessions.')).length, 1);
+  assert.deepEqual(view.rows().map(n => n.key).sort(), input.map(s => s.id).sort());
+});
 
 test('Sidebar native pin control reversibly orders rows through its local callback without host actions', () => {
   const toggled = [];
@@ -288,12 +527,12 @@ test('Sidebar pin partition preserves equal names across rigs and each sort/filt
     check(expected[mode]);
     view.props.pinnedSeats = [];
     view.render();
-    check(mode === 'name' ? [first, second, attention] :
+    check(mode === 'name' ? [first, attention, second] :
       mode === 'activity' ? [second, attention, first] : [attention, first, second]);
     view.props.pinnedSeats = [seatPinIdentity(view.props.connection, second.id)];
     view.render();
     view.props.connection = { ...view.props.connection, host: 'other' }; view.render();
-    check(mode === 'name' ? [first, second, attention] :
+    check(mode === 'name' ? [first, attention, second] :
       mode === 'activity' ? [second, attention, first] : [attention, first, second]);
     assert.ok(view.rows().every(row => row.props.children[1].props['aria-pressed'] === false));
     view.props.connection = { id: 'host', kind: 'ssh', name: 'Renamed', root: '/new' };
@@ -348,7 +587,7 @@ const sortInventory = Object.freeze([
 const sortRows = {
   name: ['other-query', 'running', 'attention', 'idle', 'working'],
   activity: ['other-query', 'working', 'running', 'attention', 'idle'],
-  'attention-first': ['attention', 'other-query', 'running', 'idle', 'working'],
+  'attention-first': ['attention', 'running', 'idle', 'working', 'other-query'],
 };
 
 test('Sidebar sort select offers three effective choices and orders actual rows without actions', () => {

@@ -72,6 +72,7 @@ export interface WorkspaceState {
   savedLayouts: SavedLayout[];
   projectHistory?: import("./project-history").RecentProject[];
   pinnedSeats?: string[];
+  collapsedPods?: string[];
   sidebarWidth?: number;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;
