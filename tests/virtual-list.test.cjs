@@ -162,13 +162,13 @@ test('real pure geometry exports normalize empty one and nonfinite inputs withou
 
 // Task 2 uses the same real nested component renderer and controlled DOM. Events
 // explicitly supply bubbling targets; the helper does not invent browser Tab.
-function nativeList() {
+function nativeList(groupRow) {
   const calls = [];
   const rows = Object.freeze(Array.from({ length: 200 }, (_, id) => Object.freeze({ id })));
   const element = (type, props) => ({ type, props });
   const h = mountComponent('src/VirtualList.tsx', 'VirtualList', {
     rows, itemKey: row => `native-${row.id}`, label: 'Synthetic native actions', scopeKey: 'owner-a',
-    estimateHeight: 55,
+    estimateHeight: 55, groupRow,
     renderRow: row => element('div', {
       'data-row-id': row.id,
       children: [0, 1].map(action => element('button', {
@@ -189,6 +189,31 @@ function nativeList() {
   const focus = node => { node.focus(); h.event(viewport(), 'onFocusCapture', { target: node }); };
   return { ...h, calls, rows, viewport, mounted, row, controls, key, scroll, focus };
 }
+
+test('optional group preserves measured roots and geometry across sparse gaps', () => {
+  const h = nativeList(() => ({ key: 'owner-a/pod', label: 'Synthetic pod', className: 'synthetic-group' }));
+  const group = () => h.nodes().find(n => n.props.role === 'group');
+  assert.ok(group(), 'optional grouping creates an actual parent');
+  const parent = group(), row = h.row(2), control = h.controls(2)[0];
+  h.focus(control);
+  h.resize(row, 88);
+  for (const top of [165, 5500, 8000, 0]) {
+    h.scroll(top);
+    assert.equal(group(), parent);
+    assert.equal(h.row(2), row);
+    assert.equal(h.controls(2)[0], control);
+    assert.ok(h.mounted().length <= 16);
+  }
+  h.resize(h.viewport(), 165, 320);
+  assert.equal(h.row(2), row);
+  h.resize(h.viewport(), 0);
+  assert.equal(h.controls(2)[0], control);
+  h.update({ rows: h.rows.filter(r => r.id !== 2) });
+  assert.equal(h.document.activeElement, h.viewport());
+  h.update({ scopeKey: 'owner-b' });
+  assert.notEqual(group(), parent);
+  h.unmount();
+});
 
 function disabledRun() {
   const calls = [], rows = Array.from({ length: 2000 }, (_, id) => ({ id }));
