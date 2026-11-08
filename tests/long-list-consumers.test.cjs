@@ -83,7 +83,7 @@ test('Sidebar pod group contains multiple actual seats once and retains separate
   focused.focus();
   view.event(list, 'onFocusCapture', { target: focused });
   view.event(list, 'onDragStartCapture', { target: dragged });
-  for (const top of [165, 5500, 8000, 165, 0]) {
+  for (const top of [165, 5500, 8250, 165, 0]) {
     scroll(view, list, top);
     assert.equal(groups()[0], parent, 'pod parent stays stable across sparse gaps and merges');
     for (const node of [focusedRow, draggedRow, focused, dragged]) assert.ok(view.nodes().includes(node), 'retained native identity');
@@ -94,7 +94,7 @@ test('Sidebar pod group contains multiple actual seats once and retains separate
   const event = view.event(dragged, 'onDragStart');
   assert.equal(view.calls[0][1], event);
   assert.equal(view.calls[0][2], items[4]);
-  scroll(view, list, 8000);
+  scroll(view, list, 8250);
   list.focus(); view.event(list, 'onBlurCapture'); view.event(list, 'onDragEndCapture');
   assert.ok(!view.nodes().includes(focused) && !view.nodes().includes(dragged));
   view.unmount();

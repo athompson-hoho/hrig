@@ -311,9 +311,7 @@ export default function Sidebar({
       sessionRows.push({ key: JSON.stringify([owner, "seat", group.identity, seat.id]), group, seat });
   }
   const renderSession = (row: SessionRow) => {
-    if (row.seat) return row.group
-      ? <div className="pod-content" role="group" aria-label={`${row.group.podLabel} · ${row.group.rigLabel}`}>{renderSeat(row.seat)}</div>
-      : renderSeat(row.seat);
+    if (row.seat) return renderSeat(row.seat);
     const group = row.group;
     if (!podTokens.current.has(group.identity))
       podTokens.current.set(group.identity, podTokens.current.size);
@@ -566,6 +564,10 @@ export default function Sidebar({
               </div>
             ) : seats.length ? (
               <VirtualList rows={sessionRows} itemKey={row => row.key} renderRow={renderSession}
+                groupRow={row => row.seat && row.group ? {
+                  key: JSON.stringify([owner, row.group.identity]),
+                  label: `${row.group.podLabel} · ${row.group.rigLabel}`, className: "pod-content",
+                } : undefined}
                 label="Sessions" scopeKey={owner} className="sidebar-session-viewport" />
             ) : (
               <div className="connection-empty">

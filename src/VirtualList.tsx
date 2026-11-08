@@ -6,6 +6,8 @@ type Props<T> = {
   rows: readonly T[];
   itemKey: (row: T, index: number) => string;
   renderRow: (row: T, index: number) => ReactElement<any>;
+  // Source groups must be contiguous; only globally selected rows create DOM.
+  groupRow?: (row: T, index: number) => { key: string; label: string; className?: string } | undefined;
   label: string;
   scopeKey: string;
   estimateHeight?: number;
@@ -58,7 +60,7 @@ export function VirtualList<T>(props: Props<T>) {
   return <Viewport key={props.scopeKey} {...props} restore={restore} />;
 }
 
-function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, maxHeight = 330, className, restore }: Props<T> & { restore: { current: Element | null } }) {
+function Viewport<T>({ rows, itemKey, renderRow, groupRow, label, estimateHeight = 55, maxHeight = 330, className, restore }: Props<T> & { restore: { current: Element | null } }) {
   const viewport = useRef<HTMLDivElement | null>(null);
   const sizes = useRef(new Map<string, number>());
   const [, changed] = useState(0);
@@ -199,10 +201,12 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
   const spacer = (key: string, height: number) => height > 0
     ? <div key={key} aria-hidden="true" style={{ height, pointerEvents: "none" }} /> : null;
   let previousEnd = 0;
+  const grouped: ReactElement<any>[] = [];
+  const parents = new Map<string, ReactElement<any>[]>();
   const rendered = indices.flatMap(index => {
     const key = keys[index], before = spacer(`gap-${key}`, offsets[index] - offsets[previousEnd]);
     previousEnd = index + 1;
-    return [before, <MeasuredRow key={key} element={renderRow(rows[index], index)} register={node => {
+    const measured = <MeasuredRow key={key} element={renderRow(rows[index], index)} register={node => {
       if (node) nodes.current.set(key, node); else nodes.current.delete(key);
     }} onSize={height => {
       if (!currentKeys.has(key) || !Number.isFinite(height) || height <= 0 || sizes.current.get(key) === height) return;
@@ -210,7 +214,21 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
       sizes.current.set(key, height);
       if (index < range.visibleStart) setGeometry(old => ({ ...old, top: old.top + height - oldHeight }));
       changed(value => value + 1);
-    }} />];
+    }} />;
+    if (!groupRow) return [before, measured];
+    const group = groupRow(rows[index], index);
+    if (!group) { grouped.push(...[before, measured].filter((node): node is ReactElement<any> => node !== null)); return []; }
+    let children = parents.get(group.key);
+    if (!children) {
+      children = [];
+      parents.set(group.key, children);
+      grouped.push(<div key={`group-${group.key}`} role="group" aria-label={group.label} className={group.className}>{children}</div>);
+    }
+    // Keep sparse gaps inside the same stable parent as retained measured rows.
+    // Splitting runs would reparent and remount focused or dragged native roots.
+    if (before) children.push(before);
+    children.push(measured);
+    return [];
   });
   return <div ref={viewport} className={`virtual-list ${className || ""}`} role="region" aria-label={label} aria-describedby={help} tabIndex={0}
     style={{ maxHeight, overflow: "auto", overflowAnchor: "none" }}
@@ -261,7 +279,7 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
     }}>
     <span id={help} className="virtual-list-help">Focus the list to use Arrow keys, Page Up/Down, Home or End. Tab moves through row actions.</span>
     <span className="virtual-list-help" aria-live="polite">{position}</span>
-    {rendered}
+    {groupRow ? grouped : rendered}
     {rows.length > 0 && spacer("after", offsets[rows.length] - offsets[previousEnd])}
   </div>;
 }
