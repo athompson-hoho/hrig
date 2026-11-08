@@ -30,6 +30,37 @@ function sidebar(items, rigs = [], overrides = {}, options = {}) {
 const classNodes = (view, name) => view.nodes().filter(n => n.props.className?.split(' ').includes(name));
 const seatRows = view => classNodes(view, 'session-row');
 const disclosureRows = view => classNodes(view, 'pod-disclosure');
+
+test('Sidebar disclosure names real pod content without false empty control relationships', () => {
+  const original = seat(0);
+  const view = sidebar([original]);
+  const list = viewport(view, 'Sessions');
+  const disclosure = disclosureRows(view)[0];
+  assert.equal(disclosure.props['aria-expanded'], true);
+  assert.equal(disclosure.props['aria-controls'], undefined,
+    'optional controls is omitted instead of pointing at an unrelated empty placeholder');
+  const content = classNodes(view, 'pod-content');
+  assert.equal(content.length, 1, 'only the actual mounted seat segment is represented');
+  assert.equal(content[0].props.role, 'group');
+  assert.equal(content[0].props['aria-label'], 'Builders · Rig 0');
+  assert.ok(content[0].contains(classNodes(view, 'seat-row')[0]), 'named group contains the actual seat action');
+  const description = view.nodes().find(n => n.props.id === disclosure.props['aria-describedby']);
+  assert.ok(view.text(description).includes('1 matching unpinned session.'));
+  view.event(disclosure, 'onClick');
+  assert.deepEqual(view.calls, [['onTogglePod', original]], 'only the explicit disclosure callback runs');
+  view.update({ collapsedPods: [JSON.stringify([connection.id, connection.kind,
+    null, null, null, null, 'rigId', original.rigId, original.pod])] });
+  assert.equal(disclosureRows(view)[0].props['aria-expanded'], false);
+  assert.equal(classNodes(view, 'pod-content').length, 0, 'collapsed content is actually absent');
+  assert.equal(sessionCount(view), 1);
+  view.update({ collapsedPods: [] });
+  assert.equal(disclosureRows(view)[0].props['aria-expanded'], true);
+  assert.equal(seatRows(view).length, 1);
+  assert.equal(classNodes(view, 'pod-content')[0].props.role, 'group');
+  assert.equal(list.props.role, 'region');
+  assert.deepEqual(view.calls, [['onTogglePod', original]], 'restoration/navigation adds no host effect');
+  view.unmount();
+});
 function sessionCount(view) {
   const heading = classNodes(view, 'section-label').find(n => view.text(n).startsWith('SESSIONS'));
   return Number(view.text(heading.children.find(n => n.props?.className === 'count')));

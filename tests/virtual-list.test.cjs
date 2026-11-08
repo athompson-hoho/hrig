@@ -7,6 +7,19 @@ const matches = Object.freeze(Array.from({ length: 200 }, (_, i) => Object.freez
   path: `/synthetic/結果-${i}.ts`, line: i + 1, text: `Synthetic match ${i} — λ`,
 })));
 
+test('actual named search viewport exposes a semantic region with reachable help', async () => {
+  const h = project(Object.freeze([matches[0]]));
+  await h.search();
+  const list = h.nodes().find(n => n.props['aria-label'] === 'Project search results');
+  assert.equal(list.props.role, 'region', 'the named viewport permits an accessible name');
+  assert.equal(list.props.tabIndex, 0);
+  const help = h.nodes().find(n => n.props.id === list.props['aria-describedby']);
+  assert.ok(help && h.text(help).includes('Page'), 'viewport help resolves to actual navigation guidance');
+  assert.equal(h.rows().length, 1);
+  assert.deepEqual(h.opened, []);
+  h.unmount();
+});
+
 function project(results = matches, geometry = {}) {
   const calls = [], opened = [];
   const h = mountComponent('src/WorkbenchPanels.tsx', 'ProjectTools', {
