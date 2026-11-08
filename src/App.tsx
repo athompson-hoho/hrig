@@ -129,6 +129,8 @@ import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
+import ShortcutSheet from "./ShortcutSheet";
+import { hasOpenDialog, isHelpKey } from "./shortcuts";
 import { filterCommands, pickFirst } from "./palette";
 import {
   recentKey,
@@ -181,6 +183,7 @@ type ModalKind =
   | "palette"
   | "guide"
   | "tools"
+  | "shortcuts"
   | null;
 type PendingAction = {
   title: string;
@@ -1682,6 +1685,11 @@ export default function App() {
     window.focus();
     setModal("panels");
   };
+  const openShortcuts = () => {
+    projectIntent.current++;
+    window.focus();
+    setModal("shortcuts");
+  };
   const terminalTabs = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken);
   const terminalCommands = terminalTabs.flatMap(t => {
     const config = t.config as PanelConfig;
@@ -1885,6 +1893,13 @@ export default function App() {
       if (event.defaultPrevented || event.isComposing || event.altKey) return;
       // The focused terminal owns its clear shortcut; leave the key untouched.
       if (terminalOwnsKey(event, window.hrig.platform, event.target)) return;
+      // A bare ? outside fields, the editor and terminals opens the shortcut sheet.
+      if (isHelpKey(event, event.target, modal !== null || hasOpenDialog(event.target))) {
+        event.preventDefault();
+        event.stopPropagation();
+        openShortcuts();
+        return;
+      }
       if (event.ctrlKey || event.metaKey) {
         if (
           [",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) ||
@@ -3049,6 +3064,9 @@ export default function App() {
               ))}
             </div>
           </Modal>
+        )}
+        {modal === "shortcuts" && (
+          <ShortcutSheet platform={window.hrig.platform} onClose={() => setModal(null)} />
         )}
         {modal === "guide" && (
           <Modal
