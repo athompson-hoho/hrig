@@ -17,6 +17,7 @@ import {
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { filterSeats } from "./seat-search";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -220,14 +221,7 @@ export default function Sidebar({
     };
   }, [section, connection.id, root, fileRevision, gitRevision]);
   const rigs = inventory?.rigs || [];
-  const seats = (inventory?.seats || []).filter(
-    (s) =>
-      (!selectedRig || s.rigId === selectedRig) &&
-      (!query ||
-        `${s.name} ${s.rigName} ${s.runtime}`
-          .toLowerCase()
-          .includes(query.toLowerCase())),
-  );
+  const { seats, noMatches } = filterSeats(inventory?.seats || [], selectedRig, query);
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -413,6 +407,11 @@ export default function Sidebar({
                 <button className="small-button" onClick={onConnect}>
                   Connection settings
                 </button>
+              </div>
+            ) : noMatches ? (
+              <div className="sidebar-empty" role="status">
+                <strong>No matching sessions</strong>
+                <p>Try another search or clear the filter.</p>
               </div>
             ) : seats.length ? (
               seats.map((s) => (
