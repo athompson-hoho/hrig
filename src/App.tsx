@@ -126,6 +126,7 @@ import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
+import { terminalOwnsKey } from "./terminal-keys";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -1801,6 +1802,8 @@ export default function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey) return;
+      // The focused terminal owns its clear shortcut; leave the key untouched.
+      if (terminalOwnsKey(event, window.hrig.platform, event.target)) return;
       if (event.ctrlKey || event.metaKey) {
         if (
           [",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) ||

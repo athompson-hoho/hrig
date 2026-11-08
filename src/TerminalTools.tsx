@@ -88,7 +88,10 @@ export default function TerminalTools({
         event.preventDefault();
         if (action === "find") show();
         else if (action === "paste") void paste();
-        else void copySelection();
+        else if (action === "clear") {
+          term.clear();
+          term.focus();
+        } else void copySelection();
       }
       return false;
     });
