@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -115,6 +115,7 @@ export function AttentionPanel({
   const [error, setError] = useState("");
   const [refusal, setRefusal] = useState("");
   const [blockedOwner, setBlockedOwner] = useState("");
+  const descriptionId = useId();
   const owner = pinConnectionIdentity(connection);
   useEffect(() => {
     let active = true;
@@ -151,35 +152,37 @@ export function AttentionPanel({
   const context = (seat: Seat) => `${seat.name || "Seat name unavailable"} · ${seat.rigName || seat.rigId || "Rig unavailable"} · ${seat.pod || "Pod unavailable"} · ${connection.name}`;
   const row = (seat: Seat, index: number, diagnostic = false) => {
     const reason = !scope.ready ? scope.reason : attentionJumpEligibility(inventory, seat, diagnostic);
+    const reasonId = `${descriptionId}-${diagnostic ? "problem" : "input"}-${index}`;
     return <div className="attention-row attention-inbox-row" key={`${seat.id}:${index}`}>
       <StatusDot status={diagnostic ? "failed" : "attention"} />
       <section><strong>{context(seat)}</strong>
         <p>{diagnostic ? "Failed" : "Needs input"} · Session: {seat.session || "unavailable"}</p>
         {seat.error && <p>{seat.error}</p>}
-        {reason && <p>{reason}</p>}
+        {reason && <p id={reasonId}>{reason}</p>}
       </section>
-      <button className="small-button" disabled={!!reason} aria-label={`${diagnostic ? "Open" : "Jump to"} ${context(seat)}`}
+      <button className="small-button" disabled={!!reason} aria-describedby={reason ? reasonId : undefined}
+        aria-label={`${diagnostic ? "Open" : "Jump to"} ${seat.name || "Seat name unavailable"} in ${seat.rigName || seat.rigId || "Rig unavailable"}, pod ${seat.pod || "Pod unavailable"}, on ${connection.name}`}
         onClick={() => setRefusal(onSeat(seat, diagnostic) || "")}>{diagnostic ? "Open seat →" : "Jump to seat →"}</button>
     </div>;
   };
   return <div className="tool-panel attention-inbox">
     <div className="tool-panel-heading"><AlertCircle /><div>
-      <h3>Needs your attention</h3><p>{connection.name} · {connection.kind} · {connection.host || connection.distro || "Local desktop"}</p>
+      <h3>Needs your attention</h3><p>{connection.name} · {connection.kind} · {connection.host || connection.distro || "Local desktop"} · represented inventory only</p>
     </div></div>
     <label className="checkbox-label"><input type="checkbox" checked={notifications}
       onChange={(e) => onNotifications(e.target.checked)} />Windows notifications when a seat newly needs input</label>
     <p>{scope.reason}</p>
     {refusal && <ErrorBox error={refusal} />}
     <h4>{inventory && !scope.ready ? "Last known needs input" : "Needs input"}{inventory ? ` (${seats.length})` : ""}</h4>
-    {inventory && scope.ready && !seats.length && <Empty icon={<Check size={28} />} title="No seats need input" description="No represented seats need input on this connection." />}
+    {inventory && scope.ready && !seats.length && <Empty icon={<Check size={28} />} title="No seats need input" description={`No seats in the represented inventory for ${connection.name} are marked as needing input. Sidebar filters do not hide seats here.`} />}
     {seats.map((seat, index) => row(seat, index))}
     <h4>Seat problems</h4>
-    {inventory && !problems.length && <p>No failed seat diagnostics.</p>}
+    {inventory && !problems.length && <p>No failed-seat diagnostics in the available represented inventory.</p>}
     {problems.map((seat, index) => row(seat, index, true))}
     <h4>Blocked work</h4>
-    {ownedError && <ErrorBox error={`${connection.name}: ${ownedError}`} />}
+    {ownedError && <ErrorBox error={`Could not load blocked work for ${connection.name}: ${ownedError}. Check this connection using the existing connection controls.`} />}
     {ownedBlocked === null && !ownedError && <Loading text="Checking blocked work" />}
-    {ownedBlocked !== null && !ownedBlocked.length && !ownedError && <p>No blocked work.</p>}
+    {ownedBlocked !== null && !ownedBlocked.length && !ownedError && <p>{`No blocked or failed work was reported for ${connection.name}.`}</p>}
     {(ownedBlocked || []).map((item, index) => <div className="attention-row" key={`${String(item.id)}:${index}`}>
       <StatusDot status="attention" /><section><strong>{String(item.title || "Work title unavailable")}</strong>
       <p>{String(item.destination || "Destination unavailable")} · {String(item.status)}</p></section>

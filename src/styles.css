@@ -4338,3 +4338,7 @@ button:hover {
 .attention-inbox-row .small-button { white-space: normal; color: var(--color-a3c1ae); }
 .attention-inbox p { overflow-wrap: anywhere; }
 .attention-inbox h4 { font-size: 12px; font-weight: 500; }
+.attention-inbox > p { font-size: 11px; font-weight: 400; line-height: 1.8; }
+.attention-inbox > h4 { margin: 16px 0 8px; }
+.attention-inbox .tool-panel-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.attention-inbox .attention-row section { min-width: 0; overflow-wrap: anywhere; }

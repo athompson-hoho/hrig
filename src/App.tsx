@@ -1117,12 +1117,12 @@ export default function App() {
         pinConnectionIdentity(config.connection) !== pinConnectionIdentity(current) ||
         config.terminalId !== id || config.seat?.id !== seat.id || config.seat?.session !== seat.session ||
         !node.getDocument?.() || !node.getWindow?.() || node.getWindow()?.closed)
-        return "Existing target cannot be safely focused. Existing terminal preserved.";
+        return "Jump is unavailable because an existing terminal belongs to a different or unverified target, or cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window, its connection and session before trying again.";
       latest.focusPanel(id);
     } else latest.openSeat(scope.inventory!.seats.find((row) => row.id === seat.id)!);
     return "";
     } catch {
-      return "Existing target cannot be safely focused. Existing terminal preserved.";
+      return "This terminal cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window before trying again.";
     }
   };
   const movePanel = (id: string, target: string, direction: string) => {

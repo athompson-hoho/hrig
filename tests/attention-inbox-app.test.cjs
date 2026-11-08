@@ -42,13 +42,16 @@ const pins = load("src/seat-pins.ts");
 const helpers = { ...pins, ...load("src/attention-inbox.ts", { "./seat-pins": pins }) };
 const host = { id: "host", name: "Host", kind: "ssh", host: "server", root: "~" };
 const seat = { id: "rig:seat", name: "Builder", rigId: "rig", rigName: "Rig", pod: "Workers", status: "attention", session: "session" };
+let nextPanelId = 0;
 function harness(authority = {}) {
+  const panelId = `attention-test-${nextPanelId++}`;
   const inventory = { seats: [seat], rigs: [], sampledAt: "now" };
   const panels = source("src/WorkbenchPanels.tsx");
   const panel = find(panels, n => ts.isFunctionDeclaration(n) && n.name?.text === "AttentionPanel");
   const effects = [];
   const states = []; let cursor = 0; let pendingEffect; let cleanup; let deps;
   const component = evaluate(panel, panels, { React, ...helpers, ...authority,
+    useId: () => panelId,
     useState: value => { const i = cursor++; if (!(i in states)) states[i] = value; return [states[i], v => { states[i] = v; }]; },
     useEffect: (fn, next) => { if (JSON.stringify(deps) !== JSON.stringify(next)) { deps = next; pendingEffect = fn; } },
     AlertCircle: "AlertCircle", StatusDot: "StatusDot", ErrorBox: "ErrorBox", Loading: "Loading", Empty: "Empty", Check: "Check" });
@@ -112,6 +115,24 @@ if (require.main === module) test("actual callback uses latest model/actions and
   }
 });
 module.exports = { harness, host, seat, helpers, flatten };
+
+if (require.main === module) test('disabled duplicate Jump controls describe their own visible reasons across panels', () => {
+  const ids = [];
+  for (const h of [harness(), harness()]) {
+    h.scope.inventory = { seats: [{ ...seat, session: null }, { ...seat, session: null }] };
+    const tree = flatten(h.render());
+    for (const button of tree.filter(n => n?.type === 'button')) {
+      assert.equal(button.props.disabled, true);
+      const id = button.props['aria-describedby'];
+      assert.ok(id, 'disabled Jump associates its visible reason');
+      const reasons = tree.filter(n => n?.props?.id === id);
+      assert.equal(reasons.length, 1);
+      assert.match(flatten(reasons[0].props.children).join(''), /no attachable.*session/i);
+      ids.push(id);
+    }
+  }
+  assert.equal(new Set(ids).size, 4, 'descriptions do not collide across duplicate rows or panels');
+});
 
 if (require.main === module) test('actual panel reports owned missing inventory error without loading or empty claim', () => {
   const h = harness(); h.scope.inventory = null; h.scope.inventoryError = 'offline';
@@ -191,7 +212,7 @@ if (require.main === module) test('owned empty inventory has separate inbox and 
   const h = harness(); h.scope.inventory = { seats: [] };
   const tree = flatten(h.render());
   assert.ok(tree.some(n => n?.props?.title === 'No seats need input'));
-  assert.ok(tree.includes('No failed seat diagnostics.'));
+  assert.ok(tree.includes('No failed-seat diagnostics in the available represented inventory.'));
 });
 if (require.main === module) test('queue rows suppress before raw owner effect and late responses cannot cross owners', async () => {
   const requests = [], timers = [], cleared = [];
@@ -208,6 +229,6 @@ if (require.main === module) test('queue rows suppress before raw owner effect a
   await Promise.resolve(); await Promise.resolve();
   assert.ok(!flatten(h.render()).includes('Late foreign'));
   requests[2].resolve([]); await Promise.resolve(); await Promise.resolve();
-  assert.ok(flatten(h.render()).includes('No blocked work.'));
+  assert.ok(flatten(h.render()).includes('No blocked or failed work was reported for Host.'));
   assert.deepEqual(timers.map(t => t.ms), [15000, 15000]); assert.deepEqual(cleared, [1]);
 });
