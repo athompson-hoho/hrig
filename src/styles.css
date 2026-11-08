@@ -679,6 +679,19 @@
   overflow: auto;
   margin: 20px 0;
 }
+.virtual-list {
+  position: relative;
+  min-height: 0;
+}
+.virtual-list-help {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .search-results > button {
   display: block;
   text-align: left;

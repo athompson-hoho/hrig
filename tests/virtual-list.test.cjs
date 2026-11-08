@@ -296,3 +296,55 @@ test('actual viewport ignores obsolete observers after scope replacement and dis
   assert.equal(h.observers.size, 0);
   assert.deepEqual(h.calls, []);
 });
+
+test('actual search native root is keyboard reachable without opening a result', async () => {
+  const h = project(); await h.search();
+  const viewport = h.nodes().find(n => n.props['aria-label'] === 'Project search results');
+  viewport.focus();
+  h.event(viewport, 'onKeyDown', { key: 'End' });
+  assert.equal(h.document.activeElement, h.rows().find(n => h.text(n).includes(`${matches[199].path}:200`)));
+  assert.deepEqual(h.opened, []);
+  assert.equal(h.calls.length, 1);
+  h.unmount();
+});
+
+test('actual viewport remeasures width and content extents and releases drag on drop without intercepting editing', () => {
+  const h = nativeList();
+  h.scroll(5507.25);
+  const anchor = h.row(100), preceding = h.row(96);
+  h.resize(preceding, 82.5, 300);
+  assert.equal(h.viewport().scrollTop, 5534.75);
+  h.resize(h.viewport(), 220, 300);
+  assert.equal(h.row(100), anchor);
+  h.resize(anchor, 110, 300);
+  assert.equal(h.viewport().scrollTop, 5534.75, 'anchor content growth preserves within-row offset');
+  assert.ok(h.mounted().length <= 16);
+  const dragged = h.controls(100)[0];
+  h.event(h.viewport(), 'onDragStartCapture', { target: dragged });
+  h.scroll(8000);
+  assert.equal(h.row(100), anchor);
+  h.event(h.viewport(), 'onDropCapture', { target: h.viewport() });
+  assert.equal(h.row(100), undefined);
+  for (const type of ['input', 'textarea', 'select']) {
+    const external = { type };
+    assert.equal(h.key('End', external).defaultPrevented, false);
+    assert.equal(h.key('Tab', external).defaultPrevented, false);
+  }
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+});
+
+test('actual scope replacement restores only focus still owned by the replaced viewport', () => {
+  const h = nativeList();
+  h.focus(h.controls(0)[0]);
+  h.update({ scopeKey: 'replacement-owner' });
+  assert.equal(h.document.activeElement, h.viewport());
+  h.focus(h.controls(0)[0]);
+  const modal = { type: 'input' };
+  h.document.activeElement = modal;
+  h.update({ scopeKey: 'third-owner' });
+  assert.equal(h.document.activeElement, modal);
+  assert.deepEqual(h.calls, []);
+  h.unmount();
+  assert.equal(h.observers.size, 0);
+});

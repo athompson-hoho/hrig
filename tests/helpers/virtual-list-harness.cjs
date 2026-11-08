@@ -105,6 +105,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
         type: value.type, scrollTop: 0, clientHeight: options.height ?? 330, clientWidth: options.width ?? 600,
         getBoundingClientRect() { return { height: this.measuredHeight ?? options.rowHeight ?? 55, width: this.clientWidth }; },
         contains(target) { return descendants(this).includes(target); },
+        matches(selector) { return selector.includes('button') && this.type === 'button' && !this.props.disabled; },
         focus() { document.activeElement = this; },
         querySelectorAll(selector) {
           return descendants(this).slice(1).filter(n => n && typeof n === 'object' &&
