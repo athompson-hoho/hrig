@@ -19,6 +19,7 @@ function load(file) {
 const shortcuts = load("src/shortcuts.ts");
 const { shortcutGroups, isHelpKey, hasOpenDialog } = shortcuts;
 const { isReopenPanelKey, reopenShortcutHint } = shortcuts;
+const { isMaximizePanelKey, maximizeShortcutHint } = shortcuts;
 const { classifyTerminalKey, TERMINAL_PANEL_SELECTOR } = load(
   "src/terminal-keys.ts",
 );
@@ -100,7 +101,9 @@ test("shortcuts tracer: a bare question mark on the page opens, in a field or un
   assert.deepEqual(Object.keys(shortcuts).sort(), [
     "hasOpenDialog",
     "isHelpKey",
+    "isMaximizePanelKey",
     "isReopenPanelKey",
+    "maximizeShortcutHint",
     "reopenShortcutHint",
     "shortcutGroups",
   ]);
@@ -136,6 +139,7 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.settings",
       "workspace.newShell",
       "workspace.reopenPanel",
+      "workspace.maximizePanel",
       "workspace.shortcuts",
       "terminal.clear",
       "editor.save",
@@ -155,6 +159,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.sidebar": ["Cmd+B"],
     "workspace.newShell": ["Cmd+Shift+T"],
     "workspace.reopenPanel": ["Cmd+Shift+H"],
+    "workspace.maximizePanel": ["Cmd+Shift+M"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Cmd+F"],
     "terminal.copy": ["Cmd+C"],
@@ -175,6 +180,7 @@ test("shortcuts labels follow the platform", () => {
     "workspace.sidebar": ["Ctrl+B"],
     "workspace.newShell": ["Ctrl+Shift+T"],
     "workspace.reopenPanel": ["Ctrl+Shift+H"],
+    "workspace.maximizePanel": ["Ctrl+Shift+M"],
     "workspace.shortcuts": ["?"],
     "terminal.find": ["Ctrl+F"],
     "terminal.copy": ["Ctrl+Shift+C"],
@@ -531,5 +537,214 @@ test("shortcuts reopen chord is claimed by no terminal, zoom, help, editor or ap
       editor,
     ),
     "and it is Save, so Ctrl+Shift+H is never a Monaco command",
+  );
+});
+
+function maximizeEvent(extra = {}) {
+  return {
+    key: "M",
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: true,
+    ...extra,
+  };
+}
+
+test("shortcuts maximize chord is Shift+M with Cmd on macOS or Ctrl elsewhere and nothing else", () => {
+  for (const platform of PLATFORMS) {
+    const [text, ...more] = byId(platform)["workspace.maximizePanel"];
+    assert.equal(more.length, 0);
+    assert.equal(text, platform === "darwin" ? "Cmd+Shift+M" : "Ctrl+Shift+M");
+    assert.equal(isMaximizePanelKey(chord(text), platform), true, platform);
+    assert.equal(maximizeShortcutHint(platform), text.split("+").join(" "));
+    assert.match(
+      labelOf(platform, "workspace.maximizePanel"),
+      /Maximize or restore the focused panel group/,
+    );
+    const reopen = byId(platform)["workspace.reopenPanel"][0];
+    assert.equal(isMaximizePanelKey(chord(reopen), platform), false);
+    assert.equal(isReopenPanelKey(chord(text), platform), false);
+  }
+  assert.equal(maximizeShortcutHint(""), "Ctrl Shift M");
+  assert.equal(maximizeShortcutHint("freebsd"), "Ctrl Shift M");
+  const lower = { key: "m", metaKey: true, ctrlKey: false };
+  assert.equal(isMaximizePanelKey(maximizeEvent(lower), "darwin"), true);
+  assert.equal(isMaximizePanelKey(maximizeEvent({ key: "m" }), "linux"), true);
+  for (const platform of ["win32", "linux", "freebsd", ""]) {
+    assert.equal(isMaximizePanelKey(maximizeEvent(), platform), true, platform);
+    for (const extra of [
+      { metaKey: true },
+      { ctrlKey: false },
+      { ctrlKey: false, metaKey: true },
+    ])
+      assert.equal(
+        isMaximizePanelKey(maximizeEvent(extra), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+  }
+  for (const extra of [
+    { ctrlKey: true, metaKey: false },
+    { ctrlKey: true, metaKey: true },
+    { ctrlKey: false, metaKey: false },
+  ])
+    assert.equal(
+      isMaximizePanelKey(maximizeEvent(extra), "darwin"),
+      false,
+      "darwin " + JSON.stringify(extra),
+    );
+  for (const platform of PLATFORMS) {
+    const mod =
+      platform === "darwin"
+        ? { ctrlKey: false, metaKey: true }
+        : { ctrlKey: true, metaKey: false };
+    assert.equal(isMaximizePanelKey(maximizeEvent(mod), platform), true);
+    for (const extra of [
+      { shiftKey: false },
+      { altKey: true },
+      { altKey: true, ctrlKey: true },
+      { isComposing: true },
+      { repeat: true },
+      { defaultPrevented: true },
+      { key: "H" },
+      { key: "T" },
+      { key: "Escape" },
+      { key: "" },
+      { key: "Process" },
+      { key: undefined },
+      { key: 77 },
+    ])
+      assert.equal(
+        isMaximizePanelKey(maximizeEvent({ ...mod, ...extra }), platform),
+        false,
+        platform + JSON.stringify(extra),
+      );
+    for (const key of "abcdefghijklnopqrstuvwxyz0123456789,.-=") {
+      assert.equal(
+        isMaximizePanelKey(maximizeEvent({ ...mod, key }), platform),
+        false,
+        platform + key,
+      );
+    }
+  }
+});
+
+test("shortcuts maximize chord is claimed by no terminal, zoom, help, editor, app or Monaco binding", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  for (const platform of PLATFORMS) {
+    const text = byId(platform)["workspace.maximizePanel"][0];
+    for (const selected of [false, true])
+      assert.equal(
+        classifyTerminalKey(chord(text), platform, selected),
+        "pass",
+        platform + " terminal " + selected,
+      );
+    assert.equal(zoomAction(chord(text)), null, platform + " zoom");
+    assert.equal(isHelpKey(chord(text), element("BODY"), false), false);
+    const all = [];
+    for (const group of shortcutGroups(platform))
+      for (const entry of group.shortcuts)
+        for (const key of entry.keys) all.push([entry.id, key]);
+    assert.deepEqual(
+      all.filter(([, key]) => key.toLowerCase() === text.toLowerCase()),
+      [["workspace.maximizePanel", text]],
+      platform + " the chord is listed once",
+    );
+    for (const [id, key] of all) {
+      if (id === "workspace.maximizePanel" || !key.includes("+")) continue;
+      assert.equal(
+        isMaximizePanelKey(chord(key), platform),
+        false,
+        platform + " " + id + " " + key,
+      );
+    }
+  }
+  assert.deepEqual(
+    classifyTerminalKey(chord("Ctrl+M"), "linux", false),
+    "pass",
+    "plain Ctrl+M is not the maximize chord",
+  );
+  assert.equal(isMaximizePanelKey(chord("Ctrl+M"), "linux"), false);
+  assert.equal(isMaximizePanelKey(chord("Ctrl+Shift+M"), "darwin"), false);
+  assert.equal(isMaximizePanelKey(chord("Cmd+M"), "darwin"), false);
+  const editor = fs.readFileSync(
+    path.join(__dirname, "..", "src", "EditorPanel.tsx"),
+    "utf8",
+  );
+  assert.equal(
+    editor.split("editor.addCommand(").length - 1,
+    1,
+    "the editor registers one command of its own",
+  );
+  assert.ok(
+    /editor\.addCommand\(\s*monaco\.KeyMod\.CtrlCmd \| monaco\.KeyCode\.KeyS,/.test(
+      editor,
+    ),
+    "and it is Save, so Ctrl+Shift+M is never a Monaco command of the app",
+  );
+
+  // Monaco's own bindings, read from the installed package: re-audit on an upgrade.
+  const monaco = path.join(__dirname, "..", "node_modules", "monaco-editor");
+  const version = JSON.parse(
+    fs.readFileSync(path.join(monaco, "package.json"), "utf8"),
+  ).version;
+  assert.match(
+    version,
+    /^0\.56\./,
+    "Monaco changed to " + version + ": audit Shift+M again",
+  );
+  const KEY_M = "43 /\\* KeyCode\\.KeyM \\*/";
+  const CTRL_CMD = "2048 /\\* KeyMod\\.CtrlCmd \\*/";
+  const WIN_CTRL = "256 /\\* KeyMod\\.WinCtrl \\*/";
+  const SHIFT = "1024 /\\* KeyMod\\.Shift \\*/";
+  const cmdShiftM = [
+    new RegExp(CTRL_CMD + " \\| " + SHIFT + " \\| " + KEY_M),
+    new RegExp(SHIFT + " \\| " + CTRL_CMD + " \\| " + KEY_M),
+  ];
+  const controlShiftM = new RegExp(
+    WIN_CTRL + " \\| " + SHIFT + " \\| " + KEY_M,
+  );
+  const plainCtrlM = new RegExp(CTRL_CMD + " \\| " + KEY_M);
+  const found = { cmdShiftM: [], controlShiftM: [], plainCtrlM: [] };
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else if (entry.name.endsWith(".js")) {
+        const source = fs.readFileSync(file, "utf8");
+        if (!source.includes("KeyCode.KeyM")) continue;
+        const name = path.relative(monaco, file);
+        if (cmdShiftM.some((re) => re.test(source))) found.cmdShiftM.push(name);
+        if (controlShiftM.test(source)) found.controlShiftM.push(name);
+        if (plainCtrlM.test(source)) found.plainCtrlM.push(name);
+      }
+    }
+  };
+  walk(path.join(monaco, "esm", "vs", "editor"));
+  const toggle = path.join(
+    "esm",
+    "vs",
+    "editor",
+    "contrib",
+    "toggleTabFocusMode",
+    "browser",
+    "toggleTabFocusMode.js",
+  );
+  assert.deepEqual(
+    found.cmdShiftM,
+    [],
+    "no Monaco command is Ctrl or Cmd with Shift+M",
+  );
+  assert.deepEqual(
+    found.controlShiftM,
+    [toggle],
+    "macOS Control+Shift+M is the only Shift+M, and the chord there is Cmd",
+  );
+  assert.deepEqual(
+    found.plainCtrlM,
+    [toggle],
+    "plain Ctrl+M is the only other M binding",
   );
 });

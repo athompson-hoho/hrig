@@ -26,6 +26,9 @@ export interface ReopenKeyEvent extends HelpKeyEvent {
   shiftKey: boolean;
 }
 
+/** The same key event shape serves the maximize chord. */
+export type MaximizeKeyEvent = ReopenKeyEvent;
+
 /**
  * The shortcut catalog for a platform, rebuilt on every call. It mirrors the
  * App key handler, terminal-keys, terminal-zoom and the editor save command;
@@ -81,6 +84,11 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           id: "workspace.reopenPanel",
           label: "Reopen the file or seat panel closed last",
           keys: [`${mod}+Shift+H`],
+        },
+        {
+          id: "workspace.maximizePanel",
+          label: "Maximize or restore the focused panel group",
+          keys: [`${mod}+Shift+M`],
         },
         {
           id: "workspace.shortcuts",
@@ -209,4 +217,30 @@ export function isReopenPanelKey(
 /** Palette hint text for the reopen shortcut on the given platform. */
 export function reopenShortcutHint(platform: string): string {
   return platform === "darwin" ? "Cmd Shift H" : "Ctrl Shift H";
+}
+
+/**
+ * True for Shift+M with Cmd on macOS or Ctrl elsewhere and no other modifier,
+ * the chord that maximizes the focused panel group or restores the layout.
+ * Monaco binds only plain Ctrl+M (Tab key moves focus) and, on macOS, the
+ * physical Control key with Shift+M, so none of its keys is taken. A held key
+ * (repeat), composing or already handled events never match, so one press
+ * flips the layout once.
+ */
+export function isMaximizePanelKey(
+  event: MaximizeKeyEvent,
+  platform: string,
+): boolean {
+  if (event.altKey || event.isComposing || event.repeat) return false;
+  if (event.defaultPrevented || !event.shiftKey) return false;
+  if (typeof event.key !== "string" || event.key.toLowerCase() !== "m")
+    return false;
+  return platform === "darwin"
+    ? event.metaKey && !event.ctrlKey
+    : event.ctrlKey && !event.metaKey;
+}
+
+/** Palette hint text for the maximize shortcut on the given platform. */
+export function maximizeShortcutHint(platform: string): string {
+  return platform === "darwin" ? "Cmd Shift M" : "Ctrl Shift M";
 }

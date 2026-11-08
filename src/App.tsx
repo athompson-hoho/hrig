@@ -137,6 +137,7 @@ import {
   isReopenPanelKey,
   reopenShortcutHint,
 } from "./shortcuts";
+import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1928,13 +1929,13 @@ export default function App() {
     },
     {
       name: "Maximize panel",
-      hint: "Fill the workspace with the focused group",
+      hint: `Fill the workspace with the focused group · ${maximizeShortcutHint(window.hrig.platform)}`,
       icon: <Square size={16} />,
       action: () => toggleMaximize("maximize", null),
     },
     {
       name: "Restore panel layout",
-      hint: "Show every panel group again",
+      hint: `Show every panel group again · ${maximizeShortcutHint(window.hrig.platform)}`,
       icon: <LayoutGrid size={16} />,
       action: () => toggleMaximize("restore", null),
     },
@@ -2024,6 +2025,14 @@ export default function App() {
         event.preventDefault();
         event.stopPropagation();
         if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel();
+        return;
+      }
+      // Same rule: claimed so no shell sees it, and Escape never restores.
+      if (isMaximizePanelKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target))
+          toggleMaximize("toggle", event.target);
         return;
       }
       if (event.ctrlKey || event.metaKey) {

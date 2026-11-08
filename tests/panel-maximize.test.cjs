@@ -575,3 +575,338 @@ test("panel-maximize is a session-only view state: withoutMaximized and restoreM
     "the module sits next to the others",
   );
 });
+
+test("panel-maximize double-click: the built-in maximize stays on, a tab still renames, the empty tab strip maximizes through the app's own action hook, and the app adds no header handler", () => {
+  const lib = path.join(root, "node_modules", "flexlayout-react");
+  const version = JSON.parse(
+    fs.readFileSync(path.join(lib, "package.json"), "utf8"),
+  ).version;
+  assert.match(
+    version,
+    /^0\.11\./,
+    "flexlayout-react changed to " +
+      version +
+      ": check double-click, rename and the maximize flag again",
+  );
+  const dist = collapse(
+    fs.readFileSync(path.join(lib, "dist", "index.js"), "utf8"),
+  );
+  assert.ok(
+    dist.includes(
+      "const onDoubleClick = (event) => { if (tabNode.isEnableRename()) { onRename(); event.stopPropagation(); } };",
+    ),
+    "a double-click on a tab renames it and goes no further",
+  );
+  assert.ok(
+    dist.includes(
+      "const onDoubleClick = (_event) => { if (tabsetNode.canMaximize()) controller.maximize(tabsetNode); };",
+    ),
+    "a double-click that reaches the strip maximizes the group",
+  );
+  assert.ok(
+    dist.includes(
+      '"data-layout-path": path + "/tabstrip", onPointerDown, onDoubleClick,',
+    ),
+    "the strip carries that handler",
+  );
+  assert.ok(
+    dist.includes(
+      "maximize(tabsetNode) { this.doAction(Actions.maximizeToggle(tabsetNode.getId(), this.getLayoutId())); }",
+    ),
+    "the double-click flips the same flag the chord flips",
+  );
+  assert.ok(
+    dist.includes(
+      "const outcome = this._props.onAction(action); if (outcome !== void 0) return this._props.model.doAction(outcome);",
+    ),
+    "a double-click goes through the app onAction hook",
+  );
+  assert.ok(
+    dist.includes(
+      "const changeListener = { onAfterAction: controller.onModelChange };",
+    ),
+    "a direct model action reaches onModelChange too, so the chord path is saved like the double-click",
+  );
+
+  const app = appText();
+  const hook = between(
+    app,
+    "const onAction = (action: Action) => {",
+    "if (action.type === Actions.DELETE_TAB) {",
+  );
+  assert.ok(has(hook, "Actions.MAXIMIZE_TOGGLE,"));
+  assert.ok(
+    has(hook, ") remember();"),
+    "a flip is remembered for Undo arrangement",
+  );
+  assert.equal(
+    count(app, "Actions.maximizeToggle("),
+    2,
+    "the navigator and the new function are the only direct flips",
+  );
+  assert.ok(
+    has(
+      app,
+      "activeModel.doAction(Actions.maximizeToggle(maximized.getId()));",
+    ),
+    "Find open panels still restores before it selects a hidden panel",
+  );
+  assert.equal(count(app, "onAction={onAction}"), 1);
+  assert.equal(count(app, "onModelChange={modelChanged}"), 1);
+  assert.equal(count(app, "onDoubleClick"), 0);
+  assert.equal(count(app, "onAuxMouseClick"), 0);
+  const strip = between(
+    app,
+    "onRenderTabSet={(node, values) => {",
+    "onTabSetPlaceHolder={",
+  );
+  assert.ok(
+    !/onDoubleClick|maximize/i.test(strip),
+    "the tab strip callback adds no maximize handler",
+  );
+  const tab = between(
+    app,
+    "onRenderTab={(node, values) => {",
+    "onRenderTabSet={(node, values) => {",
+  );
+  assert.ok(
+    !/onDoubleClick|maximize/i.test(tab),
+    "the tab callback leaves rename alone",
+  );
+
+  const layoutSource = tight(stripComments(read("src/layout.ts")));
+  assert.equal(count(layoutSource, "tabSetEnableMaximize: true,"), 1);
+  assert.equal(count(layoutSource, "tabEnableRename: true,"), 1);
+  assert.ok(!layoutSource.includes("enableMaximize: false"));
+  assert.match(
+    read("README.md"),
+    /Double-click a tab-group background to maximize or restore it/,
+  );
+});
+
+test("panel-maximize adds no resize traffic: the terminal still ignores a zero-size host, hidden groups are display none, and no new call can reach a PTY", () => {
+  const terminal = tight(stripComments(read("src/TerminalPanel.tsx")));
+  assert.ok(
+    has(
+      terminal,
+      "if ( host.current && host.current.clientWidth > 0 && host.current.clientHeight > 0 ) { fit.fit(); if (connected) window.hrig.resizeTerminal(id, term.cols, term.rows); }",
+    ),
+    "a host with no size is never fitted or resized",
+  );
+  assert.equal(count(terminal, "new ResizeObserver("), 1);
+  assert.equal(count(terminal, "window.hrig.resizeTerminal("), 2);
+  const sources = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((name) => /\.(ts|tsx)$/.test(name))
+    .sort();
+  const callers = sources.filter((name) =>
+    stripComments(read("src/" + name)).includes("hrig.resizeTerminal("),
+  );
+  assert.deepEqual(
+    callers,
+    ["TerminalPanel.tsx"],
+    "no other file resizes a PTY",
+  );
+  const layoutSource = tight(stripComments(read("src/layout.ts")));
+  assert.equal(
+    count(layoutSource, "tabEnableRenderOnDemand: false,"),
+    1,
+    "terminals stay mounted while their group is hidden: no remount, no new attach",
+  );
+  const lib = path.join(root, "node_modules", "flexlayout-react");
+  const dist = collapse(
+    fs.readFileSync(path.join(lib, "dist", "index.js"), "utf8"),
+  );
+  assert.ok(
+    dist.includes(
+      'element.style.display = visible ? "" : "none"; node.setRect(rect); node.setVisible(visible);',
+    ),
+    "a panel of a hidden group gets display none",
+  );
+  assert.ok(
+    dist.includes(
+      "if (this._props.model.getMaximizedTabset(this._layoutId) !== void 0 && !parent.isMaximized()) visible = false;",
+    ),
+    "every panel outside the maximized group is hidden that way",
+  );
+  const app = appText();
+  const body = between(
+    app,
+    "const toggleMaximize = (",
+    "const reopenClosedPanel = () => {",
+  );
+  assert.equal(count(body, "doAction("), 1);
+  assert.ok(
+    !/fit\(|resizeTerminal|ResizeObserver|dispatchEvent|setTimeout/.test(body),
+  );
+  const handler = between(
+    app,
+    "const handler = (event: KeyboardEvent) => {",
+    "const windows = [",
+  );
+  assert.ok(
+    !/fit\(|resizeTerminal|ResizeObserver|dispatchEvent|setTimeout/.test(
+      handler,
+    ),
+  );
+});
+
+test("panel-maximize chord, Escape and docs: the shortcut is claimed before the generic chords, acts only with no dialog open, never touches Escape, and NAVIGATION.md says what it does", () => {
+  const DOT = String.fromCharCode(183);
+  const app = appText();
+  assert.ok(
+    has(
+      app,
+      'import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";',
+    ),
+  );
+  assert.ok(
+    has(
+      app,
+      "hint: `Fill the workspace with the focused group " +
+        DOT +
+        " ${maximizeShortcutHint(window.hrig.platform)}`,",
+    ),
+  );
+  assert.ok(
+    has(
+      app,
+      "hint: `Show every panel group again " +
+        DOT +
+        " ${maximizeShortcutHint(window.hrig.platform)}`,",
+    ),
+  );
+  const handler = between(
+    app,
+    "const handler = (event: KeyboardEvent) => {",
+    "const windows = [",
+  );
+  const order = [
+    "if (isHelpKey(",
+    "if (isReopenPanelKey(event, window.hrig.platform)) {",
+    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
+    "if (event.ctrlKey || event.metaKey) {",
+  ].map((needle) => handler.indexOf(tight(needle)));
+  assert.ok(
+    order[0] >= 0 &&
+      order[0] < order[1] &&
+      order[1] < order[2] &&
+      order[2] < order[3],
+    "claim order: " + order,
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (isMaximizePanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleMaximize("toggle", event.target); return; }',
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
+    ),
+  );
+  assert.ok(
+    has(
+      handler,
+      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
+    ),
+    "Reopen closed panel is untouched",
+  );
+  assert.equal(count(app, "toggleMaximize("), 3, "two commands and the chord");
+  assert.equal(
+    count(app, '"Escape"'),
+    1,
+    "no new Escape handler: Escape never restores",
+  );
+  assert.equal(
+    count(app, 'addEventListener("keydown"'),
+    2,
+    "no second key handler",
+  );
+  const branch = between(
+    handler,
+    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
+    "if (event.ctrlKey || event.metaKey) {",
+  );
+  assert.ok(!/Escape/.test(branch));
+  const files = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((name) => /\.(ts|tsx)$/.test(name))
+    .sort();
+  assert.deepEqual(
+    files.filter((name) =>
+      stripComments(read("src/" + name)).includes("isMaximizePanelKey("),
+    ),
+    ["App.tsx", "shortcuts.ts"],
+  );
+  assert.deepEqual(
+    files.filter((name) =>
+      stripComments(read("src/" + name)).includes("planMaximize("),
+    ),
+    ["App.tsx", "panel-maximize.ts"],
+  );
+
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff);
+  assert.ok(raw.startsWith(String.fromCharCode(0xfeff) + "# Project"));
+  const lines = raw.split("\n");
+  const mine = lines.filter((line) =>
+    line.startsWith("Double-click the empty part of a panel group's tab strip"),
+  );
+  assert.equal(mine.length, 1);
+  assert.equal(
+    lines.filter((line) =>
+      line.startsWith("The command center entry Reopen closed panel"),
+    ).length,
+    1,
+    "the reopen paragraph is still there",
+  );
+  assert.equal(lines.at(-1), "", "the file ends with one line feed");
+  assert.ok(
+    lines.indexOf(mine[0]) >
+      lines.findIndex((line) =>
+        line.startsWith("The command center entry Reopen closed panel"),
+      ),
+    "the maximize paragraph follows the reopen paragraph",
+  );
+  for (const fragment of [
+    "press Ctrl+Shift+M (Cmd+Shift+M on macOS)",
+    "choose Maximize panel in the command center",
+    "make that group fill the workspace",
+    "hidden, not closed",
+    "their terminals keep running",
+    "every tab, size and arrangement is kept exactly as it was",
+    "double-clicking the strip again, pressing the same shortcut or choosing Restore panel layout brings back the previous layout",
+    "Double-clicking a tab still renames it",
+    "the maximize button in the group's toolbar works as before",
+    "Escape never restores",
+    "With only one group open there is nothing to hide, and a short message says so",
+    "a view state for the current session and is not saved with the layout",
+    "after a restart, when you switch projects and come back, or when you apply a saved or role layout, every group is visible again",
+    "A new panel opens in the maximized group",
+    "only selected there until you restore the layout",
+    "Find open panels restores the layout first",
+    "ignored while a dialog is open and does not repeat while held",
+    "in a terminal it replaces Ctrl+Shift+M, which no longer reaches the shell",
+    "plain Ctrl+M, including Monaco's Tab key moves focus toggle in the editor, is unchanged",
+    "terminals in hidden groups are left alone; nothing is typed or sent",
+  ]) {
+    assert.ok(
+      mine[0].includes(fragment),
+      "NAVIGATION.md is missing: " + fragment,
+    );
+  }
+});
