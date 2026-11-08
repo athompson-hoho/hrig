@@ -34,6 +34,7 @@ export const defaults = {
   "terminal.showSizeOnResize": true,
   "terminal.bellStyle": "none",
   "terminal.minimumContrastRatio": 1,
+  "terminal.macOptionIsMeta": false,
   "workspace.refreshInterval": 15,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
@@ -348,6 +349,13 @@ export const schema: Setting[] = [
     min: 1,
     max: 21,
     step: 0.5,
+  },
+  {
+    key: "terminal.macOptionIsMeta",
+    category: "Terminal",
+    label: "Option as Meta (macOS)",
+    description:
+      "macOS only; no effect on Windows or Linux. Off (the default) keeps Option typing special characters such as accents. On makes Option act as the Meta key in terminals, so Option+B and Option+F move back and forward a word in shells such as zsh and bash, and Option no longer types special characters there. Applies at once to every open terminal. Changes only how your own key presses are encoded; nothing is sent to the shell or the seat unless you press a key.",
   },
   {
     key: "workspace.refreshInterval",

@@ -366,6 +366,7 @@ export default function TerminalPanel({
     term.options.minimumContrastRatio = normalizeContrastRatio(
       preferences["terminal.minimumContrastRatio"],
     );
+    term.options.macOptionIsMeta = preferences["terminal.macOptionIsMeta"];
     term.options.theme = terminalTheme(preferences, colorTheme);
     try {
       fitRef.current?.fit();

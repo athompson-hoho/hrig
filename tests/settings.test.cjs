@@ -564,3 +564,66 @@ test("terminal.minimumContrastRatio is documented in SETTINGS.md and TERMINALS.m
     );
   }
 });
+test("terminal.macOptionIsMeta tracer: the default is off, a stored true resolves and TerminalPanel assigns it to xterm in the preferences effect without a remount", () => {
+  const key = "terminal.macOptionIsMeta";
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const stored = settings.safeOverrides(
+    JSON.parse('{"terminal.macOptionIsMeta":true}'),
+  );
+  assert.deepEqual(stored, { [key]: true });
+  assert.equal(settings.resolveSettings(stored)[key], true);
+  for (const text of [
+    '{"terminal.macOptionIsMeta":"true"}',
+    '{"terminal.macOptionIsMeta":1}',
+  ]) {
+    const corrupt = settings.safeOverrides(JSON.parse(text));
+    assert.deepEqual(corrupt, {}, text + " must be dropped");
+    assert.equal(
+      settings.resolveSettings(corrupt)[key],
+      false,
+      text + " must fall back to false",
+    );
+  }
+  const source = collapsedTerminalPanel();
+  const statement =
+    'term.options.macOptionIsMeta = preferences["terminal.macOptionIsMeta"];';
+  const at = source.indexOf(statement);
+  assert.ok(
+    at >= 0 && source.indexOf(statement, at + 1) < 0,
+    "the preferences effect must assign the setting to xterm exactly once",
+  );
+  assert.equal(
+    source.split("macOptionIsMeta").length - 1,
+    2,
+    "xterm starts at its own default of false, which is the setting default, so the preferences effect is the only writer",
+  );
+  const before = source.slice(0, at);
+  const effect = before.slice(before.lastIndexOf("useEffect("));
+  assert.ok(
+    effect.includes("const term = terminalRef.current; if (!term) return;"),
+    "the assignment must sit in the effect that updates the existing terminal",
+  );
+  assert.ok(
+    !effect.includes("new Terminal("),
+    "the assignment must not sit in the effect that creates the terminal",
+  );
+  const after = source.slice(at + statement.length);
+  const deps = /\}, \[([^\]]*)\]\);/.exec(after);
+  assert.ok(deps, "the preferences effect must end with a dependency list");
+  const names = (list) => list.split(",").map((entry) => entry.trim());
+  assert.ok(
+    names(deps[1]).includes("preferences"),
+    "the effect must re-run when the effective preferences change",
+  );
+  const creation = /new Terminal\([\s\S]*?\}, \[([^\]]*)\]\);/.exec(source);
+  assert.ok(creation, "the creation effect must have a dependency list");
+  assert.ok(
+    names(creation[1]).includes("attempt") &&
+      names(creation[1]).includes("config.terminalId"),
+  );
+  assert.ok(
+    !names(creation[1]).includes("preferences"),
+    "changing the setting must never rebuild or re-attach the terminal",
+  );
+});
