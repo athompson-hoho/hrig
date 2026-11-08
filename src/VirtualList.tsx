@@ -71,7 +71,10 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
   const [position, setPosition] = useState("");
   const cursor = useRef(0);
   const pending = useRef<{ index: number; direction: number; last: boolean } | null>(null);
+  const navigationFrame = useRef<number | null>(null);
+  const navigationUpdates = useRef(0);
   const keys = rows.map(itemKey);
+  const keySequence = JSON.stringify(keys);
   const currentKeys = new Set(keys);
   for (const key of sizes.current.keys()) if (!currentKeys.has(key)) sizes.current.delete(key);
   const offsets = prefixOffsets(keys.map(key => sizes.current.get(key) ?? estimateHeight), estimateHeight);
@@ -88,13 +91,24 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
     return children.filter(child => !child.hidden && child.getAttribute("aria-hidden") !== "true");
   };
   const rowIndex = (target: EventTarget | null) => keys.findIndex(key => nodes.current.get(key)?.contains(target as Node));
-  const navigate = (index: number, direction: number, last = false) => {
+  const cancelNavigation = () => {
+    if (navigationFrame.current !== null) cancelAnimationFrame(navigationFrame.current);
+    navigationFrame.current = null;
+    navigationUpdates.current = 0;
+    pending.current = null;
+  };
+  const navigate = (index: number, direction: number, last = false, continuing = false) => {
     if (index < 0 || index >= rows.length) return;
+    if (!continuing) cancelNavigation();
     pending.current = { index, direction, last };
-    const top = offsets[index];
+    const top = snapshot.current.offsets[index];
     setGeometry(old => ({ ...old, top }));
     changed(value => value + 1);
   };
+
+  // Recreated descriptors with the same keys still refer to current DOM rows;
+  // changed membership/order or a remounted owner must cancel old scan work.
+  useLayoutEffect(() => () => cancelNavigation(), [keySequence]);
 
   useLayoutEffect(() => {
     const oldFocus = focused.current;
@@ -119,9 +133,29 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
       target.focus({ preventScroll: true });
     } else {
       pending.current = null;
-      const next = request.index + request.direction;
-      if (next >= 0 && next < rows.length) navigate(next, request.direction, request.last);
-      else viewport.current?.focus();
+      let next = request.index + request.direction;
+      // Skip already mounted disabled rows without another render per row.
+      while (next >= 0 && next < rows.length) {
+        const candidate = nodes.current.get(keys[next]);
+        if (!candidate || controls(candidate).length) break;
+        next += request.direction;
+      }
+      if (next >= 0 && next < rows.length) {
+        // Bound nested layout updates even when every offscreen row is disabled.
+        if (++navigationUpdates.current < 8) navigate(next, request.direction, request.last, true);
+        else {
+          const frame = requestAnimationFrame(() => {
+            if (navigationFrame.current !== frame) return;
+            navigationFrame.current = null;
+            navigationUpdates.current = 0;
+            navigate(next, request.direction, request.last, true);
+          });
+          navigationFrame.current = frame;
+        }
+      } else {
+        navigationUpdates.current = 0;
+        viewport.current?.focus();
+      }
     }
   });
 
@@ -189,7 +223,7 @@ function Viewport<T>({ rows, itemKey, renderRow, label, estimateHeight = 55, max
     }}
     onBlurCapture={event => {
       const index = rowIndex(event.relatedTarget);
-      if (index < 0) { focused.current = null; setFocusKey(null); }
+      if (index < 0) { cancelNavigation(); focused.current = null; setFocusKey(null); }
     }}
     onDragStartCapture={event => {
       const index = rowIndex(event.target);
