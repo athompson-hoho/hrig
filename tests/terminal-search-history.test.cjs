@@ -921,7 +921,7 @@ test("terminal-search-history docs: TERMINALS.md says what is remembered, how to
     "press the Down arrow to move back toward the newest",
     "only while the box is empty or still showing a recalled query",
     "do nothing with Ctrl, Alt, Shift or Cmd held",
-    "runs only when you press Enter",
+    "not remembered again until you press Enter",
     "shared by every terminal open in HRig",
     "kept in memory only",
     "never saved to the workspace or the settings and never exported",
