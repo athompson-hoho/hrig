@@ -13,6 +13,7 @@ import {
   GripVertical,
   Bot,
   PanelsTopLeft,
+  Pin,
 } from "lucide-react";
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -20,6 +21,7 @@ import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 import { sortSeats } from "./seat-sort";
+import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity } from "./seat-pins";
 import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -159,6 +161,9 @@ export default function Sidebar({
   inventoryError,
   busy,
   selectedRig,
+  pinnedSeats,
+  pinsAvailable,
+  onToggleSeatPin,
   onRig,
   onRefresh,
   onProject,
@@ -179,6 +184,9 @@ export default function Sidebar({
   inventoryError: string;
   busy: boolean;
   selectedRig: string;
+  pinnedSeats: readonly string[];
+  pinsAvailable: boolean;
+  onToggleSeatPin: (seat: Seat) => void;
   onRig: (id: string) => void;
   onRefresh: () => void;
   onProject: () => void;
@@ -227,10 +235,11 @@ export default function Sidebar({
   }, [section, connection.id, root, fileRevision, gitRevision]);
   const rigs = inventory?.rigs || [];
   const searchResult = filterSeats(inventory?.seats || [], selectedRig, query);
-  const seats = sortSeats(
+  const pins = new Set(pinsAvailable ? normalizePinnedSeats(pinnedSeats) : []);
+  const seats = partitionPinnedSeats(sortSeats(
     filterSeatsByStatus(searchResult.seats, statusFilter),
     effective["rig.seatSort"],
-  );
+  ), connection, pinsAvailable ? pinnedSeats : []);
   const noMatches = searchResult.scopedCount > 0 &&
     (searchResult.hasQuery || statusFilter !== "all") && seats.length === 0;
   return (
@@ -480,6 +489,17 @@ export default function Sidebar({
                     </span>
                     <StatusDot status={s.status} />
                     <GripVertical size={12} className="grip" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button seat-pin"
+                    disabled={!pinsAvailable}
+                    aria-pressed={pins.has(seatPinIdentity(connection, s.id))}
+                    aria-label={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+                    title={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+                    onClick={() => { if (pinsAvailable) onToggleSeatPin(s); }}
+                  >
+                    <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
                   </button>
                   {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
                   <IconButton

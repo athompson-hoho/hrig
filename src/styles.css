@@ -4245,6 +4245,9 @@ button:hover {
 .session-row .seat-row { flex: 1; min-width: 0; width: auto; margin: 0; }
 .session-row > .icon-button { flex-shrink: 0; color: var(--color-707b8e); }
 .session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
+.session-row > .seat-pin[aria-pressed="true"],
+.session-row:hover > .seat-pin[aria-pressed="true"],
+.session-row:focus-within > .seat-pin[aria-pressed="true"] { color: var(--color-86cdb0); }
 .relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
 
