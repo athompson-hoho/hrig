@@ -71,6 +71,7 @@ export interface WorkspaceState {
   layouts: Record<string, IJsonModel>;
   savedLayouts: SavedLayout[];
   projectHistory?: import("./project-history").RecentProject[];
+  pinnedSeats?: string[];
   sidebarWidth?: number;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;

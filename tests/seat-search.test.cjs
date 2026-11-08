@@ -72,6 +72,10 @@ function sidebar(overrides = {}, context = preferences()) {
     // missing-module RED: the actual absent control must fail its assertion.
     './seat-sort': fs.existsSync(path.join(__dirname, '../src/seat-sort.ts'))
       ? load('../src/seat-sort.ts') : {},
+    // Optional only for the baseline RED: absence must fail the actual control
+    // assertion rather than module setup. GREEN injects the real pin helper.
+    './seat-pins': fs.existsSync(path.join(__dirname, '../src/seat-pins.ts'))
+      ? load('../src/seat-pins.ts') : {},
     './seat-search': fs.existsSync(require('node:path').join(__dirname, '../src/seat-search.ts'))
       ? load('../src/seat-search.ts') : {},
   }).default;
@@ -79,6 +83,7 @@ function sidebar(overrides = {}, context = preferences()) {
     section: 'sessions', connection: { id: 'host', kind: 'ssh', name: 'Host' }, root: '~',
     inventory: { rigs: [], seats, sampledAt: new Date().toISOString() }, inventoryError: '',
     busy: false, selectedRig: 'r1', fileRevision: 0,
+    pinnedSeats: [], pinsAvailable: true, onToggleSeatPin() {},
     ...Object.fromEntries(['onRig', 'onRefresh', 'onProject', 'onConnect', 'onManageRigs',
       'onSeat', 'onSeatBeside', 'onRelaunch', 'onDrag', 'onFile', 'onDiff'].map(key => [key, action])),
     ...overrides,
@@ -119,6 +124,185 @@ function sidebar(overrides = {}, context = preferences()) {
       n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
   };
 }
+
+test('Sidebar native pin control reversibly orders rows through its local callback without host actions', () => {
+  const toggled = [];
+  const pins = load('../src/seat-pins.ts');
+  const connection = { id: 'host', kind: 'ssh', name: 'Host' };
+  let workspace = { connections: [connection], activeConnection: 'host', pinnedSeats: [] };
+  const app = ts.createSourceFile('App.tsx', fs.readFileSync('src/App.tsx', 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let actualCallback;
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.text === 'onToggleSeatPin') {
+      actualCallback = node.initializer.expression;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(app);
+  assert.ok(actualCallback, 'actual App Sidebar callback exists');
+  const scope = { ...pins, pinsAvailable: true, pinOwner: pins.pinConnectionIdentity(connection),
+    local: connection, setState(update) { workspace = update(workspace); } };
+  vm.runInNewContext(ts.transpileModule(`callback = (${actualCallback.getText(app)});`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS },
+  }).outputText, scope);
+  const view = sidebar({ onToggleSeatPin(original) {
+    toggled.push(original);
+    scope.callback(original);
+    view.props.pinnedSeats = workspace.pinnedSeats;
+  } });
+  assert.deepEqual(view.rows().map(row => row.key), ['a', 'b']);
+  assert.equal(view.count(), 2);
+  const findPin = name => view.nodes().find(node => node.type === 'button' &&
+    node.props['aria-label'] === name);
+  const pin = findPin('Pin session Bob in RigNorth');
+  assert.ok(pin, 'Sidebar renders native Pin session Bob in RigNorth control');
+  assert.equal(pin.props.type, 'button');
+  assert.equal(pin.props.title, 'Pin session Bob in RigNorth');
+  assert.equal(pin.props['aria-pressed'], false);
+  assert.equal(pin.props.disabled, false);
+  const bobRow = view.rows().find(row => row.key === 'b');
+  assert.equal(bobRow.props.children[1], pin, 'pin is the sibling immediately after seat-open');
+  pin.props.onClick();
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['b', 'a']);
+  assert.equal(view.count(), 2);
+  assert.equal(toggled[0], seats[1], 'local callback receives the original represented seat');
+  const unpin = findPin('Unpin session Bob in RigNorth');
+  assert.ok(unpin);
+  assert.equal(unpin.props.title, 'Unpin session Bob in RigNorth');
+  assert.equal(unpin.props['aria-pressed'], true);
+  unpin.props.onClick();
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['a', 'b']);
+  assert.equal(view.count(), 2);
+  assert.equal(findPin('Pin session Bob in RigNorth').props['aria-pressed'], false);
+  assert.deepEqual(toggled, [seats[1], seats[1]]);
+  assert.deepEqual(view.calls, [], 'pinning never invokes existing host actions');
+});
+
+test('Sidebar pins owned stale partial rows but withholds foreign ownership interpretation and mutation', () => {
+  const partial = seat('partial', { name: 'Long'.repeat(200), rigName: 'Rig'.repeat(200),
+    session: null, status: 'future', runtime: undefined });
+  const pins = load('../src/seat-pins.ts');
+  const toggled = [];
+  const view = sidebar({ inventory: { rigs: [], seats: [partial] },
+    onToggleSeatPin: value => toggled.push(value) });
+  view.props.pinnedSeats = [pins.seatPinIdentity(view.props.connection, partial.id)];
+  for (const error of [view.health.CHECKING_SNAPSHOT, 'Disconnected']) {
+    view.props.inventoryError = error;
+    view.render();
+    const row = view.rows()[0];
+    const pin = row.props.children[1];
+    assert.equal(pin.props.disabled, false);
+    assert.equal(pin.props['aria-pressed'], true);
+    assert.equal(pin.props.title, `Unpin session ${partial.name} in ${partial.rigName}`);
+    assert.equal(pin.props.children.props.size, 13);
+    assert.equal(pin.props.children.props['aria-hidden'], 'true');
+    assert.equal(pin.props.children.props.fill, 'currentColor');
+    assert.equal(row.props.children[0].props.disabled, true);
+    assert.equal(row.props.children[0].props.draggable, false);
+    assert.equal(beside(row).props.disabled, true);
+    assert.equal(relaunch(row).props.disabled, true);
+    pin.props.onClick();
+  }
+  assert.deepEqual(toggled, [partial, partial]);
+  view.props.pinsAvailable = false;
+  view.render();
+  const unavailable = view.rows()[0].props.children[1];
+  assert.equal(unavailable.props.disabled, true);
+  assert.equal(unavailable.props['aria-pressed'], false);
+  assert.equal(unavailable.props.title, `Pin session ${partial.name} in ${partial.rigName}`);
+  unavailable.props.onClick();
+  assert.equal(toggled.length, 2);
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar partitions sorted matches without bypassing filters or inventing absent pinned rows', () => {
+  const alice = seat('alice', { name: 'Alice', status: 'working' });
+  const bob = seat('bob', { name: 'Bob', status: 'idle' });
+  const elsewhere = seat('elsewhere', { rigId: 'r2', name: 'Elsewhere', status: 'working' });
+  const view = sidebar({ inventory: { rigs: [], seats: [bob, elsewhere, alice] } });
+  const { seatPinIdentity } = load('../src/seat-pins.ts');
+  view.props.pinnedSeats = [seatPinIdentity(view.props.connection, bob.id),
+    seatPinIdentity(view.props.connection, elsewhere.id), seatPinIdentity(view.props.connection, 'absent')];
+  for (const mode of ['name', 'activity', 'attention-first']) {
+    view.sort(mode);
+    assert.deepEqual(view.rows().map(row => row.key), ['bob', 'alice']);
+    assert.equal(view.count(), 2);
+    view.status('working');
+    assert.deepEqual(view.rows().map(row => row.key), ['alice']);
+    view.status('all');
+    view.query('Alice');
+    assert.deepEqual(view.rows().map(row => row.key), ['alice']);
+    view.query('absent');
+    assert.equal(view.count(), 0);
+    assert.ok(view.nodes().some(n => n.props?.role === 'status' && textOf(n).includes('No matching sessions')));
+    view.query('');
+    assert.equal(view.sortSelect().props.value, mode);
+  }
+  view.props.inventory = { rigs: [], seats: [alice] };
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['alice']);
+  const replacement = seat('bob', { name: 'Bob', status: 'future', runtime: undefined, session: null });
+  view.props.inventory = { rigs: [], seats: [alice, replacement] };
+  view.render();
+  assert.deepEqual(view.rows().map(row => row.key), ['bob', 'alice']);
+  assert.equal(view.rows()[0].props.children[1].props['aria-pressed'], true);
+  view.rows()[0].props.children[0].props.onClick();
+  assert.equal(view.calls[0][0], replacement);
+  view.calls.length = 0;
+  assert.deepEqual(view.calls, []);
+});
+
+test('Sidebar pin partition preserves equal names across rigs and each sort/filter intersection', () => {
+  const first = seat('r1:same', { name: 'Same', status: 'idle' });
+  const second = seat('r2:same', { name: 'Same', rigId: 'r2', rigName: 'RigSouth', status: 'working' });
+  const attention = seat('r1:attention', { name: 'Zed', status: 'attention' });
+  const input = Object.freeze([first, second, attention]);
+  const { seatPinIdentity } = load('../src/seat-pins.ts');
+  const view = sidebar({ selectedRig: '', inventory: { rigs: [], seats: input } });
+  view.props.pinnedSeats = [seatPinIdentity(view.props.connection, second.id)];
+  const expected = { name: [second, first, attention],
+    activity: [second, attention, first], 'attention-first': [second, attention, first] };
+  const check = values => {
+    assert.deepEqual(view.rows().map(row => row.key), values.map(value => value.id));
+    assert.equal(view.count(), values.length);
+    view.rows().forEach((row, index) => {
+      row.props.children[0].props.onClick();
+      assert.equal(view.calls.pop()[0], values[index]);
+    });
+  };
+  for (const mode of ['name', 'activity', 'attention-first']) {
+    view.sort(mode);
+    check(expected[mode]);
+    view.query('Same');
+    check([second, first]);
+    view.status('working');
+    check([second]);
+    view.props.selectedRig = 'r1'; view.render();
+    check([]);
+    view.props.selectedRig = 'r2'; view.render();
+    check([second]);
+    view.props.selectedRig = ''; view.query(''); view.status('all');
+    check(expected[mode]);
+    view.props.pinnedSeats = [];
+    view.render();
+    check(mode === 'name' ? [first, second, attention] :
+      mode === 'activity' ? [second, attention, first] : [attention, first, second]);
+    view.props.pinnedSeats = [seatPinIdentity(view.props.connection, second.id)];
+    view.render();
+    view.props.connection = { ...view.props.connection, host: 'other' }; view.render();
+    check(mode === 'name' ? [first, second, attention] :
+      mode === 'activity' ? [second, attention, first] : [attention, first, second]);
+    assert.ok(view.rows().every(row => row.props.children[1].props['aria-pressed'] === false));
+    view.props.connection = { id: 'host', kind: 'ssh', name: 'Renamed', root: '/new' };
+    view.render();
+    check(expected[mode]);
+  }
+  assert.deepEqual(view.calls, []);
+  assert.deepEqual(input, [first, second, attention]);
+});
 
 test('Sidebar status select offers five ordered choices and reversibly filters actual rows', () => {
   const inventorySeats = Object.freeze([
@@ -276,12 +460,12 @@ test('Sidebar sorting preserves original callback objects stale guards empty sta
   view.sort('activity');
   assert.deepEqual(view.rows().map(row => row.key), ['long', 'partial']);
   assert.ok(view.rows()[0].props.children[0].props.title.startsWith(original.name));
-  assert.equal(view.rows()[1].props.children[1].props.disabled, true);
+  assert.equal(beside(view.rows()[1]).props.disabled, true);
   assert.deepEqual(view.calls, []);
   const row = view.rows()[0];
   row.props.children[0].props.onClick();
-  row.props.children[1].props.onClick();
-  row.props.children[2].props.onClick();
+  beside(row).props.onClick();
+  relaunch(row).props.onClick();
   assert.deepEqual(view.calls, [[original], [original], [original]]);
   view.calls.length = 0;
   for (const error of [view.health.CHECKING_SNAPSHOT, 'Disconnected']) {
@@ -384,6 +568,9 @@ test('does not join metadata fields or interpret query as regular expression', (
   }
 });
 
+function beside(row) { return row.props.children.find(n => n?.props?.title?.startsWith("Open ")); }
+function relaunch(row) { return row.props.children.find(n => n?.props?.title?.startsWith("Relaunch session ")); }
+
 function textOf(node) {
   if (Array.isArray(node)) return node.map(textOf).join('');
   if (node == null || typeof node === 'boolean') return '';
@@ -457,8 +644,8 @@ test('Sidebar stale and checking snapshots retain notices and disabled actions a
         const open = row.props.children[0];
         assert.equal(open.props.disabled, true);
         assert.equal(open.props.draggable, false);
-        assert.equal(row.props.children[1].props.disabled, true);
-        assert.equal(row.props.children[2].props.disabled, true);
+        assert.equal(beside(row).props.disabled, true);
+        assert.equal(relaunch(row).props.disabled, true);
       }
       assert.equal(view.props.selectedRig, 'r1');
     }
@@ -474,8 +661,8 @@ test('Sidebar partial seat without session retains beside and relaunch guards', 
   const row = view.rows()[0];
   assert.equal(row.props.children[0].props.disabled, false);
   assert.equal(row.props.children[0].props.draggable, true);
-  assert.equal(row.props.children[1].props.disabled, true);
-  assert.equal(row.props.children[2].props.disabled, true);
+  assert.equal(beside(row).props.disabled, true);
+  assert.equal(relaunch(row).props.disabled, true);
   view.query('');
   assert.deepEqual(view.rows().map(row => row.key), ['partial']);
   assert.deepEqual(view.calls, []);
@@ -542,8 +729,8 @@ test('Sidebar status filtering preserves stale/checking guards and notices even 
       for (const row of view.rows()) {
         assert.equal(row.props.children[0].props.disabled, true);
         assert.equal(row.props.children[0].props.draggable, false);
-        assert.equal(row.props.children[1].props.disabled, true);
-        assert.equal(row.props.children[2].props.disabled, true);
+        assert.equal(beside(row).props.disabled, true);
+        assert.equal(relaunch(row).props.disabled, true);
       }
     }
     assert.deepEqual(view.calls, []);
@@ -560,17 +747,17 @@ test('Sidebar filtered explicit actions receive original seats while missing-ses
   const [row, partialRow] = view.rows();
   assert.equal(row.props.children[0].props.disabled, false);
   assert.equal(row.props.children[0].props.draggable, true);
-  assert.equal(row.props.children[1].props.disabled, false);
-  assert.equal(row.props.children[2].props.disabled, false);
+  assert.equal(beside(row).props.disabled, false);
+  assert.equal(relaunch(row).props.disabled, false);
   row.props.children[0].props.onClick();
   const event = {};
   row.props.children[0].props.onDragStart(event);
-  row.props.children[1].props.onClick();
-  row.props.children[2].props.onClick();
+  beside(row).props.onClick();
+  relaunch(row).props.onClick();
   assert.deepEqual(view.calls, [[original], [event, original], [original], [original]]);
   for (const args of view.calls) assert.equal(args[args.length - 1], original);
   assert.equal(partialRow.props.children[0].props.disabled, false);
   assert.equal(partialRow.props.children[0].props.draggable, true);
-  assert.equal(partialRow.props.children[1].props.disabled, true);
-  assert.equal(partialRow.props.children[2].props.disabled, true);
+  assert.equal(beside(partialRow).props.disabled, true);
+  assert.equal(relaunch(partialRow).props.disabled, true);
 });

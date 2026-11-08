@@ -77,6 +77,7 @@ import {
   StatusDot,
 } from "./components";
 import Sidebar from "./Sidebar";
+import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
 import {
@@ -265,6 +266,9 @@ export default function App() {
     state.connections[0] ||
     local;
   const root = state.roots[connection.id] || connection.root;
+  const pinOwner = pinConnectionIdentity(connection);
+  // Ownership is captured at render time, independently of snapshot freshness.
+  const pinsAvailable = inventoryHealth.current.key === pinOwner;
   const projectHistory = useMemo(
     () => normalizeHistory(state.projectHistory),
     [state.projectHistory],
@@ -474,6 +478,7 @@ export default function App() {
         setState({
           ...base,
           projectHistory: normalizeHistory(base.projectHistory),
+          pinnedSeats: normalizePinnedSeats(base.pinnedSeats),
           connections,
           preferences:
             base.preferences ??
@@ -2062,6 +2067,20 @@ export default function App() {
                 inventoryError={inventoryError}
                 busy={busy}
                 selectedRig={state.activeRig}
+                pinnedSeats={state.pinnedSeats || []}
+                pinsAvailable={pinsAvailable}
+                onToggleSeatPin={(seat) => {
+                  if (!pinsAvailable) return;
+                  setState((s) => {
+                    const current = s.connections.find((c) => c.id === s.activeConnection) ||
+                      s.connections[0] || local;
+                    if (pinConnectionIdentity(current) !== pinOwner) return s;
+                    return {
+                      ...s,
+                      pinnedSeats: toggleSeatPin(s.pinnedSeats, seatPinIdentity(current, seat.id)),
+                    };
+                  });
+                }}
                 onRig={(id) => setState((s) => ({ ...s, activeRig: id }))}
                 onRefresh={refreshAll}
                 onProject={openProject}
