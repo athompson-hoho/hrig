@@ -102,6 +102,7 @@ import {
 } from "./inventory-health";
 import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
+import { snippetContext, type SnippetContext } from "./snippet-vars";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
@@ -1731,7 +1732,7 @@ export default function App() {
         );
     }
   };
-  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string; connection: string} | null>(null);
+  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string; connection: string; context: SnippetContext} | null>(null);
   const openPalette = () => {
     projectIntent.current++;
     setSearch("");
@@ -1767,7 +1768,7 @@ export default function App() {
   const terminalTabs = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken);
   const terminalCommands = terminalTabs.flatMap(t => {
     const config = t.config as PanelConfig;
-    const target = {id: config.terminalId!, name: t.name || "Terminal", connection: config.connection.name};
+    const target = {id: config.terminalId!, name: t.name || "Terminal", connection: config.connection.name, context: snippetContext(config.connection, config.root, config.seat)};
     return [
       ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
         name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
@@ -3213,6 +3214,7 @@ export default function App() {
         )}
         {snippetTarget && <TerminalSnippets name={snippetTarget.name} connection={snippetTarget.connection} terminalId={snippetTarget.id}
           snippets={state.terminalSnippets || []}
+          context={snippetTarget.context}
           onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
           onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}
           onClose={() => setSnippetTarget(null)} />}
