@@ -50,41 +50,12 @@ const seat = (id, extra = {}) => Object.freeze({
 const seats = Object.freeze([seat('a'), seat('b', { name: 'Bob', pod: 'Reviewers' }),
   seat('c', { rigId: 'r2', name: 'Other' })]);
 
-// This harness checks actual element props and retained query state, not native DOM behavior.
-let sidebarInstance = 0;
+// Execute production nested components and measured viewport with synthetic DOM.
+const { mountComponent } = require("./helpers/virtual-list-harness.cjs");
 function sidebar(overrides = {}, context = preferences()) {
-  const state = [];
-  const instance = ++sidebarInstance;
-  const refs = [];
-  let refCursor = 0;
-  let cursor = 0;
   const calls = [];
   const action = (...args) => calls.push(args);
-  const health = load('../src/inventory-health.ts');
-  const Sidebar = load('../src/Sidebar.tsx', {
-    react: { useEffect() {}, useId() { return `sidebar-${instance}`; },
-      useRef(initial) { const i = refCursor++; return refs[i] ||= { current: initial }; }, useState(initial) {
-      const index = cursor++;
-      if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
-      return [state[index], (value) => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
-    } },
-    'lucide-react': new Proxy({}, { get: (_, name) => name }),
-    './components': { ErrorBox: 'ErrorBox', IconButton: 'IconButton', StatusDot: 'StatusDot' },
-    './inventory-health': health,
-    './seat-pods': load('../src/seat-pods.ts', { './seat-pins': load('../src/seat-pins.ts') }),
-    './seat-status': load('../src/seat-status.ts'),
-    './SettingsContext': { useSettings: () => context },
-    // Baseline Sidebar does not import this module yet. Never manufacture a
-    // missing-module RED: the actual absent control must fail its assertion.
-    './seat-sort': fs.existsSync(path.join(__dirname, '../src/seat-sort.ts'))
-      ? load('../src/seat-sort.ts') : {},
-    // Optional only for the baseline RED: absence must fail the actual control
-    // assertion rather than module setup. GREEN injects the real pin helper.
-    './seat-pins': fs.existsSync(path.join(__dirname, '../src/seat-pins.ts'))
-      ? load('../src/seat-pins.ts') : {},
-    './seat-search': fs.existsSync(require('node:path').join(__dirname, '../src/seat-search.ts'))
-      ? load('../src/seat-search.ts') : {},
-  }).default;
+  const health = load("../src/inventory-health.ts");
   const props = {
     section: 'sessions', connection: { id: 'host', kind: 'ssh', name: 'Host' }, root: '~',
     inventory: { rigs: [], seats, sampledAt: new Date().toISOString() }, inventoryError: '',
@@ -95,19 +66,12 @@ function sidebar(overrides = {}, context = preferences()) {
       'onSeat', 'onSeatBeside', 'onRelaunch', 'onDrag', 'onFile', 'onDiff'].map(key => [key, action])),
     ...overrides,
   };
-  let tree;
-  const render = () => { cursor = 0; refCursor = 0; tree = Sidebar(props); return tree; };
-  const nodes = () => {
-    const result = [];
-    function walk(node) {
-      if (Array.isArray(node)) return node.forEach(walk);
-      if (!node || typeof node !== 'object') return;
-      result.push(node);
-      walk(node.props?.children);
-    }
-    walk(tree);
-    return result;
-  };
+  const view = mountComponent("src/Sidebar.tsx", "default", props, {
+    actualComponents: true, resolvedChildren: true, settings: context,
+    height: 330, rowHeight: 55,
+  });
+  const render = () => view.update(props);
+  const nodes = view.nodes;
   const input = () => nodes().find(n => n.type === 'input' && n.props['aria-label'] === 'Filter sessions');
   const statusSelect = () => nodes().find(n => n.type === 'select' &&
     n.props['aria-label'] === 'Filter session status');
@@ -209,8 +173,9 @@ test('pod disclosure toggles actual owner state without hiding favorites', () =>
   assert.equal(collapse.props.disabled, false);
   assert.equal(typeof controlledId, 'string');
   assert.ok(region(), 'expanded disclosure controls a mounted container');
-  assert.ok(textOf(region()).includes('Ordinary'));
-  assert.equal(textOf(region()).includes('Favorite'), false, 'favorite is outside controlled rows');
+  assert.ok(view.nodes().some(n => n.props?.className === 'pod-content' && textOf(n).includes('Ordinary')), 'expanded ordinary segment is mounted');
+  assert.ok(view.nodes().filter(n => n.props?.className === 'pod-content')
+    .every(n => !textOf(n).includes('Favorite')), 'favorite is outside ordinary pod segments');
   collapse.props.onClick();
   view.render();
   assert.deepEqual(Array.from(workspace.collapsedPods), [identity]);

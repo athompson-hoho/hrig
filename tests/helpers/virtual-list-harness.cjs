@@ -5,7 +5,9 @@ const ts = require('typescript');
 
 // Controlled DOM geometry only. All component rendering and range decisions
 // come from production source, including nested function components.
+let mountSerial = 0;
 function mountComponent(file, exportName, initialProps, options = {}) {
+  const mountId = ++mountSerial;
   const instances = new Map(), dom = new Map(), modules = new Map();
   const observers = new Set(), pending = [];
   const document = { activeElement: null };
@@ -28,7 +30,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       }];
     },
     useRef(initial) { const i = current.cursor++; return current.slots[i] ??= { current: initial }; },
-    useId() { const i = current.cursor++; return current.slots[i] ??= `list-test-${++serial}`; },
+    useId() { const i = current.cursor++; return current.slots[i] ??= `list-test-${mountId}-${++serial}`; },
     useEffect: effect, useLayoutEffect: effect,
     useMemo(fn, deps) {
       const i = current.cursor++, old = current.slots[i];
@@ -119,8 +121,10 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       };
       dom.set(location, node);
     }
-    node.props = value.props; node.parentElement = parent;
+    node.props = value.props; node.key = value.key; node.parentElement = parent;
     node.children = render(value.props.children, `${location}/children`, node, seenInstances, seenDom);
+    if (options.resolvedChildren) node.props = { ...value.props,
+      children: Array.isArray(value.props.children) ? node.children : typeof value.props.children !== "object" ? value.props.children : node.children.length === 1 ? node.children[0] : value.props.children };
     const ref = value.props.ref;
     if (node.ref !== ref) {
       if (typeof node.ref === 'function') node.ref(null);

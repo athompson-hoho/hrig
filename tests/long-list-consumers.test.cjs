@@ -44,7 +44,7 @@ function assertDisclosureTargets(view) {
   }
 }
 function viewport(view, label) {
-  return view.nodes().find(n => n.props.role === 'region' && n.props['aria-label'] === label);
+  return view.nodes().find(n => n.props.className?.split(' ').includes('virtual-list') && n.props['aria-label'] === label);
 }
 function scroll(view, node, top) {
   assert.ok(node, 'real labelled viewport is mounted');
@@ -174,4 +174,71 @@ test('Sidebar filter intersects running alias and retains truthful zero/empty gu
   assert.ok(view.nodes().some(n => view.text(n) === 'Discovering seats…'));
   assert.deepEqual(view.calls, []);
   view.unmount();
+});
+
+test('Sidebar middle native siblings, keyboard boundaries and sparse retention preserve authority', () => {
+  const items = Object.freeze(Array.from({ length: 2000 }, (_, i) => seat(i)));
+  const view = sidebar(items);
+  const list = viewport(view, 'Sessions');
+  scroll(view, list, 55055);
+  const original = items[1000];
+  const open = classNodes(view, 'seat-row').find(n => n.props.title.startsWith(`${original.name}@`));
+  assert.ok(open);
+  for (const label of [`Pin session ${original.name} in ${original.rigName}`,
+    `Open ${original.name} beside current`, `Relaunch session ${original.name}`]) {
+    const button = view.nodes().find(n => n.type === 'button' && n.props['aria-label'] === label);
+    assert.ok(button);
+    view.event(button, 'onClick');
+    assert.equal(view.calls.at(-1)[1], original);
+  }
+  const baseline = view.calls.length;
+  open.focus();
+  view.event(list, 'onFocusCapture', { target: open });
+  view.event(list, 'onDragStartCapture', { target: open });
+  scroll(view, list, 1e9);
+  assert.ok(view.nodes().includes(open), 'same focused/dragged native root is retained');
+  assert.ok(seatRows(view).length <= 16, 'sparse extras do not fill the intervening range');
+  list.focus();
+  view.event(list, 'onBlurCapture');
+  view.event(list, 'onDragEndCapture');
+  assert.ok(!view.nodes().includes(open));
+  view.event(list, 'onKeyDown', { key: 'Home' });
+  assert.equal(view.document.activeElement.props.className, 'pod-disclosure');
+  list.focus();
+  view.event(list, 'onKeyDown', { key: 'ArrowDown' });
+  assert.ok(view.document.activeElement.props.title.startsWith(`${items[0].name}@`));
+  list.focus();
+  view.event(list, 'onKeyDown', { key: 'End' });
+  assert.ok(view.document.activeElement.props.title.startsWith(`${items.at(-1).name}@`));
+  const lastRow = seatRows(view).find(n => n.contains(view.document.activeElement));
+  const lastAction = lastRow.children.at(-1);
+  const tab = view.event(list, 'onKeyDown', { key: 'Tab', target: lastAction });
+  assert.equal(tab.defaultPrevented, false, 'native Tab leaves the final row');
+  assert.equal(view.calls.length, baseline, 'navigation adds no consumer action');
+  view.unmount();
+});
+
+test('Sidebar resized hidden and replaced owner windows retain full counts and current callbacks', () => {
+  const items = Object.freeze(Array.from({ length: 2000 }, (_, i) => seat(i, { pod: `Pod ${i}` })));
+  const view = sidebar(items);
+  let list = viewport(view, 'Sessions');
+  view.resize(list, 0);
+  assert.ok(seatRows(view).length + disclosureRows(view).length <= 5);
+  view.resize(list, 165, 320);
+  scroll(view, list, 1e9);
+  assert.ok(seatRows(view).length + disclosureRows(view).length <= 12);
+  assert.equal(sessionCount(view), 2000);
+  assertDisclosureTargets(view);
+  const replacement = seat(1999, { name: 'Current owner seat', pod: '' });
+  view.update({ connection: { ...connection, host: 'synthetic-replacement' },
+    inventory: { rigs: [], seats: [replacement] } });
+  list = viewport(view, 'Sessions');
+  assert.equal(sessionCount(view), 1);
+  assert.equal(seatRows(view).length, 1);
+  assert.equal(list.scrollTop, 0);
+  assert.deepEqual(view.calls, []);
+  view.event(classNodes(view, 'seat-row')[0], 'onClick');
+  assert.equal(view.calls[0][1], replacement);
+  view.unmount();
+  assert.equal(view.observers.size, 0);
 });
