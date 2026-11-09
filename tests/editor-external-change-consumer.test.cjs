@@ -478,3 +478,55 @@ test('incomplete reload response preserves local text baseline and recovery', as
   assert.equal(v.editor().props.value, local, 'Missing disk fields cannot become an empty/loading file');
   assert.ok(v.button('Reload from disk'));
 });
+
+// UI audit W1: a recovered current disk check retires only its own failure.
+for (const [label, disk] of [['same revision', initial], ['changed revision', fresh]]) {
+  test(`current ${label} disk success retires its prior disk-check failure`, async t => {
+    const v = await detected(t), before = preserved(v);
+    v.focusWindow(); await v.reject(2, Error('synthetic failed disk check'));
+    assert.ok(v.visibleText().includes('Could not check disk changes.'), 'Current failure positive control');
+    unchanged(v, before);
+    v.focusWindow(); await v.resolve(3, disk);
+    unchanged(v, before);
+    assert.equal(v.editor().props.value, local);
+    assert.ok(!v.visibleText().includes('Could not check disk changes.'),
+      'A valid current disk check must retire its own obsolete failure guidance');
+    assert.ok(v.button('Compare with disk')); assert.ok(v.button('Reload from disk'));
+    if (disk === fresh) assert.equal(v.button('Keep mine').props.disabled, false);
+  });
+}
+
+test('successful disk checks retain unrelated newer-typing Reload retry guidance', async t => {
+  const v = await detected(t), pending = startReload(v);
+  v.type('new local typing after confirmation');
+  const before = preserved(v);
+  await v.resolve(pending, fresh); unchanged(v, before);
+  assert.ok(v.visibleText().includes('Reload canceled because you edited'));
+  v.focusWindow(); await v.resolve(3, initial); unchanged(v, before);
+  assert.ok(v.visibleText().includes('Reload canceled because you edited'),
+    'Disk success must not clear unrelated Reload retry guidance');
+});
+
+test('obsolete disk success cannot retire a new owner disk-check failure', async t => {
+  const v = await detected(t), old = v.buffer(), bytes = JSON.stringify(old);
+  v.focusWindow(); const oldRead = 2;
+  v.retarget({ id: 'new-owner-panel', config: { ...v.props.config, path: 'new-owner.ts' } });
+  await v.resolve(3, initial);
+  assert.equal(v.editor().props.value, initial.content, 'Current owner opening positive control');
+  v.focusWindow(); await v.reject(4, Error('current owner disk check failed'));
+  assert.ok(v.visibleText().includes('Could not check disk changes.'));
+  const before = preserved(v); await v.resolve(oldRead, fresh); unchanged(v, before);
+  assert.ok(v.visibleText().includes('Could not check disk changes.'),
+    'An obsolete owner result cannot clear current failure guidance');
+  assert.equal(JSON.stringify(old), bytes);
+});
+
+test('malformed disk response does not retire a current disk-check failure', async t => {
+  const v = await detected(t), before = preserved(v);
+  v.focusWindow(); await v.reject(2, Error('synthetic disk failure'));
+  assert.ok(v.visibleText().includes('Could not check disk changes.'));
+  v.focusWindow(); await v.resolve(3, { content: '', revision: 'partial', truncated: true });
+  unchanged(v, before);
+  assert.ok(v.visibleText().includes('Could not check disk changes.'),
+    'Only a valid current disk read can retire its failure notice');
+});
