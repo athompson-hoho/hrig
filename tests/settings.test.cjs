@@ -1223,3 +1223,54 @@ test("shortcuts.overrides is plain text with the generic rule, empty by default,
     "SETTINGS.md must have a shortcuts.overrides row with an empty default",
   );
 });
+test("appearance.statusBarHidden is a text Appearance setting, empty by default, listed once right after Show status bar, under the generic text rule, project over user, and documented in SETTINGS.md", () => {
+  const key = "appearance.statusBarHidden";
+  const root = path.join(srcDir, "..");
+  const items = bundled("src/status-bar-items.ts");
+  assert.equal(settings.defaults[key], "");
+  assert.equal(settings.defaults["appearance.statusBar"], true);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "appearance.statusBar");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Appearance");
+  assert.equal(row.label, "Hidden status bar items");
+  assert.equal(row.options, undefined);
+  for (const item of items.STATUS_ITEMS)
+    assert.ok(row.description.includes(item.id), "the row names " + item.id);
+  const text = "sessions, layout";
+  assert.deepEqual(settings.validateOverrides({ [key]: text }), {
+    [key]: text,
+  });
+  for (const value of ["", "   ", "a;b", "a<b>", "a{b}", "x".repeat(301)]) {
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Invalid text for " + key,
+      "the generic text rule for " + JSON.stringify(value.slice(0, 12)),
+    );
+  }
+  for (const value of [true, 1, null, ["sessions"]])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.equal(
+    settings.validateOverrides({ [key]: "x".repeat(300) })[key].length,
+    300,
+  );
+  assert.deepEqual(settings.safeOverrides({ [key]: "" }), {});
+  assert.equal(settings.resolveSettings()[key], "");
+  assert.equal(
+    settings.resolveSettings({ [key]: "sessions" })[key],
+    "sessions",
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: "sessions" }, { [key]: "activity" })[key],
+    "activity",
+  );
+  const doc = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  assert.ok(
+    doc.includes("| `" + key + "` | empty |"),
+    "SETTINGS.md must have an appearance.statusBarHidden row with an empty default",
+  );
+});

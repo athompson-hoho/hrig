@@ -86,6 +86,7 @@ import { HostTintContext } from "./HostTint";
 import HostTintDialog from "./HostTintDialog";
 import { normalizeHostTints } from "./host-tint";
 import { resolveTaskFilters, saveTaskFilters } from "./task-filters";
+import { isVisible, parseHidden, statusDividers } from "./status-bar-items";
 import {
   safeOverrides,
   validateOverrides,
@@ -357,6 +358,12 @@ export default function App() {
     () => parseOverrideText(overridesText, window.hrig?.platform || "unknown").map,
     [overridesText],
   );
+  const statusHiddenText = preferences["appearance.statusBarHidden"];
+  const hiddenStatusItems = useMemo(
+    () => parseHidden(statusHiddenText),
+    [statusHiddenText],
+  );
+  const statusSeparators = statusDividers(hiddenStatusItems);
   const themeDocuments = useRef(new Set<Document>([document]));
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -2852,26 +2859,32 @@ export default function App() {
         </div>
         {showStatusBar(focusMode, preferences["appearance.statusBar"]) && (
           <footer className="statusbar">
-            <AccountStatus connection={connection} />
+            {isVisible("accounts", hiddenStatusItems) && (
+              <AccountStatus connection={connection} />
+            )}
             <div>
-              <span className="status-brand">
-                <Network size={11} />
-                {connection.kind === "local"
-                  ? "Local workspace"
-                  : `${connection.kind.toUpperCase()}: ${connection.name}`}
-              </span>
-              <button
-                onClick={() => {
-                  setSection("changes");
-                  setSidebar(true);
-                }}
-              >
-                <GitBranch size={11} />
-                Source control
-              </button>
+              {isVisible("connection", hiddenStatusItems) && (
+                <span className="status-brand">
+                  <Network size={11} />
+                  {connection.kind === "local"
+                    ? "Local workspace"
+                    : `${connection.kind.toUpperCase()}: ${connection.name}`}
+                </span>
+              )}
+              {isVisible("source-control", hiddenStatusItems) && (
+                <button
+                  onClick={() => {
+                    setSection("changes");
+                    setSidebar(true);
+                  }}
+                >
+                  <GitBranch size={11} />
+                  Source control
+                </button>
+              )}
             </div>
             <div>
-              {droppedNow.length > 0 && (
+              {droppedNow.length > 0 && isVisible("reconnect", hiddenStatusItems) && (
                 <>
                   <button
                     onClick={reconnectDropped}
@@ -2880,20 +2893,30 @@ export default function App() {
                     <RefreshCw size={11} />
                     {droppedLabel(droppedNow.length)}
                   </button>
-                  <span className="status-divider" />
+                  {statusSeparators.afterReconnect && (
+                    <span className="status-divider" />
+                  )}
                 </>
               )}
-              <span>
-                {tabCount} {tabCount === 1 ? "session" : "sessions"} open
-              </span>
-              <span className="status-divider" />
-              <span>
-                <Check size={11} />
-                Layout autosaved
-              </span>
-              <button onClick={() => addPanel("activity", "Activity")}>
-                <Activity size={12} />
-              </button>
+              {isVisible("sessions", hiddenStatusItems) && (
+                <span>
+                  {tabCount} {tabCount === 1 ? "session" : "sessions"} open
+                </span>
+              )}
+              {statusSeparators.betweenSessionsAndLayout && (
+                <span className="status-divider" />
+              )}
+              {isVisible("layout", hiddenStatusItems) && (
+                <span>
+                  <Check size={11} />
+                  Layout autosaved
+                </span>
+              )}
+              {isVisible("activity", hiddenStatusItems) && (
+                <button onClick={() => addPanel("activity", "Activity")}>
+                  <Activity size={12} />
+                </button>
+              )}
             </div>
           </footer>
         )}

@@ -1,6 +1,7 @@
 import { themes } from "./theme-catalog";
 import { isWindows } from "./platform";
 import { DEFAULT_WORD_SEPARATOR, isValidWordSeparator } from "./terminal-words";
+import { STATUS_ITEMS } from "./status-bar-items";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -8,6 +9,7 @@ export const defaults = {
   "appearance.fontFamily": '"DM Sans", "Segoe UI", sans-serif',
   "appearance.reduceMotion": false,
   "appearance.statusBar": true,
+  "appearance.statusBarHidden": "",
   "editor.fontSize": 13,
   "editor.fontFamily": '"Cascadia Code", Consolas, monospace',
   "editor.tabSize": 2,
@@ -147,6 +149,15 @@ export const schema: Setting[] = [
     label: "Show status bar",
     description:
       "Show connection, source control, session count, and layout status at the bottom.",
+  },
+  {
+    key: "appearance.statusBarHidden",
+    category: "Appearance",
+    label: "Hidden status bar items",
+    description:
+      "Status bar items to hide, as ids separated by commas or spaces: " +
+      STATUS_ITEMS.map((item) => item.id).join(", ") +
+      ". Empty (the default) shows every item, and unknown ids are ignored. An empty box is not accepted: use the reset button to show every item again. The reconnect button appears only while terminals are dropped, and the same action stays in the command center. Applies only while Show status bar is on. Display only; nothing is sent to the shell or the seat.",
   },
   {
     key: "editor.fontSize",
