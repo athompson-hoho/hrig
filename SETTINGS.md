@@ -29,7 +29,9 @@ Seat sort order (`rig.seatSort`) also controls the sidebar's Sort sessions selec
 
 Changing terminal appearance updates the existing xterm view, without replacing its PTY. Selecting a different local shell affects newly created local terminals; remote sessions continue to use their existing harness. Reconnection remains bounded to six attempts and never launches agents. Decreasing scrollback can remove older visible history.
 
-The Settings JSON view exports preferences only, including any configured default-root preference; it excludes saved connections, credentials, current project bindings, layouts and terminal output. Imports replace only the selected scope after full key/type/range validation. Unknown keys, invalid values, oversized files and malformed JSON are rejected before any preference is applied.
+The Settings JSON view exports preferences only, including any configured default-root preference; it excludes saved connections, credentials, current project bindings, layouts and terminal output. Imports replace only the selected scope after full key/type/range validation. Before anything is applied, the JSON view checks the text and shows what would be added, changed, removed (the import replaces the selected scope) and skipped. Malformed JSON, an unreadable version, oversized files or a missing settings object block Apply. Individual unknown keys (for example from a newer or older HRig) and invalid values are skipped and listed, and the remaining valid settings can still be applied.
+
+**Migration notes.** The file format is `{ "version": 1, "settings": { ... } }`. A file with a higher version is read as version 1 and flagged. Settings are never renamed silently: a key HRig does not know is skipped, so removed or renamed settings fall back to their defaults. Exporting always writes the current version.
 
 ## Settings catalog
 

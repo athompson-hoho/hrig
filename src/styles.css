@@ -4614,3 +4614,5 @@ button:hover {
 .editor-breadcrumbs { display: inline-flex; flex-wrap: nowrap; align-items: center; min-width: 0; overflow: hidden; white-space: nowrap; }
 .editor-breadcrumbs .crumb-sep { opacity: 0.5; white-space: pre; }
 .editor-breadcrumbs .crumb-current { font-weight: 600; }
+.settings-import-report { margin: 8px 0; font-size: 12px; }
+.settings-import-report ul { margin: 4px 0 4px 18px; padding: 0; }
