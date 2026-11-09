@@ -20,6 +20,7 @@ import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { formatAge } from "./inventory-health";
 import { connectionStatus } from "./connection-status";
+import { QUICK_ACTIONS } from "./rig-quick-actions";
 import { seatActivityAge } from "./seat-activity-age";
 import { seatWorkSummary } from "./seat-work";
 import { filterSeats } from "./seat-search";
@@ -51,6 +52,7 @@ export default function Sidebar({
   podsAvailable,
   onTogglePod,
   onRig,
+  onRigAction,
   onRefresh,
   onProject,
   onConnect,
@@ -82,6 +84,8 @@ export default function Sidebar({
   pinsAvailable: boolean;
   onToggleSeatPin: (seat: Seat) => void;
   onRig: (id: string) => void;
+  /** Opens the control center on a reviewed form; never runs anything. */
+  onRigAction?: (rigId: string, actionId: string) => void;
   onRefresh: () => void;
   onProject: () => void;
   onConnect: () => void;
@@ -155,6 +159,15 @@ export default function Sidebar({
   const selectOnly = effective["rig.seatClick"] === "select";
   const activityClock = Date.now(); // reader clock; refreshed by existing inventory rerenders, no timer
   const ageCurrent = !inventoryError && pinsAvailable;
+  const [rigMenu, setRigMenu] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rigMenu) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setRigMenu(null); };
+    const click = () => setRigMenu(null);
+    window.addEventListener("keydown", key);
+    window.addEventListener("click", click);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("click", click); };
+  }, [rigMenu]);
   const connState = connectionStatus({
     error: inventoryError,
     hasInventory: !!inventory,
@@ -456,16 +469,57 @@ export default function Sidebar({
             {rigs.length > 0 && <VirtualList rows={rigs} itemKey={r => JSON.stringify([owner, "rig", r.id])}
               scopeKey={owner} label="Rig list" maxHeight={136} estimateHeight={34}
               className="sidebar-rig-viewport" renderRow={r => (
-              <button
-                className={`rig-row ${r.id === selectedRig ? "selected" : ""}`}
-                key={r.id}
-                onClick={() => onRig(r.id)}
-              >
-                <StatusDot status={r.status} />
-                <span>{r.name}</span>
-                <span className="count">{r.nodeCount}</span>
-              </button>
+              <div className="rig-row-wrap" key={r.id}>
+                <button
+                  className={`rig-row ${r.id === selectedRig ? "selected" : ""}`}
+                  onClick={() => onRig(r.id)}
+                >
+                  <StatusDot status={r.status} />
+                  <span>{r.name}</span>
+                  <span className="count">{r.nodeCount}</span>
+                </button>
+                {onRigAction && (
+                  <button
+                    type="button"
+                    className="rig-actions-toggle"
+                    title={`Rig actions for ${r.name}`}
+                    aria-label={`Rig actions for ${r.name}`}
+                    aria-haspopup="menu"
+                    aria-expanded={rigMenu === r.id}
+                    disabled={!!inventoryError}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRigMenu(rigMenu === r.id ? null : r.id);
+                    }}
+                  >
+                    <span aria-hidden="true">⋯</span>
+                  </button>
+                )}
+              </div>
             )} />}
+            {onRigAction && rigMenu && (() => {
+              const rig = rigs.find((r) => r.id === rigMenu);
+              if (!rig) return null;
+              return (
+                <div className="rig-actions-menu" role="menu" aria-label={`Actions for ${rig.name}`}>
+                  <p className="subtle">Opens the OpenRig control center. Nothing runs until you review and confirm there.</p>
+                  {QUICK_ACTIONS.map((a) => (
+                    <button
+                      key={a.id}
+                      role="menuitem"
+                      title={a.hint}
+                      onClick={() => {
+                        setRigMenu(null);
+                        onRigAction(rig.id, a.id);
+                      }}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                  <button role="menuitem" onClick={() => setRigMenu(null)}>Close</button>
+                </div>
+              );
+            })()}
           </div>
           <div className="section-label">
             <span title="Matching sessions, including favorites and sessions in collapsed pods.">SESSIONS</span>

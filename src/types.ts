@@ -103,6 +103,8 @@ export interface PanelConfig {
   port?: number;
   line?: number;
   role?: string;
+  /** One-shot request to open the control center on a command (navigation only). */
+  initialCommand?: { path: string[]; rigId?: string; nonce: number };
 }
 export interface TerminalLogState { id: string; active: boolean; path: string; bytes: number; error: string }
 export interface TerminalEvent {

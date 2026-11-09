@@ -138,6 +138,7 @@ import { draftOperation } from "./drafts";
 import DeferredPanel from "./DeferredPanel";
 import PanelBoundary from "./PanelBoundary";
 import { connectionStatus } from "./connection-status";
+import { initialCommand, quickAction } from "./rig-quick-actions";
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
   DoctorPanel,
@@ -902,6 +903,23 @@ export default function App() {
       cancelled = true;
     };
   }, [loaded, root, endpoint, state.activeRig, currentRig?.name]);
+  // Quick action menu: navigation only. Opens the control center on a command
+  // with the rig prefilled; the reviewed Review/confirm/Run flow is unchanged.
+  const openRigAction = (rigId: string, actionId: string) => {
+    const action = quickAction(actionId);
+    const rig = inventory?.rigs.find((r) => r.id === rigId);
+    if (!action || !rig) return;
+    const request = initialCommand(action, rig, Date.now());
+    const panelId = "tool:rigControl:" + workspace;
+    const existing = model.getNodeById(panelId) as TabNode | undefined;
+    if (existing)
+      model.doAction(
+        Actions.updateNodeAttributes(panelId, {
+          config: { ...existing.getConfig(), initialCommand: request },
+        }),
+      );
+    addPanel("rigControl", "OpenRig control center", { initialCommand: request }, panelId);
+  };
   const addPanel = (
     component: string,
     name: string,
@@ -1497,7 +1515,7 @@ export default function App() {
       case "doctor":
         return <DoctorPanel connection={config.connection} />;
       case "rigControl":
-        return <RigControl connection={config.connection} root={config.root} inventory={config.connection.id === connection.id ? inventory : null} onFile={(path,line) => openFile(path,false,line,config)} />;
+        return <RigControl connection={config.connection} root={config.root} inventory={config.connection.id === connection.id ? inventory : null} onFile={(path,line) => openFile(path,false,line,config)} initial={config.initialCommand} />;
       case "attention":
         return (
           <AttentionPanel
@@ -2191,6 +2209,7 @@ export default function App() {
                   });
                 }}
                 onRig={(id) => setState((s) => ({ ...s, activeRig: id }))}
+                onRigAction={(rigId, actionId) => openRigAction(rigId, actionId)}
                 onRefresh={refreshAll}
                 onProject={openProject}
                 onConnect={openConnect}

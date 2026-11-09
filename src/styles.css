@@ -4622,3 +4622,11 @@ button:hover {
 .seat-compare-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .seat-compare-pane h4 { margin: 4px 0; font-size: 12px; }
 @media (max-width: 800px) { .seat-compare-grid.two { grid-template-columns: minmax(0, 1fr); } }
+.rig-row-wrap { display: flex; align-items: center; gap: 2px; }
+.rig-row-wrap > .rig-row { flex: 1; min-width: 0; }
+.rig-actions-toggle { flex: 0 0 auto; padding: 2px 6px; border-radius: 4px; color: var(--color-818b9d); background: transparent; border: 0; cursor: pointer; }
+.rig-actions-toggle:hover:not(:disabled), .rig-actions-toggle:focus-visible { background: var(--color-22252e); }
+.rig-actions-toggle:disabled { opacity: 0.4; cursor: default; }
+.rig-actions-menu { display: flex; flex-direction: column; gap: 2px; margin: 4px 8px; padding: 6px; border: 1px solid var(--color-3b414e); border-radius: 6px; background: var(--color-22252e); }
+.rig-actions-menu p { margin: 0 0 4px; font-size: 11px; }
+.rig-actions-menu button { text-align: left; padding: 5px 8px; border-radius: 4px; }
