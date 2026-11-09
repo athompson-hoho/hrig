@@ -1,5 +1,24 @@
 ﻿# Project and panel navigation
 
+When the status bar is visible, its Source control button shows Git information for the selected workspace connection and exact project root. It follows the workspace, including when an editor or terminal belongs to another context. The eight display states are:
+
+| Display | Meaning |
+|---------|---------|
+| Checking Git… | The current workspace read is pending. |
+| Git unavailable | The read failed, is unsupported, or returned invalid metadata; no branch or counts are inferred. |
+| No Git repository | A validated result positively confirms this workspace is outside a Git repository. |
+| `{branch} ↑{ahead} ↓{behind}` | Commits ahead of and behind the configured upstream's locally stored ref. Confirmed `↑0 ↓0` is a known comparison. |
+| `{branch} · no upstream` | No upstream is configured; counts are unavailable. |
+| `{branch} · comparison unavailable` | Local information cannot establish counts, including when a configured upstream ref is gone locally. |
+| Detached HEAD | No branch is checked out; counts are unavailable. |
+| `{branch} · no commits` | The symbolic branch is proven unborn; counts are unavailable. |
+
+This is a local Git snapshot; no remote fetch occurs. Counts compare commits against the locally stored upstream ref, which may be stale. Neither zero counts nor any other indicator establishes worktree cleanliness or the current remote state. Long summaries may truncate visually; the button's full title and accessible name retain the represented branch, upstream and comparison meaning.
+
+Explicitly activate Source control to open Changes in every state. Metadata completion alone does not navigate, write files, run Git mutations, send seat/shell input or change terminal lifecycle. For another read, open Files and use Refresh files; this rechecks local metadata without fetching. Existing saves/file-revision changes also renew the snapshot while the bar is visible. Connection/root/revision changes hide old results immediately, and obsolete successes or errors cannot replace the current result. A fresh valid read can recover from Git unavailable. Hiding the status bar unmounts its reader; there is no timer or polling.
+
+These E03 statements describe observed source behavior and synthetic checks. Native narrow-window geometry, long-name rendering, keyboard/focus and assistive-technology behavior, disposable Windows/local/SSH/WSL checks remain pending; runtime latency is unmeasured. E01/E02 and all earlier native/live/judgment gates remain unapproved.
+
 Open a project with Ctrl+O (Cmd+O on macOS). The project hub lists attached rig folders, recent folders and favorites, with host and rig labels. Search, pin or remove history entries, browse a folder, or enter a path. Removing history never deletes files or rigs.
 
 History retains up to 50 favorites and 50 recent projects. Entries are tied to the saved connection and endpoint; removed or retargeted connections appear unavailable. HRig validates a folder before switching and preserves the current project when validation fails or the dialog is canceled. Layouts remain associated with their existing project path. History stores folder/host metadata, not file contents or credentials.
