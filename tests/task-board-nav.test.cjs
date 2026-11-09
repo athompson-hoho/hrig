@@ -1206,3 +1206,237 @@ test("task-board-nav scope: keys act only on a card and only when handled, filte
     board.unmount();
   }
 });
+
+test("task-board-nav wiring: the module is pure and only the board uses it, the board has one key handler that moves focus and nothing else, the column split exists once, and no shortcut, setting, style, timer or bridge call was added", () => {
+  // The module: plain data in and out, no imports, no page, no clock, no bridge; every export has a doc comment.
+  const source = read("src/task-board-nav.ts");
+  const code = stripComments(source);
+  assert.ok(!/^\s*import\s/m.test(code), "no imports");
+  assert.ok(
+    !/\b(require|document|window|navigator|localStorage|sessionStorage|setTimeout|setInterval|requestAnimationFrame|Date|fetch|process)\b|Math\.random|hrig/.test(
+      code,
+    ),
+  );
+  const exported = [
+    ...source.matchAll(/^export (?:const|function|type) (\w+)/gm),
+  ]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(exported, [
+    "BOARD_COLUMNS",
+    "BoardColumn",
+    "Cell",
+    "NAV_KEYS",
+    "Stop",
+    "boardColumns",
+    "cellAtIndex",
+    "cellIndex",
+    "moveFocus",
+    "navKey",
+    "settleCell",
+    "stopAt",
+    "tabCell",
+  ]);
+  assert.deepEqual(
+    Object.keys(lib).sort(),
+    exported.filter((n) => !["BoardColumn", "Cell", "Stop"].includes(n)),
+  );
+  const lines = source.split("\n");
+  for (const [index, line] of lines.entries())
+    if (/^export /.test(line) && !/^export type /.test(line))
+      assert.ok(lines[index - 1].startsWith("/** "), "doc comment: " + line);
+
+  // The board: one import from the module, one column split (the old two inline filters are gone), one key handler on the board.
+  const boardSource = read("src/TaskBoard.tsx");
+  const board = collapse(stripComments(boardSource));
+  assert.equal(count(board, 'from "./task-board-nav";'), 1);
+  assert.equal(count(board, "boardColumns(visible)"), 1);
+  assert.equal(count(board, "tabCell(columns, stop)"), 1);
+  assert.equal(count(board, "moveFocus("), 1);
+  for (const gone of [
+    '["pending", "in-progress", "blocked", "other"]',
+    '!["pending", "in-progress", "blocked"]',
+    "visible.filter(",
+  ])
+    assert.equal(count(board, gone), 0, "gone: " + gone);
+  assert.equal(count(board, "onKeyDown="), 1);
+  assert.equal(count(board, "onKeyUp="), 0);
+  assert.equal(count(board, "onFocus="), 1);
+  assert.equal(count(board, "tabIndex="), 1);
+  assert.equal(count(board, "tabIndex={tabFor(col, row)}"), 1);
+  assert.equal(
+    count(board, "event.preventDefault()"),
+    1,
+    "only the handled key is consumed",
+  );
+  assert.equal(
+    count(board, ".focus()"),
+    2,
+    "the key handler and the refresh restore",
+  );
+  assert.equal(count(board, ".click("), 0, "a key never clicks a card");
+  assert.equal(count(board, "document.activeElement"), 2);
+  assert.equal(count(board, 'typeof document === "undefined"'), 2);
+  const handler = between(board, "const onBoardKey =", "const onBoardFocus =");
+  assert.ok(
+    !/onClick|inspect|mutate|rigAction|sendMessage|hrig|set[A-Z]|\.click\(/.test(
+      handler,
+    ),
+    "the key handler only moves focus",
+  );
+  const focus = between(board, "const onBoardFocus =", "const reasonNote =");
+  assert.ok(
+    !/onClick|inspect|mutate|rigAction|sendMessage|hrig|setSelected|setError|setBusy|setNotice|setRefresh/.test(
+      focus,
+    ),
+  );
+  for (const absent of [
+    "setTimeout(",
+    "requestAnimationFrame",
+    "addEventListener",
+    "localStorage",
+    "sessionStorage",
+    "dangerouslySetInnerHTML",
+    'role="list"',
+    'role="listitem"',
+  ])
+    assert.equal(count(board, absent), 0, "absent: " + absent);
+  assert.equal(count(board, "setInterval("), 1, "no timer was added");
+  assert.equal(count(boardSource, "style="), 0);
+  assert.equal(count(boardSource, "className={"), 0);
+  const bridge = [
+    ...stripComments(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g),
+  ]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(bridge, ["queue", "rigAction", "rigAction", "sendMessage"]);
+  // The card keeps its click and gains only the tab stop; Enter and Space are the button's own.
+  assert.equal(
+    count(
+      board,
+      'className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-stuck=',
+    ),
+    1,
+  );
+
+  // Nothing else uses the module, and no shortcut, setting, stylesheet rule or main process file mentions it.
+  const users = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((f) => /\.tsx?$/.test(f) && f !== "task-board-nav.ts")
+    .filter((f) => read("src/" + f).includes("task-board-nav"));
+  assert.deepEqual(users, ["TaskBoard.tsx"]);
+  for (const file of [
+    "src/shortcuts.ts",
+    "src/settings.ts",
+    "src/App.tsx",
+    "src/styles.css",
+  ])
+    assert.ok(
+      !/task-board-nav|onBoardKey|BOARD_COLUMNS/.test(read(file)),
+      file,
+    );
+  for (const file of fs.readdirSync(path.join(root, "electron")))
+    if (/\.(cjs|mjs|js)$/.test(file))
+      assert.ok(!read("electron/" + file).includes("task-board-nav"), file);
+});
+
+test("task-board-nav docs: TASKS.md and NAVIGATION.md say which keys move where, that the board is one Tab stop, that Enter opens the details as before, that it is not a shortcut or a setting, what a refresh does, and that nothing is sent", () => {
+  const doc = read("TASKS.md");
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, "\n### Keyboard navigation\n"), 1);
+  assert.equal(
+    count(doc, "\n## "),
+    2,
+    "the two level 2 headings other tests count are untouched",
+  );
+  // The section sits before Card details, so the sections that other tests read to the next heading keep their paragraphs.
+  assert.ok(
+    doc.indexOf("\n### Keyboard navigation\n") <
+      doc.indexOf("\n### Card details\n"),
+  );
+  assert.ok(
+    doc.indexOf("\n### Keyboard navigation\n") >
+      doc.indexOf("separate, explicit actions."),
+  );
+  const at = doc.indexOf("\n### Keyboard navigation\n");
+  const section = doc.slice(at + 1, doc.indexOf("\n### Card details\n"));
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 3);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line per paragraph");
+  const say = (paragraph, parts) => {
+    const flat = collapse(paragraph);
+    for (const part of parts)
+      assert.ok(flat.includes(part), "TASKS.md says: " + part);
+  };
+  say(paragraphs[0], [
+    "driven from the keyboard",
+    "the board is one stop, on the card you used last (the first card at first), instead of one stop per card",
+    "Up and Down move to the previous and next card of the same column",
+    "Left and Right move to the nearest column that has cards and keep the same row when it can (the last card of that column otherwise)",
+    "Home and End go to the first and last card of the column",
+    "Focus does not wrap around",
+    "Enter or Space opens the task details, as clicking the card does, and Escape closes them again",
+  ]);
+  say(paragraphs[1], [
+    "only while a card has focus and only when pressed on their own",
+    "a key held with Ctrl, Alt, Cmd or Shift is left to the app",
+    "the filter boxes above the board keep their own arrow, Home and End keys",
+    "This is not a shortcut",
+    "not in the Keyboard shortcuts sheet or in Settings, there is no setting for it",
+    "the focused card showing the same focus ring as any button",
+  ]);
+  say(paragraphs[2], [
+    "only moves focus and never changes a task",
+    "does not open, send, assign or hand off anything",
+    "nothing is typed into a seat",
+    "every 15 seconds",
+    "focus stays on the same task while it is still shown, in its new column if its state changed",
+    "if it is gone, focus goes to the card nearest to where it was",
+    "A refresh never takes focus from anything outside the board",
+  ]);
+  const refresh = /setInterval\(load, (\d+)\)/.exec(read("src/TaskBoard.tsx"));
+  assert.equal(
+    Number(refresh[1]) / 1000,
+    15,
+    "the doc's refresh period is the code's",
+  );
+  // The keys named in the docs are the keys the module handles.
+  assert.deepEqual(lib.NAV_KEYS, NAV);
+
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark is kept");
+  assert.ok(raw.endsWith(".\n") && !raw.endsWith("\n\n"));
+  assert.ok(!raw.includes("\r"));
+  const navLines = raw.split("\n");
+  const mine = navLines.filter((l) =>
+    l.startsWith("Task board keyboard navigation:"),
+  );
+  assert.equal(mine.length, 1);
+  const para = mine[0];
+  assert.ok(/^[\x20-\x7e]+$/.test(para), "plain ASCII");
+  const where = navLines.indexOf(para);
+  assert.ok(
+    navLines[where - 1] === "" && navLines[where + 1] === "",
+    "a paragraph of its own",
+  );
+  assert.ok(
+    where > navLines.findIndex((l) => l.startsWith("Shortcut overrides:")),
+    "after the last earlier paragraph",
+  );
+  for (const part of [
+    "the board is one Tab stop, on the card you used last",
+    "Up and Down inside a column, Left and Right to the nearest column that has cards, Home and End to the first and last card of the column",
+    "Enter or Space opens the task details, as a click does, and Escape closes them",
+    "only while a card has focus and only without Ctrl, Alt, Cmd or Shift",
+    "the filter boxes, the app shortcuts and terminals keep every key they had",
+    "It is not a global shortcut",
+    "not in the Keyboard shortcuts sheet or the command center, it cannot be rebound, there is no setting for it",
+    "nothing is typed or sent to a terminal or seat",
+    "TASKS.md describes what the board does when it refreshes",
+  ])
+    assert.ok(para.includes(part), "NAVIGATION.md says: " + part);
+  // README keeps its single link to TASKS.md.
+  assert.equal(count(read("README.md"), "TASKS.md"), 1);
+});

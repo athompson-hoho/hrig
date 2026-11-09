@@ -2,6 +2,14 @@
 
 The Task queue panel (Tools, or search Task queue in the command center) lists the active OpenRig queue items in columns by state. This page describes the task details dialog and the panel's filters. HRig reads the queue to show it; assigning work and requesting a handoff are separate, explicit actions.
 
+### Keyboard navigation
+
+The board can be driven from the keyboard. Press Tab to reach it: the board is one stop, on the card you used last (the first card at first), instead of one stop per card. On a card, Up and Down move to the previous and next card of the same column, Left and Right move to the nearest column that has cards and keep the same row when it can (the last card of that column otherwise), and Home and End go to the first and last card of the column. Focus does not wrap around: at the first or last card, or when no column lies further in that direction, it stays where it is. Enter or Space opens the task details, as clicking the card does, and Escape closes them again.
+
+Keys are looked at only while a card has focus and only when pressed on their own: a key held with Ctrl, Alt, Cmd or Shift is left to the app, the filter boxes above the board keep their own arrow, Home and End keys, and every other key keeps its usual effect. This is not a shortcut: it is not in the Keyboard shortcuts sheet or in Settings, there is no setting for it, and the look of the board does not change, the focused card showing the same focus ring as any button.
+
+Navigation only moves focus and never changes a task. It does not open, send, assign or hand off anything, nothing is typed into a seat, and the board reads the queue exactly as before. When the board refreshes (every 15 seconds) focus stays on the same task while it is still shown, in its new column if its state changed; if it is gone, focus goes to the card nearest to where it was. A refresh never takes focus from anything outside the board.
+
 ### Card details
 
 A card for a blocked task shows why under the owner, for example `Blocked on qitem-20261108170835-ab12cd34ef56ab78`. HRig reads the reason from the task's `blockedOn` field, which OpenRig sets when a task is parked on a blocker (another task, a typed gate or a human seat), and from the fields `blockedReason` and `reason` when a version of OpenRig sends them; the first of these fields that holds text wins. A task held on purpose (state held, on-hold or parked; OpenRig itself parks a held task as blocked, so these names only matter if a version sends them) reads `heldReason`, `holdReason`, `reason` and `blockedOn` the same way. Only text is read. A task in any other state shows no reason, and a blocked task without a reason keeps its card as it was.
