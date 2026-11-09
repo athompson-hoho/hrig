@@ -921,7 +921,7 @@ test("settings-overrides wiring: the module is pure and reads only the settings 
     assert.ok(page.includes(part), "SettingsPage still has: " + part);
   // The saving and scope code is counted exactly as it was.
   assert.equal(count(page, "context.update("), 2);
-  assert.equal(count(page, "context.reset("), 2);
+  assert.equal(count(page, "context.reset("), 3);
   assert.equal(count(page, "context.replace("), 1);
   assert.equal(count(page, "validateOverrides("), 2);
   assert.equal(count(page, "useSettings()"), 2);

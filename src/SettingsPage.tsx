@@ -27,6 +27,7 @@ import {
 import { themes } from "./themes";
 import { overrideNote, summarizeOverrides } from "./settings-overrides";
 import { recentRows } from "./settings-recent";
+import { describeSectionReset, modifiedKeysInCategory } from "./settings-view";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
 import UpdateSettings from './UpdateSettings';
@@ -172,6 +173,7 @@ export default function SettingsPage({ project }: { project: string }) {
     [modifiedOnly, setModifiedOnly] = useState(false),
     [recentOnly, setRecentOnly] = useState(false),
     [confirmReset, setConfirmReset] = useState(false),
+    [confirmSection, setConfirmSection] = useState(""),
     [json, setJson] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
@@ -193,6 +195,16 @@ export default function SettingsPage({ project }: { project: string }) {
     ? recent.filter((row) => found.includes(row))
     : found;
   const listing = !!query || recentOnly;
+  const sectionKeys = modifiedKeysInCategory(
+    schema,
+    own,
+    confirmSection || category,
+  );
+  const sectionReset = describeSectionReset(
+    scope,
+    confirmSection || category,
+    sectionKeys,
+  );
   const value =
     own["appearance.theme"] ??
     (scope === "project" ? context.user["appearance.theme"] : undefined) ??
@@ -363,6 +375,16 @@ export default function SettingsPage({ project }: { project: string }) {
                       : category}
                 </h3>
                 <span>{matches.length} settings</span>
+                {!listing && (
+                  <button
+                    className="settings-reset-scope"
+                    disabled={!sectionReset.count}
+                    title={sectionReset.buttonTitle}
+                    onClick={() => setConfirmSection(category)}
+                  >
+                    <RotateCcw size={12} /> {sectionReset.button}
+                  </button>
+                )}
               </div>
               {!listing && category === "Appearance" && !modifiedOnly && (
                 <>
@@ -631,6 +653,36 @@ export default function SettingsPage({ project }: { project: string }) {
               }}
             >
               Reset settings
+            </button>
+          </div>
+        </Modal>
+      )}
+      {confirmSection && (
+        <Modal
+          title={sectionReset.title}
+          subtitle={sectionReset.subtitle}
+          onClose={() => setConfirmSection("")}
+        >
+          {sectionReset.detail && (
+            <p className="settings-scope-note">{sectionReset.detail}</p>
+          )}
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() => setConfirmSection("")}
+            >
+              Cancel reset
+            </button>
+            <button
+              className="primary-button"
+              disabled={!sectionReset.count}
+              onClick={() => {
+                for (const key of sectionKeys) context.reset(scope, key);
+                setNotice(sectionReset.notice);
+                setConfirmSection("");
+              }}
+            >
+              {sectionReset.confirm}
             </button>
           </div>
         </Modal>
