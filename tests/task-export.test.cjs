@@ -1478,3 +1478,284 @@ test("task-export hostile: tasks full of formulas, markup, line breaks, control 
     big.unmount();
   }
 });
+
+test("task-export wiring: the module is pure with the exports that are pinned, the board reads it in one place with the readers it already has, the download is the Settings mechanism in its own small file, and no channel, setting, style or main process file knows about it", () => {
+  const source = read("src/task-export.ts");
+  const code = stripComments(source);
+  // Pure: no import, no page, clock, timer, network, storage, program-environment or bridge name, and no clock read.
+  assert.ok(!/^import /m.test(code), "no imports");
+  assert.ok(
+    !/\b(document|window|setTimeout|setInterval|clearTimeout|fetch|process|require|Blob|URL|localStorage|sessionStorage|navigator|clipboard|XMLHttpRequest|WebSocket|Math\.random)\b/.test(
+      code,
+    ),
+  );
+  assert.equal(count(code, "Date.now"), 0);
+  assert.equal(count(code, "new Date()"), 0);
+  assert.equal(count(code, "new Date("), 1, "the injected time only");
+  // The other board modules pin that only the board names them: this one reads nothing of theirs.
+  assert.ok(!/task-age|task-reason|task-board-nav|task-filters/.test(source));
+
+  const exported = [
+    ...source.matchAll(/^export (?:const|function|type) (\w+)/gm),
+  ]
+    .map((m) => m[1])
+    .sort();
+  const types = [
+    "ExportColumn",
+    "ExportFile",
+    "ExportFormat",
+    "ExportReaders",
+    "ExportRow",
+    "ExportSet",
+  ];
+  const names = [
+    "EXPORT_COLUMNS",
+    "EXPORT_NOTE",
+    "MAX_CELL",
+    "MAX_CELL_READ",
+    "MAX_EXPORT_ROWS",
+    "MAX_ROW_TAGS",
+    "exportButton",
+    "exportFile",
+    "exportName",
+    "exportNotice",
+    "exportRows",
+    "toCsv",
+    "toMarkdown",
+  ];
+  assert.deepEqual(exported, [...types, ...names].sort());
+  assert.deepEqual(Object.keys(lib).sort(), [...names].sort());
+  const lines = source.split("\n");
+  for (const [index, line] of lines.entries())
+    if (/^export /.test(line))
+      assert.ok(lines[index - 1].startsWith("/** "), "doc comment: " + line);
+  assert.ok(!/\bexport default\b/.test(source));
+
+  // The download helper: the Settings mechanism in a few lines, nothing more.
+  const helperSource = read("src/download-text.ts");
+  const helper = stripComments(helperSource);
+  assert.deepEqual(
+    [...helperSource.matchAll(/^export (?:const|function|type) (\w+)/gm)].map(
+      (m) => m[1],
+    ),
+    ["downloadText"],
+  );
+  assert.ok(!/^import /m.test(helper));
+  for (const [part, times] of [
+    ["URL.createObjectURL(", 1],
+    ["URL.revokeObjectURL(", 1],
+    ['document.createElement("a")', 1],
+    [".click()", 1],
+    ["setTimeout(", 1],
+    [", 1000)", 1],
+    ["appendChild", 0],
+    ["document.body", 0],
+    ["innerHTML", 0],
+    ["window.", 0],
+    ["fetch(", 0],
+    ["localStorage", 0],
+    ["navigator", 0],
+  ])
+    assert.equal(count(helper, part), times, part);
+  const settings = read("src/SettingsPage.tsx");
+  assert.equal(count(settings, "URL.createObjectURL("), 1);
+  assert.equal(
+    count(settings, 'a.download = "hrig-" + scope + "-settings.json"'),
+    1,
+  );
+  assert.ok(
+    !settings.includes("download-text"),
+    "Settings keeps its own code, untouched",
+  );
+
+  // The board: one import of each, the readers it already uses lent to the module, one handler that only reads the list, two buttons.
+  const boardSource = read("src/TaskBoard.tsx");
+  const board = collapse(stripComments(boardSource)).replace(/, \}/g, " }");
+  assert.equal(
+    count(
+      board,
+      'import { exportButton, exportFile, exportNotice, exportRows, type ExportFormat } from "./task-export";',
+    ),
+    1,
+  );
+  assert.equal(
+    count(board, 'import { downloadText } from "./download-text";'),
+    1,
+  );
+  assert.equal(count(board, "downloadText("), 1);
+  assert.equal(count(board, "exportRows("), 1);
+  assert.equal(
+    count(
+      board,
+      "exportRows(list, at, { tags: itemTags, age: ageOf, reason: reasonOf })",
+    ),
+    1,
+    "the readers are the board's own, lent as they are",
+  );
+  assert.equal(count(board, "exportFile(format, set.rows, at)"), 1);
+  assert.equal(
+    count(board, "exportNotice(format, set.rows.length, set.total)"),
+    1,
+  );
+  assert.equal(count(board, 'exportShown("csv", visible, now)'), 1);
+  assert.equal(count(board, 'exportShown("md", visible, now)'), 1);
+  assert.equal(
+    count(board, "Date.now()"),
+    1,
+    "the clock is still read once, for the ages",
+  );
+  assert.equal(count(board, "disabled={!shown}"), 2);
+  assert.equal(
+    count(
+      board,
+      "const shown = columns.reduce((n, c) => n + c.items.length, 0);",
+    ),
+    1,
+    "the count in the buttons is the number of cards",
+  );
+  const handler = between(board, "const exportShown =", "const visible =");
+  assert.ok(
+    !/hrig|rigAction|sendMessage|mutate|setRefresh|setBusy|setSelected|setCreate|setItems|JSON\.stringify|innerHTML|localStorage|navigator|clipboard|\.click\(|document|Blob|URL/.test(
+      handler,
+    ),
+    "the handler only reads the list, saves a file and reports",
+  );
+  assert.ok(
+    !/\.(pop|push|shift|unshift|splice|sort|reverse|fill|copyWithin)\(/.test(
+      handler,
+    ),
+    "the handler never changes the list it is given",
+  );
+  assert.equal(count(handler, "setNotice("), 1);
+  assert.equal(count(handler, "setError("), 1);
+  assert.ok(
+    !/\b(Blob|createObjectURL|revokeObjectURL|createElement|\.click\()/.test(
+      stripComments(boardSource),
+    ),
+    "the file is saved by the helper, not by the board",
+  );
+  const bridge = [
+    ...stripComments(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g),
+  ]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(bridge, ["queue", "rigAction", "rigAction", "sendMessage"]);
+  assert.equal(count(boardSource, "style="), 0);
+  assert.equal(count(boardSource, "className={"), 0);
+  assert.equal(count(boardSource, "dangerouslySetInnerHTML"), 0);
+
+  // Nothing else uses either file, and no channel, setting, shortcut, stylesheet or main process file mentions the feature.
+  const users = (name, self) =>
+    fs
+      .readdirSync(path.join(root, "src"))
+      .filter((f) => /\.tsx?$/.test(f) && f !== self)
+      .filter((f) => read("src/" + f).includes(name));
+  assert.deepEqual(users("task-export", "task-export.ts"), ["TaskBoard.tsx"]);
+  assert.deepEqual(users("download-text", "download-text.ts"), [
+    "TaskBoard.tsx",
+  ]);
+  const feature =
+    /task-export|download-text|exportShown|exportRows|exportTasks|exportFile/;
+  for (const file of fs.readdirSync(path.join(root, "electron")))
+    if (/\.(cjs|mjs|js)$/.test(file))
+      assert.ok(!feature.test(read("electron/" + file)), file);
+  for (const file of [
+    "src/types.ts",
+    "src/settings.ts",
+    "src/shortcuts.ts",
+    "src/styles.css",
+    "src/SettingsPage.tsx",
+    "src/App.tsx",
+  ])
+    assert.ok(!feature.test(read(file)), file);
+  assert.equal(count(read("README.md"), "TASKS.md"), 1);
+});
+
+test("task-export docs: TASKS.md has one Exporting tasks section that says which tasks and columns are exported, what is left out and why a title needs a look, how the file is saved and named, the CSV and markdown rules and the formula quote", () => {
+  const doc = read("TASKS.md");
+  const heading = "\n### Exporting tasks\n";
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, heading), 1);
+  assert.equal(
+    count(doc, "\n## "),
+    2,
+    "the level 2 headings other tests count",
+  );
+  const at = doc.indexOf(heading);
+  assert.ok(at > doc.indexOf("separate, explicit actions."), "after the intro");
+  assert.ok(
+    at < doc.indexOf("\n### Keyboard navigation\n"),
+    "before the sections other tests read to the next heading",
+  );
+  assert.ok(at < doc.indexOf("\n### Card details\n"));
+  const next = doc.indexOf("\n### ", at + 1);
+  assert.ok(next > at && next < doc.indexOf("\n## "));
+  const section = doc.slice(at + 1, next);
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 3);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line per paragraph");
+  const say = (paragraph, parts) => {
+    const flat = collapse(paragraph);
+    for (const part of parts)
+      assert.ok(flat.includes(part), "TASKS.md says: " + part);
+  };
+  const rows = 1000;
+  say(paragraphs[0], [
+    "Two buttons in the header of the Task queue panel, Export CSV and Export Markdown, save the tasks the board shows right now as a file",
+    "What is exported is what you see after the filters",
+    "the number in each button is the number of tasks that go into the file",
+    "with no task shown the buttons are disabled",
+    "the same browser style download as Export JSON in Settings",
+    "your computer asks where to put it",
+    "`hrig-tasks-YYYYMMDD-HHMM` with the extension csv or md",
+    "in your computer's local time",
+    "never with a connection, rig or host name",
+    "Exporting is read only",
+    "nothing is sent to OpenRig or to a seat",
+    "no task is changed",
+    "the board makes no extra request",
+  ]);
+  say(paragraphs[1], [
+    "Every row has the same seven columns: " +
+      lib.EXPORT_COLUMNS.slice(0, -1).join(", ") +
+      " and " +
+      lib.EXPORT_COLUMNS.at(-1),
+    "the tags are its tags as the filter reads them (lower case, joined with a comma and a space)",
+    "the age is the card's age since creation, as the card shows it (`<1m`, `5m`, `3h`, `2d`, as of the last refresh)",
+    "the reason is the line a blocked or held card shows",
+    "Nothing else of a task is exported: not its body, not its details, not any other field that OpenRig sends",
+    "The title is the title the card shows",
+    "OpenRig fills it from the task's subject, else its summary, else in some versions a body preview",
+    "a title can hold text that someone pasted into a task, secrets included",
+    "The tooltip of the buttons and the line shown when the download starts say: " +
+      lib.EXPORT_NOTE,
+    "Every cell is cut after " + lib.MAX_CELL + " characters with three dots",
+    "control, zero-width and direction-changing characters are removed",
+    "at most " +
+      rows.toLocaleString("en-US") +
+      " rows are written, which is the most the board lists",
+  ]);
+  say(paragraphs[2], [
+    "In a CSV file, a cell is quoted when it holds a comma, a quote or a line break (a quote is doubled and a line break stays inside the cell)",
+    "lines end in CRLF",
+    "UTF-8 without a byte order mark",
+    "(in Excel, Data, From Text/CSV)",
+    "A cell that a spreadsheet could read as a formula, because after any spaces it starts with `=`, `+`, `-` or `@`, or it starts with a tab or a carriage return, gets a single quote in front of it so that it opens as text",
+    "this also marks plain text that starts with a minus sign, which is accepted, and the quote shows in the cell",
+    "A markdown file is a pipe table: line breaks become spaces",
+    "pipes, backslashes, backticks, angle brackets and square brackets are escaped",
+    "a title cannot add a column, a link, an image or HTML",
+    "(a viewer may still turn a plain web address into a link)",
+  ]);
+
+  // The names and numbers the page uses are the code's and the real download is the Settings one.
+  assert.equal(lib.MAX_EXPORT_ROWS, rows);
+  assert.equal(lib.MAX_CELL, 200);
+  assert.equal(lib.exportButton("csv", 3).text, "Export CSV (3)");
+  assert.equal(lib.exportButton("md", 3).text, "Export Markdown (3)");
+  assert.match(lib.exportName("csv", AT), /^hrig-tasks-\d{8}-\d{4}\.csv$/);
+  assert.ok(read("src/SettingsPage.tsx").includes("Export JSON"));
+  assert.equal(count(read("README.md"), "TASKS.md"), 1);
+});
