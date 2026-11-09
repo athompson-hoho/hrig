@@ -46,6 +46,7 @@ export const defaults = {
   "terminal.wordSeparator": DEFAULT_WORD_SEPARATOR,
   "workspace.refreshInterval": 15,
   "workspace.restoreLastProject": false,
+  "workspace.hideStoppedSeats": false,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
@@ -435,6 +436,13 @@ export const schema: Setting[] = [
     label: "Reopen the last project on launch",
     description:
       "When HRig starts, open your most recent project if the project it brought back is a different one, for example because the saved folder or connection is gone. It uses the same Open project check as a project on the Welcome screen: the folder must exist, and a failure shows its message there and changes nothing else. Off by default, so HRig starts exactly as before. It never reaches a host that launch does not already use (a project on another SSH or WSL connection is not reopened for you), never starts or restarts a seat and never sends anything to a terminal. Read from your user settings only: a project override has no effect.",
+  },
+  {
+    key: "workspace.hideStoppedSeats",
+    category: "Workspace",
+    label: "Hide stopped sessions in the sidebar",
+    description:
+      "Leave the sessions that have stopped or exited, and the sessions of a rig the inventory calls archived, out of the sidebar's session list. Off by default, so every session is listed as before. A failed session or one that needs input is never hidden. While this is on, the count beside SESSIONS reads shown of total, and an empty list says how many are hidden, with a button to show them. Only that list changes: open panels, the command center, drag and drop and relaunch are as they were, and nothing is started, stopped or sent to a seat. The eye button beside SESSIONS turns it on and off. Read from your user settings only: a project override has no effect.",
   },
   {
     key: "connections.defaultKind",

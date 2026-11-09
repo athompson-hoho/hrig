@@ -17,7 +17,9 @@ import {
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { HiddenSeatsNotice, HideStoppedButton } from "./HiddenSeats";
 import { SeatBadgeRow } from "./SeatBadgeRow";
+import { hiddenCount, seatCountText, visibleSeats } from "./seat-visibility";
 import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -231,6 +233,11 @@ export default function Sidebar({
           .toLowerCase()
           .includes(query.toLowerCase())),
   );
+  const hideStopped = settings.user["workspace.hideStoppedSeats"] === true;
+  const shownSeats = visibleSeats(seats, rigs, hideStopped);
+  const hiddenSeats = hideStopped ? hiddenCount(seats, rigs) : 0;
+  const setHideStopped = (value: boolean) =>
+    settings.update("user", "workspace.hideStoppedSeats", value);
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -389,7 +396,15 @@ export default function Sidebar({
           </div>
           <div className="section-label">
             <span>SESSIONS</span>
-            <span className="count">{seats.length}</span>
+            <span className="section-tools">
+              <span className="count">
+                {seatCountText(shownSeats.length, seats.length, hideStopped)}
+              </span>
+              <HideStoppedButton
+                hiding={hideStopped}
+                onToggle={() => setHideStopped(!hideStopped)}
+              />
+            </span>
           </div>
           <div className="sidebar-scroll">
             {inventoryError === CHECKING_SNAPSHOT && inventory && (
@@ -417,8 +432,8 @@ export default function Sidebar({
                   Connection settings
                 </button>
               </div>
-            ) : seats.length ? (
-              seats.map((s) => (
+            ) : shownSeats.length ? (
+              shownSeats.map((s) => (
                 <div className="session-row" key={s.id}>
                   <button
                     disabled={!!inventoryError}
@@ -456,6 +471,11 @@ export default function Sidebar({
                   </IconButton>
                 </div>
               ))
+            ) : hiddenSeats ? (
+              <HiddenSeatsNotice
+                count={hiddenSeats}
+                onShow={() => setHideStopped(false)}
+              />
             ) : (
               <div className="connection-empty">
                 <Bot size={26} />

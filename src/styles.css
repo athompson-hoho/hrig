@@ -1423,6 +1423,14 @@ button:hover {
   padding: 0;
   color: var(--color-7e8798);
 }
+.section-label .section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-label button[aria-pressed="true"] {
+  color: var(--color-86cdb0);
+}
 .count {
   background: var(--color-2b2e38);
   color: var(--color-929caf);
