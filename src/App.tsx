@@ -147,6 +147,7 @@ import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
+import { useHumanItemNotices } from "./useHumanItemNotices";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import ShortcutSheet from "./ShortcutSheet";
 import {
@@ -651,6 +652,13 @@ export default function App() {
     }
     attentionSeen.current = current;
   }, [inventory, preferences["notifications.desktop"], connection.id]);
+  useHumanItemNotices({
+    enabled: loaded && preferences["notifications.humanItems"],
+    connection,
+    intervalSeconds: preferences["workspace.refreshInterval"],
+    refresh,
+    log,
+  });
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(

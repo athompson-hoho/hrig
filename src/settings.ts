@@ -51,6 +51,7 @@ export const defaults = {
   "notifications.desktop": false,
   "notifications.terminalBell": false,
   "notifications.terminalQuiet": false,
+  "notifications.humanItems": false,
   "shortcuts.overrides": "",
 };
 export type Preferences = typeof defaults;
@@ -464,6 +465,13 @@ export const schema: Setting[] = [
     label: "Terminal quiet alerts",
     description:
       "Also notify when a terminal you are not looking at goes quiet after a burst of output, such as a finished build. Requires desktop notifications. No terminal text is included.",
+  },
+  {
+    key: "notifications.humanItems",
+    category: "Notifications",
+    label: "Notify about queue items for me",
+    description:
+      "Notify when a new Task queue item addressed to a person appears (a human@host, human@kernel or name@external destination). Off by default and separate from Desktop attention notifications: this setting alone is the opt-in. Read only: HRig reads the queue list it already reads, and never claims, answers or changes an item or sends anything to a seat. The notification gives the count and at most the first item's summary, cut to 80 characters, never an item's text, id or address. Items already waiting when you turn it on or switch connection, and quiet updates, do not notify.",
   },
   {
     key: "shortcuts.overrides",
