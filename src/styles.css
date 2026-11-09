@@ -3905,6 +3905,13 @@ button:hover {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+/* Search highlight in the settings list: the searched words in a row's name and description. */
+.setting-copy mark {
+  background: var(--surface);
+  color: var(--mint);
+  border-radius: 2px;
+  padding: 0 1px;
+}
 .setting-badge {
   font-size: 8px;
   color: var(--mint);

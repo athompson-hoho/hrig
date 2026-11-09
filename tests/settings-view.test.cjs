@@ -936,3 +936,671 @@ test("settings-view docs: SETTINGS.md has one Reset category paragraph with ever
   assert.ok(row[0].includes("per-category"));
   assert.equal(lib.MAX_NAMED, 8, "the paragraph's number is the code's");
 });
+
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const joined = (parts) => parts.map((part) => part.text).join("");
+const marks = (parts) =>
+  parts.filter((part) => part.match).map((part) => part.text);
+const lone = (text) =>
+  /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(
+    text,
+  );
+
+test("settings-view parts: the search words are matched as text, case blind, left to right and never overlapping, the parts always add up to the text, and no character is cut", () => {
+  const { highlightParts, MAX_QUERY, MAX_SCAN, MAX_MARKS } = lib;
+  assert.equal(MAX_QUERY, 100);
+  assert.equal(MAX_SCAN, 2000);
+  assert.equal(MAX_MARKS, 20);
+  const P = (text, match = false) => ({ text, match });
+  // One match, in the middle, at the start, at the end, the whole text.
+  assert.deepEqual(highlightParts("Editor font size", "font"), [
+    P("Editor "),
+    P("font", true),
+    P(" size"),
+  ]);
+  assert.deepEqual(highlightParts("font size", "font"), [
+    P("font", true),
+    P(" size"),
+  ]);
+  assert.deepEqual(highlightParts("Editor font", "font"), [
+    P("Editor "),
+    P("font", true),
+  ]);
+  assert.deepEqual(highlightParts("font", "font"), [P("font", true)]);
+  // Case blind both ways, the original case kept in the part; the search is trimmed.
+  assert.deepEqual(highlightParts("Font Size", "fONT"), [
+    P("Font", true),
+    P(" Size"),
+  ]);
+  assert.deepEqual(highlightParts("font size", "  FONT\t\n"), [
+    P("font", true),
+    P(" size"),
+  ]);
+  // Several matches, and matches that would overlap are taken left to right without overlap.
+  assert.deepEqual(highlightParts("a font and a font", "font"), [
+    P("a "),
+    P("font", true),
+    P(" and a "),
+    P("font", true),
+  ]);
+  assert.deepEqual(highlightParts("aaaa", "aa"), [
+    P("aa", true),
+    P("aa", true),
+  ]);
+  assert.deepEqual(highlightParts("aaa", "aa"), [P("aa", true), P("a")]);
+  assert.deepEqual(highlightParts("abab", "ab"), [
+    P("ab", true),
+    P("ab", true),
+  ]);
+  assert.deepEqual(highlightParts("aXa", "a"), [
+    P("a", true),
+    P("X"),
+    P("a", true),
+  ]);
+  // Inner spaces are part of the words.
+  assert.deepEqual(highlightParts("the font size row", "font size"), [
+    P("the "),
+    P("font size", true),
+    P(" row"),
+  ]);
+  assert.deepEqual(
+    highlightParts("font  size", "font size"),
+    [P("font  size")],
+    "no match, one plain part",
+  );
+  // No search, a blank one, no match, odd inputs.
+  for (const query of [
+    undefined,
+    null,
+    "",
+    "   ",
+    "\t\n",
+    7,
+    {},
+    ["font"],
+    true,
+  ])
+    assert.deepEqual(highlightParts("Editor font size", query), [
+      P("Editor font size"),
+    ]);
+  assert.deepEqual(highlightParts("Editor font size", "zebra"), [
+    P("Editor font size"),
+  ]);
+  for (const text of ["", undefined, null, 7, {}, ["a"]])
+    assert.deepEqual(highlightParts(text, "a"), []);
+  // Characters that mean something in a pattern mean themselves here: nothing is escaped because nothing is a pattern.
+  assert.deepEqual(highlightParts("match a.*b here", ".*"), [
+    P("match a"),
+    P(".*", true),
+    P("b here"),
+  ]);
+  assert.deepEqual(highlightParts("abc", ".*"), [P("abc")]);
+  assert.deepEqual(highlightParts("a (b) [c] {d} e", "(b)"), [
+    P("a "),
+    P("(b)", true),
+    P(" [c] {d} e"),
+  ]);
+  for (const meta of [
+    "(",
+    ")",
+    "[",
+    "]",
+    "{",
+    "}",
+    "\\",
+    "^",
+    "$",
+    "|",
+    "?",
+    "*",
+    "+",
+    ".",
+    "a+",
+    "(a+)+$",
+    "[a-",
+    "\\1",
+    "(?<n>",
+    "%",
+    "\\u0041",
+    "\\p{L}",
+  ]) {
+    const host = "x" + meta + "y" + meta;
+    const out = highlightParts(host, meta);
+    assert.deepEqual(marks(out), [meta, meta], meta);
+    assert.equal(joined(out), host);
+  }
+  assert.deepEqual(
+    highlightParts("aaaa", "(a+)+$"),
+    [P("aaaa")],
+    "no pattern engine: a nasty pattern is just text",
+  );
+  // Emoji and other characters outside the basic plane are matched whole and never cut.
+  assert.deepEqual(
+    highlightParts("Dark \u{1F319} mode \u{1F319}", "\u{1F319}"),
+    [P("Dark "), P("\u{1F319}", true), P(" mode "), P("\u{1F319}", true)],
+  );
+  const half = highlightParts("Dark \u{1F319} mode", "\ud83c");
+  assert.deepEqual(
+    half,
+    [P("Dark "), P("\u{1F319}", true), P(" mode")],
+    "a search for half a pair marks the whole character",
+  );
+  assert.equal(
+    highlightParts("Dark \u{1F319} mode", "\udf19").some((part) => part.match),
+    true,
+  );
+  for (const part of half) assert.equal(lone(part.text), false);
+  // A family emoji (joiners) and a letter with a combining mark: matched as written, whole characters kept.
+  const family = "\u{1F469}‍\u{1F4BB}";
+  assert.deepEqual(highlightParts("by " + family + " ok", family), [
+    P("by "),
+    P(family, true),
+    P(" ok"),
+  ]);
+  assert.deepEqual(highlightParts("écran", "é"), [P("é", true), P("cran")]);
+  assert.deepEqual(
+    highlightParts("écran", "É"),
+    [P("é", true), P("cran")],
+    "an accented capital finds the small one",
+  );
+  assert.deepEqual(
+    highlightParts("Жур", "ж"),
+    [P("Ж", true), P("ур")],
+    "Cyrillic case is folded",
+  );
+  assert.deepEqual(highlightParts("日本語", "本"), [
+    P("日"),
+    P("本", true),
+    P("語"),
+  ]);
+  // A letter that lower cases to two units is mapped back to the whole letter; the Kelvin sign is a K.
+  assert.deepEqual(highlightParts("İstanbul", "i"), [
+    P("İ", true),
+    P("stanbul"),
+  ]);
+  assert.deepEqual(
+    highlightParts("İstanbul", "istanbul"),
+    [P("İstanbul")],
+    "as the search itself finds nothing here",
+  );
+  assert.deepEqual(highlightParts("K", "k"), [P("K", true)]);
+  assert.deepEqual(highlightParts("Straße", "STRAßE"), [P("Straße", true)]);
+  // The documented limit: case is folded one character at a time, so a Greek capital sigma that ends a word is found by the page's search (which lower cases the whole text) but is not marked.
+  assert.equal("ΟΔΟΣ".toLowerCase().includes("οδος"), true);
+  assert.deepEqual(highlightParts("ΟΔΟΣ", "οδος"), [P("ΟΔΟΣ")]);
+  // Long searches are not marked and not cut: 100 code points work, 101 do not, a huge one costs nothing.
+  const hundred = "a".repeat(100);
+  assert.deepEqual(highlightParts("x" + hundred + "y", hundred), [
+    P("x"),
+    P(hundred, true),
+    P("y"),
+  ]);
+  assert.deepEqual(highlightParts("x" + hundred + "ay", hundred + "a"), [
+    P("x" + hundred + "ay"),
+  ]);
+  const emoji100 = "\u{1F319}".repeat(100);
+  assert.deepEqual(
+    marks(highlightParts(emoji100, emoji100)),
+    [emoji100],
+    "100 code points of two units each",
+  );
+  assert.deepEqual(
+    highlightParts(emoji100 + "x", emoji100 + "\u{1F319}"),
+    [P(emoji100 + "x")],
+    "101 code points",
+  );
+  assert.deepEqual(highlightParts("abc", "b".repeat(5000000)), [P("abc")]);
+  // Long texts: only the first MAX_SCAN units are searched, the rest comes back as plain text, a pair at the edge is not cut, and nothing is lost.
+  const filler = "x".repeat(1990);
+  const longText = filler + " font here and more font " + "y".repeat(5000);
+  const longOut = highlightParts(longText, "font");
+  assert.equal(joined(longOut), longText);
+  assert.deepEqual(
+    marks(longOut),
+    ["font"],
+    "the match at 1991 is inside the scan, the later ones are not",
+  );
+  const edge = "a".repeat(1999) + "\u{1F319}" + "font";
+  const edgeOut = highlightParts(edge, "font");
+  assert.equal(joined(edgeOut), edge);
+  assert.deepEqual(marks(edgeOut), []);
+  for (const part of edgeOut) assert.equal(lone(part.text), false);
+  const huge = "ab ".repeat(1000000);
+  const hugeOut = highlightParts(huge, "ab");
+  assert.equal(joined(hugeOut), huge);
+  assert.equal(marks(hugeOut).length, MAX_MARKS);
+  // At most MAX_MARKS marks; the later matches stay in the plain tail.
+  const many = "font ".repeat(50);
+  const manyOut = highlightParts(many, "font");
+  assert.equal(marks(manyOut).length, 20);
+  assert.equal(joined(manyOut), many);
+  assert.equal(manyOut[manyOut.length - 1].match, false);
+  // A scan that cannot go wrong slowly: the worst case for a plain search over the largest text and search.
+  const slow = highlightParts("a".repeat(2001) + "b", "a".repeat(99) + "c");
+  assert.deepEqual(slow, [P("a".repeat(2001) + "b")]);
+  // The text given is not changed.
+  const frozen = Object.freeze("Editor font size");
+  assert.deepEqual(highlightParts(frozen, "font"), [
+    P("Editor "),
+    P("font", true),
+    P(" size"),
+  ]);
+});
+
+test("settings-view fuzz: for random texts and searches the parts add up to the text, no part is empty, no character is cut, marks hold the search, and a mark exists exactly when the page's own search matches", () => {
+  const { highlightParts } = lib;
+  const rnd = seeded(20260512);
+  const alphabet = [
+    "a",
+    "B",
+    "c",
+    "é",
+    "É",
+    "İ",
+    "ı",
+    "ß",
+    "ẞ",
+    "K",
+    "\u{1F319}",
+    "\u{1F469}",
+    "‍",
+    "́",
+    " ",
+    ".",
+    "*",
+    "(",
+    "$",
+    "\\",
+    "Ж",
+    "ж",
+    "日",
+    "f",
+    "o",
+    "n",
+    "t",
+  ];
+  const pick = (n) => {
+    let out = "";
+    for (let i = 0; i < n; i++)
+      out += alphabet[Math.floor(rnd() * alphabet.length)];
+    return out;
+  };
+  const fold = (text) =>
+    Array.from(text)
+      .map((c) => c.toLowerCase())
+      .join("");
+  let checked = 0;
+  let matched = 0;
+  for (let n = 0; n < 600; n++) {
+    const text = pick(Math.floor(rnd() * 70));
+    let query;
+    const mode = rnd();
+    if (mode < 0.5 && text.length) {
+      const chars = Array.from(text);
+      const a = Math.floor(rnd() * chars.length);
+      query = chars.slice(a, a + 1 + Math.floor(rnd() * 4)).join("");
+      if (rnd() < 0.5) query = query.toUpperCase();
+      if (rnd() < 0.3) query = "  " + query + " ";
+    } else query = pick(1 + Math.floor(rnd() * 3));
+    const parts = highlightParts(text, query);
+    if (text === "") {
+      assert.deepEqual(parts, []);
+      continue;
+    }
+    assert.equal(joined(parts), text, "the parts add up to the text");
+    parts.forEach((part, i) => {
+      assert.ok(part.text.length > 0, "no empty part");
+      assert.equal(typeof part.match, "boolean");
+      if (i > 0)
+        assert.ok(
+          part.match || parts[i - 1].match,
+          "plain parts are never next to each other",
+        );
+      assert.equal(lone(part.text), false, "no character is cut");
+    });
+    const needle = query.trim();
+    const found = needle
+      ? text.toLowerCase().includes(needle.toLowerCase())
+      : false;
+    assert.equal(
+      parts.some((part) => part.match),
+      found,
+      JSON.stringify([text, query]),
+    );
+    for (const part of parts.filter((p) => p.match))
+      assert.ok(
+        fold(part.text).includes(fold(needle)),
+        "a mark holds the search",
+      );
+    assert.deepEqual(
+      highlightParts(text, query),
+      parts,
+      "the same answer twice",
+    );
+    checked++;
+    if (found) matched++;
+  }
+  assert.equal(checked > 500, true);
+  assert.equal(
+    matched > 100,
+    true,
+    "the generator produced plenty of real matches",
+  );
+});
+
+test("settings-view marked: the real page marks the searched words in the name and the description of each result row as <mark> elements with plain text, nowhere else, and draws nothing different without a search", () => {
+  const user = { "editor.fontSize": 15 };
+  const context = fakeContext({ user });
+  const page = pageHarness(context);
+  const copy = (key) => {
+    const row = page
+      .all()
+      .find((n) => n.props && n.props["data-setting"] === key);
+    assert.ok(row, key + " is listed");
+    const parts = page.within(row);
+    return {
+      label: parts.find(
+        (n) => n.type === "label" && n.props.htmlFor === "setting-" + key,
+      ),
+      description: parts.find((n) => n.type === "p" && !n.props.className),
+      code: parts.find((n) => n.type === "code"),
+      all: parts,
+    };
+  };
+  const expected = (text, query) => {
+    const parts = lib.highlightParts(text, query);
+    return parts.some((p) => p.match)
+      ? parts.map((p) =>
+          p.match ? { type: "mark", props: { children: p.text } } : p.text,
+        )
+      : text;
+  };
+  // No search: the label and the description are the plain strings, as before this feature.
+  page.chooseCategory("Editor");
+  const row = schema.find((r) => r.key === "editor.fontSize");
+  assert.equal(copy("editor.fontSize").label.props.children, row.label);
+  assert.equal(
+    copy("editor.fontSize").description.props.children,
+    row.description,
+  );
+  assert.equal(
+    page.all().some((n) => n.type === "mark"),
+    false,
+  );
+  // A search: every listed row has exactly the marks the module gives, in the name and in the description.
+  page.search("font");
+  const listed = page.rows();
+  assert.ok(listed.length >= 3, "a few rows match font");
+  let markedLabels = 0;
+  let markedDescriptions = 0;
+  for (const key of listed) {
+    const r = schema.find((x) => x.key === key);
+    const c = copy(key);
+    assert.deepEqual(
+      c.label.props.children,
+      expected(r.label, "font"),
+      key + " label",
+    );
+    assert.deepEqual(
+      c.description.props.children,
+      expected(r.description, "font"),
+      key + " description",
+    );
+    assert.equal(c.code.props.children, key, "the key line is not marked");
+    if (Array.isArray(c.label.props.children)) markedLabels++;
+    if (Array.isArray(c.description.props.children)) markedDescriptions++;
+  }
+  assert.ok(markedLabels >= 2 && markedDescriptions >= 1);
+  const fontSize = copy("editor.fontSize");
+  assert.equal(fontSize.all.filter((n) => n.type === "mark").length >= 1, true);
+  for (const mark of page.all().filter((n) => n.type === "mark")) {
+    assert.equal(
+      typeof mark.props.children,
+      "string",
+      "a mark holds plain text",
+    );
+    assert.deepEqual(
+      Object.keys(mark.props),
+      ["children"],
+      "a mark has no handler, style or markup property",
+    );
+    assert.equal(mark.props.children.toLowerCase(), "font");
+  }
+  // The same search typed in capitals with edge spaces marks the same; the page lower cases and trims it, as its filter does.
+  page.search("  FONT ");
+  assert.deepEqual(
+    copy("editor.fontSize").label.props.children,
+    expected(row.label, "font"),
+  );
+  // A row found only through its key or an option has nothing to mark and shows its plain text.
+  page.search("editor.tabsize");
+  const tab = schema.find((r) => r.key === "editor.tabSize");
+  assert.equal(copy("editor.tabSize").label.props.children, tab.label);
+  assert.equal(
+    page.all().some((n) => n.type === "mark"),
+    false,
+  );
+  // Hostile search text: nothing is interpreted, no markup property anywhere, and the row text stays as it is.
+  for (const hostile of [
+    "<img src=x onerror=alert(1)>",
+    "<mark>",
+    "&lt;",
+    "</p><script>",
+    "${font}",
+    "\u0000",
+    "‮",
+    "(?",
+    "font".repeat(40),
+  ]) {
+    page.search(hostile);
+    for (const node of page.all()) {
+      assert.equal(
+        node.props && "dangerouslySetInnerHTML" in node.props,
+        false,
+      );
+      assert.equal(node.props && "innerHTML" in node.props, false);
+    }
+    for (const mark of page.all().filter((n) => n.type === "mark"))
+      assert.equal(typeof mark.props.children, "string");
+  }
+  // The search that marks is the search that filters: every listed row is one the filter found, and what it found is marked in the label or description when the words are there.
+  page.search("zebra");
+  assert.deepEqual(page.rows(), []);
+  page.search("");
+  // With the Recently changed view the search marks too, and the row order is the recent one.
+  context.recent = [
+    { key: "terminal.fontSize", scope: "user", project: "" },
+    { key: "editor.fontSize", scope: "user", project: "" },
+  ];
+  page.render();
+  page.box("Recently changed").props.onChange({ target: { checked: true } });
+  page.search("font");
+  assert.deepEqual(page.rows(), ["terminal.fontSize", "editor.fontSize"]);
+  assert.deepEqual(
+    copy("terminal.fontSize").label.props.children,
+    expected(schema.find((r) => r.key === "terminal.fontSize").label, "font"),
+  );
+});
+
+test("settings-view style: the module is complete and pure, the page marks through one helper with elements only, and the one new style rule is a tokens-only rule", () => {
+  const source = read("src/settings-view.ts");
+  const code = stripComments(source);
+  assert.equal(isAscii(source), true, "the module is ASCII");
+  assert.deepEqual(
+    [...code.matchAll(/^import [\s\S]*?from "([^"]+)";/gm)].map((m) => m[1]),
+    ["./settings"],
+  );
+  const exported = [
+    ...source.matchAll(/^export (?:const|function|interface|type) (\w+)/gm),
+  ].map((m) => m[1]);
+  assert.deepEqual(exported, [
+    "MAX_NAMED",
+    "SectionReset",
+    "modifiedKeysInCategory",
+    "describeSectionReset",
+    "TextPart",
+    "MAX_QUERY",
+    "MAX_SCAN",
+    "MAX_MARKS",
+    "highlightParts",
+  ]);
+  const rows = source.split("\n");
+  rows.forEach((line, i) => {
+    if (/^export /.test(line))
+      assert.ok(/\*\/\s*$/.test(rows[i - 1]), "doc comment above: " + line);
+  });
+  assert.ok(source.includes("export const MAX_QUERY = 100;"));
+  assert.ok(source.includes("export const MAX_SCAN = 2000;"));
+  assert.ok(source.includes("export const MAX_MARKS = 20;"));
+  // No pattern engine anywhere in the module: this is what makes the search text safe.
+  for (const word of [
+    "RegExp",
+    "new RegExp",
+    ".match(",
+    ".matchAll(",
+    ".replace(",
+    ".replaceAll(",
+    ".test(",
+    ".exec(",
+    ".search(",
+    ".split(",
+    "innerHTML",
+    "dangerously",
+    "document.",
+    "window.",
+    "Date",
+    "Math.random",
+    "eval(",
+  ])
+    assert.equal(count(code, word), 0, "the module has no " + word);
+  assert.equal(count(code, "indexOf("), 1, "one plain text search");
+  assert.equal(
+    [...code.matchAll(/\/[^\/\n*][^\/\n]*\/[gimsuy]*[.,;)]/g)].length,
+    0,
+    "no regular expression literal",
+  );
+
+  // SettingsPage.tsx: one helper, used for the name and the description, elements only.
+  const page = collapse(read("src/SettingsPage.tsx"));
+  assert.equal(count(page, "highlightParts("), 1);
+  assert.equal(
+    count(page, "function marked(text: string, query: string) {"),
+    1,
+  );
+  assert.equal(
+    count(
+      page,
+      "const parts = highlightParts(text, query); if (!parts.some((part) => part.match)) return text; return parts.map((part, i) => part.match ? <mark key={i}>{part.text}</mark> : part.text, ); }",
+    ),
+    1,
+  );
+  assert.equal(
+    count(page, "marked("),
+    3,
+    "the helper, the name and the description",
+  );
+  assert.equal(count(page, "{marked(row.label, highlight)}"), 1);
+  assert.equal(count(page, "<p>{marked(row.description, highlight)}</p>"), 1);
+  assert.equal(
+    count(page, "highlight={text}"),
+    1,
+    "the page's own trimmed and lower cased search",
+  );
+  assert.equal(count(page, "<mark"), 1);
+  assert.equal(count(page, "dangerouslySetInnerHTML"), 0);
+  assert.equal(count(page, "innerHTML"), 0);
+  assert.equal(
+    count(page, "<code>{row.key}</code>"),
+    1,
+    "the key line is plain text",
+  );
+  assert.equal(count(page, "const text = query.trim().toLowerCase();"), 1);
+  for (const part of [
+    '<label htmlFor={"setting-" + row.key}>',
+    "const modified = Object.hasOwn(own, row.key);",
+    'aria-label={"Reset " + row.label}',
+  ])
+    assert.ok(page.includes(part), "SettingsPage still has: " + part);
+
+  // The one style rule: uses theme tokens only, adds nothing else.
+  const css = read("src/styles.css");
+  const rule = [
+    "/* Search highlight in the settings list: the searched words in a row's name and description. */",
+    ".setting-copy mark {",
+    "  background: var(--surface);",
+    "  color: var(--mint);",
+    "  border-radius: 2px;",
+    "  padding: 0 1px;",
+    "}",
+    "",
+  ].join("\n");
+  assert.equal(
+    count(css, rule),
+    1,
+    "the rule is in the stylesheet once, comment and all",
+  );
+  assert.equal(count(css, ".setting-copy mark"), 1);
+  assert.ok(
+    css.indexOf(".setting-copy mark {") > css.indexOf(".setting-copy code {"),
+    "next to the rest of the row styles, not at the end of the file",
+  );
+  assert.equal(isAscii(rule), true);
+  assert.equal(
+    /#[0-9a-fA-F]{3,8}|!important|rgb|url\(/.test(rule),
+    false,
+    "tokens only",
+  );
+  assert.equal(count(css, "{"), count(css, "}"), "braces balance");
+  assert.ok(css.includes("--surface: var(--color-181a20);"));
+  assert.ok(css.includes("--mint: var(--color-a0e3c2);"));
+  // The older styles this feature leans on are still there.
+  assert.ok(css.includes(".setting-copy > label {"));
+  assert.ok(css.includes(".setting-copy p {"));
+});
+
+test("settings-view notes: SETTINGS.md has one Search highlight paragraph with every claim and numbers equal to the code's, next to the scope text, and the Transfer and discoverability row names it", () => {
+  const doc = read("SETTINGS.md");
+  assert.equal(isAscii(doc), true, "SETTINGS.md is ASCII");
+  const paragraphs = doc
+    .split("\n\n")
+    .filter((p) => p.startsWith("Search highlight:"));
+  assert.equal(paragraphs.length, 1, "one Search highlight paragraph");
+  const p = collapse(paragraphs[0]);
+  for (const claim of [
+    "while you search, the words you typed are marked in the name and the description of each result row",
+    "the key line and the option names are not marked",
+    "a row found only by its key or an option shows no mark",
+    "matched as text, not as a pattern",
+    "characters such as . * ( [ and \\ mean themselves",
+    "upper and lower case are the same",
+    "drawn as plain text in a highlight, never as markup",
+    "Only the first " + lib.MAX_SCAN + " characters of a text are searched",
+    "at most " + lib.MAX_MARKS + " marks are drawn in one text",
+    "a search longer than " + lib.MAX_QUERY + " characters is not marked",
+    "Case is folded one character at a time",
+    "a Greek capital sigma at the end of a word",
+    "found by the search but not marked",
+    "It is display only: it does not change what the search finds, and nothing is saved, changed or sent",
+  ])
+    assert.ok(p.includes(claim), "SETTINGS.md must say: " + claim);
+  const at = doc.indexOf("Search highlight:");
+  assert.ok(at > doc.indexOf("Reset category:"));
+  assert.ok(at < doc.indexOf("## Settings catalog"), "in the scope section");
+  assert.equal(count(doc, "Search highlight:"), 1);
+  const row = doc
+    .split("\n")
+    .filter((line) => line.startsWith("| Transfer and discoverability |"));
+  assert.equal(row.length, 1, "one Transfer and discoverability row");
+  assert.ok(row[0].includes("search highlighting"));
+  assert.ok(row[0].includes("per-category"));
+  assert.ok(row[0].includes("a Recently changed filter"));
+});

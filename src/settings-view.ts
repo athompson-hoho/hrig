@@ -128,3 +128,78 @@ export function describeSectionReset(
       "Reset " + plural(count, "setting", "settings") + " in " + name + ".",
   };
 }
+
+/** One piece of a text: the part the search matches, or a part it does not. */
+export interface TextPart {
+  text: string;
+  match: boolean;
+}
+
+/** The longest search text marked, counted as code points. A longer one is not marked at all (it cannot occur in a name or description) and is never cut, so a mark never disagrees with the search. */
+export const MAX_QUERY = 100;
+
+/** The most of a text that is searched for marks, in UTF-16 units; the rest comes back as plain text. */
+export const MAX_SCAN = 2000;
+
+/** The most marks in one text; later matches stay plain. */
+export const MAX_MARKS = 20;
+
+// Lower case one code point at a time, remembering for every unit of the result where in the original text its code point starts and ends. A match is mapped back through these, so it always covers whole code points (an emoji or a letter that lower cases to two units is never split).
+function fold(text: string): { folded: string; from: number[]; to: number[] } {
+  let folded = "";
+  const from: number[] = [];
+  const to: number[] = [];
+  let at = 0;
+  for (const char of text) {
+    const piece = char.toLowerCase();
+    folded += piece;
+    for (let i = 0; i < piece.length; i++) {
+      from.push(at);
+      to.push(at + char.length);
+    }
+    at += char.length;
+  }
+  return { folded, from, to };
+}
+
+/** The text cut into plain and matching parts for the search words, case blind, left to right and never overlapping. The words are matched as text, not as a pattern (a dot or a bracket means itself), so there is nothing to escape and nothing that can run away. The parts always add up to the exact text, and a part is never cut inside a character. Not text or an empty or over-long search gives the text as one plain part; empty text gives no parts. */
+export function highlightParts(text: unknown, query: unknown): TextPart[] {
+  if (typeof text !== "string" || text === "") return [];
+  const plain: TextPart[] = [{ text, match: false }];
+  if (typeof query !== "string") return plain;
+  const needle = query.trim();
+  if (!needle || needle.length > MAX_QUERY * 2) return plain;
+  if (Array.from(needle).length > MAX_QUERY) return plain;
+  const wanted = fold(needle).folded;
+  let head = text;
+  if (text.length > MAX_SCAN) {
+    const last = text.charCodeAt(MAX_SCAN - 1);
+    head = text.slice(
+      0,
+      last >= 0xd800 && last <= 0xdbff ? MAX_SCAN - 1 : MAX_SCAN,
+    );
+  }
+  const { folded, from, to } = fold(head);
+  const parts: TextPart[] = [];
+  let done = 0;
+  let search = 0;
+  let marks = 0;
+  while (marks < MAX_MARKS) {
+    const found = folded.indexOf(wanted, search);
+    if (found < 0) break;
+    const start = from[found];
+    const end = to[found + wanted.length - 1];
+    if (start < done) {
+      search = found + 1;
+      continue;
+    }
+    if (start > done)
+      parts.push({ text: text.slice(done, start), match: false });
+    parts.push({ text: text.slice(start, end), match: true });
+    done = end;
+    search = found + wanted.length;
+    marks++;
+  }
+  if (done < text.length) parts.push({ text: text.slice(done), match: false });
+  return parts;
+}

@@ -27,7 +27,11 @@ import {
 import { themes } from "./themes";
 import { overrideNote, summarizeOverrides } from "./settings-overrides";
 import { recentRows } from "./settings-recent";
-import { describeSectionReset, modifiedKeysInCategory } from "./settings-view";
+import {
+  describeSectionReset,
+  highlightParts,
+  modifiedKeysInCategory,
+} from "./settings-view";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
 import UpdateSettings from './UpdateSettings';
@@ -44,7 +48,23 @@ const categories = [
   ['Updates', Download],
   ["About", Info],
 ] as const;
-function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
+// A row's text with the searched words marked: plain text and mark elements, never markup.
+function marked(text: string, query: string) {
+  const parts = highlightParts(text, query);
+  if (!parts.some((part) => part.match)) return text;
+  return parts.map((part, i) =>
+    part.match ? <mark key={i}>{part.text}</mark> : part.text,
+  );
+}
+function Row({
+  row,
+  scope,
+  highlight,
+}: {
+  row: Setting;
+  scope: SettingsScope;
+  highlight: string;
+}) {
   const context = useSettings(),
     own = scope === "user" ? context.user : context.project;
   const value =
@@ -75,8 +95,10 @@ function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
       data-setting={row.key}
     >
       <div className="setting-copy">
-        <label htmlFor={"setting-" + row.key}>{row.label}</label>
-        <p>{row.description}</p>
+        <label htmlFor={"setting-" + row.key}>
+          {marked(row.label, highlight)}
+        </label>
+        <p>{marked(row.description, highlight)}</p>
         <code>{row.key}</code>
         {modified && (
           <span className="setting-badge">
@@ -467,7 +489,12 @@ export default function SettingsPage({ project }: { project: string }) {
                 </>
               )}
               {matches.map((row) => (
-                <Row key={scope + row.key} row={row} scope={scope} />
+                <Row
+                  key={scope + row.key}
+                  row={row}
+                  scope={scope}
+                  highlight={text}
+                />
               ))}
               {!matches.length && (
                 <div className="settings-empty">
