@@ -21,6 +21,7 @@ import {
 import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { breadcrumbs } from "./breadcrumb";
+import { motionReduced } from "./reduced-motion";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
 import {
@@ -153,7 +154,7 @@ export default function EditorPanel({
     bracketPairColorization: { enabled: preferences["editor.bracketPairs"] },
     automaticLayout: true,
     scrollBeyondLastLine: false,
-    smoothScrolling: !preferences["appearance.reduceMotion"],
+    smoothScrolling: !motionReduced(preferences["appearance.reduceMotion"]),
   };
   const owner = editorChangeOwner(id, config, diff);
   const lifetime = useRef({ owner, active: true, edit: 0, request: 0, busy: false,

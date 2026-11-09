@@ -24,6 +24,7 @@ import type { PanelConfig } from "./types";
 import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
+import { motionReduced } from "./reduced-motion";
 export default function TerminalPanel({
   config,
   onFile,
@@ -161,7 +162,7 @@ export default function TerminalPanel({
       fontFamily: '"Cascadia Code", "Cascadia Mono", Consolas, monospace',
       fontSize: 13,
       lineHeight: 1.28,
-      cursorBlink: true,
+      cursorBlink: !motionReduced(false),
       cursorStyle: "bar",
       scrollback: 10000,
       // The official search addon uses buffer markers and decorations.
@@ -341,7 +342,7 @@ export default function TerminalPanel({
       "bar" | "block" | "underline";
     term.options.cursorBlink =
       preferences["terminal.cursorBlink"] &&
-      !preferences["appearance.reduceMotion"];
+      !motionReduced(preferences["appearance.reduceMotion"]);
     term.options.scrollback = preferences["terminal.scrollback"];
     term.options.theme = terminalTheme(preferences, colorTheme);
     try {
