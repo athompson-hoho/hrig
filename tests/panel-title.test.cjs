@@ -1311,3 +1311,344 @@ test("panel-title restore: a damaged or hostile stored workspace opens with clea
   }
   assert.ok(real.restoreModel(undefined).getNodeById("welcome"));
 });
+
+// ---------------------------------------------------------------------------
+// Wiring and documentation.
+
+const srcFiles = fs
+  .readdirSync(path.join(root, "src"))
+  .filter((name) => /\.(ts|tsx)$/.test(name))
+  .sort();
+const filesWith = (needle) =>
+  srcFiles.filter((name) =>
+    stripComments(read("src/" + name)).includes(needle),
+  );
+
+test("panel-title wiring: the module is pure, the menu only passes text, App changes the tab title and nothing else, no effect of the terminal depends on its whole config, and only the title code knows the two keys", () => {
+  // The pure module.
+  const source = read("src/panel-title.ts");
+  assert.ok(isAscii(source), "ASCII only");
+  const code = stripComments(source);
+  assert.ok(!/^import /m.test(code), "no import");
+  assert.ok(!/export default/.test(code), "named exports only");
+  assert.ok(
+    !/\b(document|window|hrig|React|localStorage|sessionStorage|indexedDB|setTimeout|setInterval|fetch|Date|Math|performance|eval|require|console|process|structuredClone|crypto)\b/.test(
+      code,
+    ),
+    "no browser, storage, clock, timer, network or bridge word",
+  );
+  const lines = source.split("\n");
+  const exported = lines
+    .map((line, i) => ({ line, i }))
+    .filter((x) => x.line.startsWith("export "));
+  assert.deepEqual(
+    exported.map((x) =>
+      x.line.replace(/^export (const|function|interface) (\w+).*$/, "$2"),
+    ),
+    [
+      "MAX_TITLE",
+      "MAX_ORIGINAL",
+      "MAX_NODES",
+      "MAX_DEPTH",
+      "TitledTab",
+      "TitlePatch",
+      "normalizeTitle",
+      "canRename",
+      "customTitleOf",
+      "isRenamed",
+      "titleOf",
+      "applyCustomTitle",
+      "resetTitle",
+      "normalizeTabTitles",
+    ],
+    "the exports, in order",
+  );
+  for (const x of exported)
+    assert.ok(
+      lines[x.i - 1].startsWith("/** ") && lines[x.i - 1].endsWith(" */"),
+      "a one-line doc comment above: " + x.line,
+    );
+  for (const line of [
+    "export const MAX_TITLE = 60;",
+    "export const MAX_ORIGINAL = 200;",
+    "export const MAX_NODES = 20000;",
+    "export const MAX_DEPTH = 64;",
+  ])
+    assert.ok(lines.includes(line), line);
+
+  // The menu: the same three imports, only the existing look, and no title logic of its own.
+  const menuText = read("src/PanelContextMenu.tsx");
+  assert.ok(isAscii(menuText), "ASCII only");
+  const menu = tight(stripComments(menuText));
+  assert.deepEqual(stripComments(menuText).match(/from "[^"]+";/g), [
+    'from "react";',
+    'from "./components";',
+    'from "./panel-close-targets";',
+  ]);
+  assert.equal(count(menu, "<span>Rename...</span>"), 1);
+  assert.equal(count(menu, "<span>Reset name</span>"), 1);
+  assert.equal(count(menu, 'title="Rename panel"'), 1);
+  assert.equal(
+    count(
+      menu,
+      'subtitle="Only the tab title changes. The session and the seat are not touched."',
+    ),
+    1,
+    "the dialog says it is a label only",
+  );
+  assert.ok(
+    menu.includes(
+      "Up to " +
+        lib.MAX_TITLE +
+        " characters. Leave it empty to restore the original name.",
+    ),
+    "the dialog note quotes the limit of the module",
+  );
+  assert.ok(
+    menu.includes(
+      'const titled = clicked?.kind === "seat" || clicked?.kind === "shell";',
+    ),
+  );
+  assert.ok(
+    menu.includes(
+      'if (event.key === "Enter" && !event.nativeEvent.isComposing)',
+    ),
+  );
+  const css = read("src/styles.css");
+  for (const name of [
+    "menu-separator",
+    "field-label",
+    "field-note",
+    "modal-actions",
+    "secondary-button",
+    "primary-button",
+  ]) {
+    assert.ok(menu.includes(name), name + " is used");
+    assert.ok(
+      css.includes("." + name),
+      name + " already has a rule: the look is reused",
+    );
+  }
+  assert.ok(
+    !/style=\{\{[^}]*\}\}/.test(menu.replace(/style=\{\{ left:[^}]*\}\}/, "")),
+    "only the position is styled",
+  );
+  assert.deepEqual(filesWith("Rename..."), ["PanelContextMenu.tsx"]);
+  assert.deepEqual(filesWith("Reset name"), ["PanelContextMenu.tsx"]);
+
+  // App.tsx: the exact text of every title edit.
+  const app = tight(stripComments(read("src/App.tsx")));
+  const has = (part) => assert.ok(app.includes(tight(part)), part);
+  has(
+    'import { applyCustomTitle, canRename, isRenamed, resetTitle, type TitlePatch } from "./panel-title";',
+  );
+  has(
+    `const titledTab = (id: string) => { const node = model.getNodeById(id); return node instanceof TabNode ? { component: node.getComponent(), name: node.getName(), config: node.getConfig(), } : null; };`,
+  );
+  has(
+    `const retitleTab = (id: string, patch: TitlePatch | null) => { if (!patch) return; model.doAction(Actions.updateNodeAttributes(id, patch)); modelChanged(model); };`,
+  );
+  has(
+    "const renamePanel = (id: string, text: string) => retitleTab(id, applyCustomTitle(titledTab(id), text));",
+  );
+  has(
+    "const resetPanelName = (id: string) => retitleTab(id, resetTitle(titledTab(id)));",
+  );
+  has(
+    `if (action.type === Actions.RENAME_TAB) { const tab = titledTab(action.data.node); if (!canRename(tab)) return action; const patch = applyCustomTitle(tab, action.data.text); return patch ? Actions.updateNodeAttributes(action.data.node, patch) : undefined; }`,
+  );
+  has(
+    "<PanelContextMenu menu={tabMenu} renamed={!!tabMenu && isRenamed(titledTab(tabMenu.id))} onDismiss={() => setTabMenu(null)} onClosePanels={closePanels} onRenamePanel={renamePanel} onResetPanel={resetPanelName} />",
+  );
+  assert.equal(count(app, "<PanelContextMenu "), 1);
+  assert.equal(count(app, "Actions.RENAME_TAB"), 1);
+  assert.equal(
+    count(app, "Actions.updateNodeAttributes("),
+    5,
+    "the arranger, a file line, the dirty flag and the two title edits",
+  );
+  assert.equal(count(app, "applyCustomTitle("), 2);
+  assert.equal(count(app, "resetTitle("), 1);
+  assert.equal(count(app, "titledTab("), 4);
+  assert.equal(
+    count(app, "remember();"),
+    9,
+    "a title change is not an arrangement and adds no history step",
+  );
+  assert.equal(
+    count(app, "announceLayout("),
+    3,
+    "only the three arrangements announce a layout change",
+  );
+  const edits = tight(
+    stripComments(
+      cut(
+        read("src/App.tsx"),
+        "const titledTab = (id: string) => {",
+        "const savePending = async () => {",
+      ) +
+        cut(
+          read("src/App.tsx"),
+          "if (action.type === Actions.RENAME_TAB) {",
+          "return action;\n  };\n  const markDirty",
+        ),
+    ),
+  );
+  for (const word of [
+    "window.",
+    "hrig",
+    "terminalId",
+    "seat",
+    "createTerminal",
+    "writeTerminal",
+    "closeTerminal",
+    "sendTerminalCommand",
+    "rigControl",
+    "sendMessage",
+    "localStorage",
+    "setPending",
+    "remember(",
+    "setModel(",
+    "Model.fromJson",
+    "deleteTab",
+    "moveNode",
+    "setTimeout",
+  ])
+    assert.ok(!edits.includes(word), "the title edits never use " + word);
+  const layout = tight(stripComments(read("src/layout.ts")));
+  assert.ok(
+    layout.includes('import { normalizeTabTitles } from "./panel-title";'),
+  );
+  assert.ok(
+    layout.includes(
+      "export function restoreModel(stored?: IJsonModel) { try { const json = normalizeTabTitles(stored); if (json)",
+    ),
+  );
+  assert.equal(count(layout, "...withoutMaximized(json),"), 1);
+  assert.equal(
+    count(layout, "tabEnableRename: true,"),
+    1,
+    "the built-in rename stays on",
+  );
+  assert.equal(
+    count(app, "restoreModel("),
+    3,
+    "every stored layout, saved layout and role template is cleaned by the one restore",
+  );
+  assert.deepEqual(filesWith('"./panel-title"'), ["App.tsx", "layout.ts"]);
+
+  // Label only: the terminal never reads its whole config in a dependency list, and nothing outside the title code knows the two keys.
+  const terminal = stripComments(read("src/TerminalPanel.tsx"));
+  assert.ok(
+    !/\[\s*config\s*[,\]]|,\s*config\s*[,\]]/.test(terminal),
+    "no effect depends on the whole config",
+  );
+  assert.deepEqual(filesWith("customTitle"), ["panel-title.ts", "types.ts"]);
+  assert.deepEqual(filesWith("defaultTitle"), ["panel-title.ts", "types.ts"]);
+  const types = tight(read("src/types.ts"));
+  assert.ok(types.includes("customTitle?: string;"));
+  assert.ok(types.includes("defaultTitle?: string;"));
+  for (const dir of ["electron", "mobile"]) {
+    const walk = (folder) =>
+      fs
+        .readdirSync(path.join(root, folder), { withFileTypes: true })
+        .flatMap((entry) =>
+          entry.isDirectory()
+            ? walk(folder + "/" + entry.name)
+            : [folder + "/" + entry.name],
+        );
+    for (const file of walk(dir).filter((f) => /\.(c?js|mjs|ts|tsx)$/.test(f)))
+      assert.ok(
+        !/customTitle|defaultTitle/.test(read(file)),
+        file + " does not know the titles",
+      );
+  }
+});
+
+test("panel-title docs: NAVIGATION.md and TERMINALS.md each have one paragraph that says how to rename and reset, what is cleaned and kept, that it is a label only and what it never touches", () => {
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark is kept");
+  assert.ok(raw.endsWith(".\n") && !raw.endsWith("\n\n"));
+  assert.ok(!raw.includes("\r"));
+  const lines = raw.split("\n");
+  const mine = lines.filter((l) => l.startsWith("Rename a terminal panel:"));
+  assert.equal(mine.length, 1);
+  const para = mine[0];
+  assert.ok(isAscii(para), "plain ASCII");
+  const at = lines.indexOf(para);
+  assert.ok(
+    lines[at - 1] === "" && lines[at + 1] === "",
+    "a paragraph of its own",
+  );
+  const index = (start) => lines.findIndex((l) => l.startsWith(start));
+  assert.ok(at > index("Layout undo notice:"));
+  assert.ok(at < index("The command center entry Toggle focus mode"));
+  assert.ok(at > index("Right-click a panel's tab for Close"));
+  assert.equal(count(raw, "Rename a terminal panel:"), 1);
+  for (const part of [
+    "right-click the tab of a shell or a seat panel and choose Rename...",
+    "Type the title and press Enter to save it; Escape or Cancel leaves the name as it was",
+    "A title typed on the tab itself (double-click it, or press F2) follows the same rules",
+    "line breaks and runs of spaces become one space",
+    "control, zero-width and direction-override characters are removed",
+    "it is cut at " + lib.MAX_TITLE + " characters",
+    "An empty title, or the original name, puts the original name back",
+    "the same menu also offers Reset name, which puts the original name back",
+    "the original is saved with the panel, so this works after a restart too",
+    "The title is saved with the workspace and with saved layouts",
+    "cleaned again whenever a workspace, a saved layout or a role template is loaded",
+    "Only terminals are renamed this way: files, diffs and other panels keep their names",
+    "A title is only a label on the tab, in Find open panels and in the panel navigator",
+    "the terminal header still shows the seat name and host",
+    "the session, the seat and the panel id are not touched",
+    "nothing is typed or sent to a terminal or seat",
+    "starts with the seat's own name",
+    "A rename takes away the Undo button of the layout notice",
+    "Undo arrangement puts back the titles the panels had in the earlier layout",
+  ])
+    assert.ok(para.includes(part), "NAVIGATION.md must say: " + part);
+  assert.ok(!/future|later|for now|v1|placeholder/i.test(para));
+
+  const doc = read("TERMINALS.md");
+  assert.ok(
+    doc.charCodeAt(0) !== 0xfeff && doc.endsWith("\n") && !doc.endsWith("\n\n"),
+  );
+  assert.ok(!doc.includes("\r"));
+  const rows = doc.split("\n");
+  const own = rows.filter((l) => l.startsWith("Rename a terminal: "));
+  assert.equal(own.length, 1);
+  const where = rows.indexOf(own[0]);
+  assert.ok(isAscii(own[0]), "plain ASCII");
+  assert.ok(
+    rows[where - 1] === "" && rows[where + 1] === "",
+    "a paragraph of its own",
+  );
+  assert.ok(
+    rows[where - 2].startsWith(
+      "Command center lists Focus, Clear, Find, Reconnect",
+    ),
+    "right after the command center paragraph",
+  );
+  assert.ok(
+    rows[where + 2].startsWith("Snippet placeholders: "),
+    "right before the snippet paragraphs",
+  );
+  for (const part of [
+    "choose Rename..., type a title and press Enter",
+    "Reset name in the same menu puts the original name back",
+    "NAVIGATION.md has the full rules: the title is cleaned, cut at " +
+      lib.MAX_TITLE +
+      " characters and saved with the workspace",
+    "The title is only the label of the terminal's tab",
+    "Find open panels, the panel navigator and the command center entries for that terminal",
+    "the terminal header still shows the seat name, runtime and host",
+    "the command center and Saved snippets still show the host and the terminal ID",
+    "Renaming never touches the session",
+    "nothing is typed or sent to the shell or the seat",
+    "the terminal is not restarted or reconnected",
+    "the seat and the terminal ID, which are what OpenRig actions and these controls use to find a terminal, stay as they are",
+    "Only terminals can be renamed.",
+  ])
+    assert.ok(own[0].includes(part), "TERMINALS.md must say: " + part);
+  assert.ok(!/future|later|for now|v1|placeholder/i.test(own[0]));
+});
