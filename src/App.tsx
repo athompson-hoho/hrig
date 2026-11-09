@@ -103,6 +103,7 @@ import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import RelaunchSession from "./RelaunchSession";
+import SeatPrompt from "./SeatPrompt";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
 import PanelNavigator, { type NavigablePanel } from "./PanelNavigator";
@@ -221,6 +222,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
+  const [promptView, setPromptView] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const modalRef = useRef(modal);
@@ -1959,6 +1961,7 @@ export default function App() {
   return (
     <SettingsContext.Provider value={settingsContext}>
       <div className="app" inert={updateRestarting || undefined}>
+        {promptView && <SeatPrompt key={promptView.connection.id + promptView.seat.id} connection={promptView.connection} seat={promptView.seat} onClose={() => setPromptView(null)} />}
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
           window.dispatchEvent(new CustomEvent("hrig:session-relaunched", {detail:{connectionId:relaunch.connection.id, seatId:relaunch.seat.id}}));
           refreshAll(); setRelaunch(null); notify("Fresh session launched. Checking readiness...");
@@ -2135,6 +2138,7 @@ export default function App() {
                 onConnect={openConnect}
                 onSeat={openSeat}
                 onSeatBeside={openSeatBeside}
+                onSeatPrompt={(seat) => setPromptView({seat, connection})}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
                 activeFile={activeFile}

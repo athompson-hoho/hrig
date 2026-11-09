@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("hrig", {
   exportDiagnostics: invoke('diagnostics:export'),
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
+  seatPrompt: invoke("seat:prompt"),
   designRig: invoke("rig:design"),
   assessTeam: invoke("rig:assess"),
   ports: invoke("ports:list"),

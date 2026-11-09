@@ -180,6 +180,10 @@ export interface HrigAPI {
       allowMissing?: boolean;
     },
   ): Promise<any>;
+  seatPrompt(
+    connection: Connection,
+    id: string,
+  ): Promise<{ seatName: string; text: string; truncated: boolean; capturedAt: string }>;
   rigAction(
     connection: Connection,
     request: Record<string, unknown>,

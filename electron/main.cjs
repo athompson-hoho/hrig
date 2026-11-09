@@ -296,6 +296,14 @@ ipcMain.on("state:flush", (event, state) => {
 });
 handle("connections:detect", () => core.detectConnections());
 handle("rig:inventory", (_event, connection) => backend.inventory(connection));
+const seatPrompt = require("./seat-prompt.cjs").createSeatPrompt({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 20000),
+});
+handle("seat:prompt", (_event, connection, id) => {
+  core.validateConnection(connection);
+  return seatPrompt.read(connection, id);
+});
 handle("rig:send", (_event,connection,seat,message)=>backend.sendMessage(connection,seat,message));
 handle("connection:doctor", (_event, connection) =>
   backend.doctor(connection),

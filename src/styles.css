@@ -4540,3 +4540,16 @@ button:hover {
 .diagnostics-export .diagnostics-export-action { padding: 4px 8px; min-height: 28px; white-space: normal; max-width: 100%; min-width: 0; overflow-wrap: anywhere; font-size: 10px; font-weight: 400; line-height: 1.5; }
 .diagnostics-export p { margin: 4px 0 0; min-width: 0; overflow-wrap: anywhere; color: var(--color-c9cdd7); font-size: 11px; font-weight: 400; line-height: 1.8; }
 .diagnostics-export p.diagnostics-export-result { margin-top: 8px; }
+.seat-prompt-text {
+  max-height: 50vh;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  border: 1px solid var(--line, currentColor);
+  border-radius: 6px;
+  user-select: text;
+}

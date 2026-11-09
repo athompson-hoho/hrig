@@ -55,6 +55,7 @@ export default function Sidebar({
   onManageRigs,
   onSeat,
   onSeatBeside,
+  onSeatPrompt,
   onRelaunch,
   onDrag,
   onFile,
@@ -82,6 +83,7 @@ export default function Sidebar({
   onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
   onSeatBeside?: (seat: Seat) => void;
+  onSeatPrompt?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -185,6 +187,9 @@ export default function Sidebar({
         <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
       </button>
       {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
+      {onSeatPrompt && s.status === "attention" && (
+        <IconButton title={`View pending prompt for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatPrompt(s)}><span aria-hidden="true">?</span></IconButton>
+      )}
       <IconButton
         title={`Relaunch session ${s.name}`}
         disabled={!!inventoryError || !s.session}
