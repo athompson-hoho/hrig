@@ -6,6 +6,8 @@ import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
 import { pasteClipboard, pastePreview, endsWithLineBreak } from "./terminal-paste";
 import TerminalPasteConfirm from "./TerminalPasteConfirm";
+import TerminalPasteHistory from "./TerminalPasteHistory";
+import { clearPastes, pushPaste } from "./terminal-paste-history";
 import { classifyTerminalKey } from "./terminal-keys";
 import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
@@ -24,6 +26,12 @@ let searchHistory: readonly string[] = [];
 
 // Height of the two link items and their separator in the right-click menu (two 33px buttons and an 11px separator, see .dropdown in styles.css); added to the bottom-edge clamp only while they show.
 const LINK_ITEMS_HEIGHT = 77;
+
+// Height of the Paste from history item in the right-click menu (one 33px button, see .dropdown in styles.css); added to the bottom-edge clamp only while it shows.
+const HISTORY_ITEM_HEIGHT = 33;
+
+// Recent pastes, one list per terminal id and in memory only: pasted text often holds a secret for one host, so a list is never shared with another terminal and is never saved, restored, logged or exported. It is dropped when its terminal closes or the setting is turned off.
+const pasteHistories = new Map<string, readonly string[]>();
 
 export default function TerminalTools({
   terminal,
@@ -97,6 +105,25 @@ export default function TerminalTools({
   // reaches the shell only through the terminal's normal input path.
   const [hasImage,setHasImage]=useState(false);
   const pasteImage=async()=>{try{const text=await window.hrig.pasteClipboardImage(terminalId);if(text)terminal.current?.paste(text);}catch(e){setNotice((e as Error).message);}terminal.current?.focus();};
+  // Opt-in paste history. paste() runs from handlers that close over an old render, so only a ref is current at paste time.
+  const historyOn = effective["terminal.pasteHistory"] === true;
+  const historyRef = useRef(historyOn);
+  historyRef.current = historyOn;
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Every write of this terminal's list goes through here; an empty list is dropped, not stored.
+  const keepPastes = (list: readonly string[]) => {
+    if (list.length) pasteHistories.set(terminalId, list);
+    else pasteHistories.delete(terminalId);
+  };
+  // The one place a paste is remembered: the text that was actually pasted, after any confirmation.
+  const rememberPaste = (text: string) => {
+    if (historyRef.current) keepPastes(pushPaste(pasteHistories.get(terminalId) ?? [], text));
+  };
+  // Turning the setting off forgets the list and closes the picker; closing the terminal forgets the list too.
+  useEffect(() => { if (!historyOn) { keepPastes(clearPastes()); setHistoryOpen(false); } }, [historyOn]);
+  useEffect(() => () => keepPastes(clearPastes()), [terminalId]);
+  const chooseFromHistory = (text: string) => { setHistoryOpen(false); void paste(text); };
+  const clearHistory = () => { keepPastes(clearPastes()); setHistoryOpen(false); setNotice("Paste history cleared."); };
   // Component state holds only the count, the truncated preview and a boolean; the clipboard text stays in pasteClipboard's local variable.
   const [pasteAsk, setPasteAsk] = useState<{
     lines: number;
@@ -121,11 +148,12 @@ export default function TerminalTools({
   };
   // An unmounted dialog must not leave a paste pending.
   useEffect(() => () => pendingAnswer.current?.(false), []);
-  const paste = async () => {
+  const paste = async (picked?: string) => {
     // Bind the paste to the terminal that asked: a reconnect swaps terminal.current while the dialog is open.
     const target = terminal.current;
     try {
-      await pasteClipboard({readText:()=>window.hrig.readClipboardText(),hasImage:()=>window.hrig.clipboardHasImage(),pasteText:text=>{ if (terminal.current === target) target?.paste(text); },pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
+      // A picked history entry takes the same route as clipboard text, so the multi-line confirmation applies to it too; the clipboard itself is not read for it.
+      await pasteClipboard({readText:()=>picked===undefined?window.hrig.readClipboardText():Promise.resolve(picked),hasImage:()=>picked===undefined?window.hrig.clipboardHasImage():Promise.resolve(false),pasteText:text=>{ if (terminal.current === target) { target?.paste(text); rememberPaste(text); } },pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
     } catch (e) {
       setNotice((e as Error).message);
     }
@@ -297,6 +325,7 @@ export default function TerminalTools({
     terminal.current?.focus();
   };
   const menuLink = menu?.link ?? null;
+  const historyItem = menu !== null && historyOn && (pasteHistories.get(terminalId)?.length ?? 0) > 0;
   return (
     <>
       {menu && (
@@ -305,7 +334,7 @@ export default function TerminalTools({
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0)),
+            top: Math.min(menu.y, window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0) - (historyItem ? HISTORY_ITEM_HEIGHT : 0)),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -332,6 +361,11 @@ export default function TerminalTools({
           <button role="menuitem" onClick={choose(paste)}>
             <span>Paste</span>
           </button>
+          {historyItem && (
+            <button role="menuitem" onClick={choose(() => setHistoryOpen(true))}>
+              <span>Paste from history…</span>
+            </button>
+          )}
           {hasImage&&<button role="menuitem" onClick={choose(pasteImage)}><span>Paste image…</span></button>}
           <div className="menu-separator" />
           <button role="menuitem" onClick={choose(() => terminal.current?.selectAll())}>
@@ -345,6 +379,14 @@ export default function TerminalTools({
           preview={pasteAsk.preview}
           endsWithBreak={pasteAsk.endsWithBreak}
           onAnswer={pasteAsk.answer}
+        />
+      )}
+      {historyOpen && (
+        <TerminalPasteHistory
+          entries={pasteHistories.get(terminalId) ?? []}
+          onChoose={chooseFromHistory}
+          onClear={clearHistory}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
     <div

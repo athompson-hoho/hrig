@@ -36,6 +36,7 @@ export const defaults = {
   "terminal.copyOnSelect": false,
   "terminal.copyTrimTrailingWhitespace": false,
   "terminal.confirmMultilinePaste": false,
+  "terminal.pasteHistory": false,
   "terminal.showSizeOnResize": true,
   "terminal.showOutputCounter": false,
   "terminal.bellStyle": "none",
@@ -357,6 +358,13 @@ export const schema: Setting[] = [
     label: "Confirm multi-line paste",
     description:
       "Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm.",
+  },
+  {
+    key: "terminal.pasteHistory",
+    category: "Terminal",
+    label: "Paste history",
+    description:
+      "Remember the text you paste into a terminal with HRig, so Paste from history in the terminal's right-click menu can paste it again. Off by default, and then nothing is remembered and the menu item does not exist. Each terminal keeps its own last 10 pastes of up to 10,000 characters, in memory only: never saved, logged or exported, never shared with another terminal, and gone when you close the terminal, turn this off or close HRig. Pasted text can contain secrets. Only text HRig itself pasted is remembered; the clipboard is never read to build the list. Choosing an entry pastes it like a normal paste, so Confirm multi-line paste still asks, and Enter is never pressed. See TERMINALS.md.",
   },
   {
     key: "terminal.showSizeOnResize",

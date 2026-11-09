@@ -1531,3 +1531,64 @@ test("workspace.restoreLastProject is an off-by-default Workspace boolean listed
   ])
     assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
 });
+test("terminal.pasteHistory is an off-by-default Terminal boolean listed once right after the multi-line paste confirmation, resolved user then project, and documented in SETTINGS.md", () => {
+  const key = "terminal.pasteHistory";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "terminal.confirmMultilinePaste");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Terminal");
+  assert.equal(row.label, "Paste history");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  const claims = [
+    "Off by default, and then nothing is remembered and the menu item does not exist",
+    "last 10 pastes of up to 10,000 characters, in memory only",
+    "never saved, logged or exported",
+    "never shared with another terminal",
+    "gone when you close the terminal, turn this off or close HRig",
+    "Pasted text can contain secrets",
+    "the clipboard is never read to build the list",
+    "Enter is never pressed",
+  ];
+  for (const part of claims)
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) => line.startsWith("| `" + key + "` |"));
+  assert.ok(at > 0, "SETTINGS.md must have a terminal.pasteHistory row");
+  assert.equal(
+    lines.filter((line) => line.startsWith("| `" + key + "` |")).length,
+    1,
+  );
+  assert.ok(lines[at].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at - 1].startsWith("| `terminal.confirmMultilinePaste` |"));
+  assert.ok(lines[at + 1].startsWith("| `terminal.showSizeOnResize` |"));
+  for (const part of [...claims, "See TERMINALS.md"])
+    assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
+  assert.ok(!/[^\n -~]/.test(lines[at]), "the row is printable ASCII");
+});

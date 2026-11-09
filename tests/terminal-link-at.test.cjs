@@ -785,8 +785,8 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
     2 * px(rule(".dropdown"), "padding") + 2 * px(rule(".dropdown"), "border");
   assert.equal(
     items,
-    8,
-    "Open link, Copy link, Copy, Save, Create task, Paste, Paste image, Select all",
+    9,
+    "Open link, Copy link, Copy, Save, Create task, Paste, Paste from history, Paste image, Select all",
   );
   assert.equal(separators, 2);
   assert.equal(
@@ -796,8 +796,8 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
   );
   assert.equal(
     frame + item * items + sep * separators,
-    223 + 77,
-    "the clamp with link items is the tallest menu",
+    223 + 77 + 33,
+    "the clamp with link items and the paste history item is the tallest menu",
   );
 
   // The installed xterm and addon say what the plan relies on.
