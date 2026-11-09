@@ -4,6 +4,7 @@ import { filterLog, formatLog, type LogFilter } from "./activity-log";
 import { Empty, ErrorBox, IconButton, Loading, StatusDot } from "./components";
 import type { Connection, Seat } from "./types";
 import { draftKey, draftOperation, useDraft } from "./drafts";
+import { visibleInterval } from "./visible-interval";
 function RecipientMessage({
   connection,
   root,
@@ -206,10 +207,10 @@ export function QueuePanel({
           if (active) setError(e.message);
         });
     load();
-    const timer = setInterval(load, 15000);
+    const stopPolling = visibleInterval(load, 15000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [connection.id, rigName, refresh]);
   return (

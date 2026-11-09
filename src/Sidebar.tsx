@@ -28,11 +28,11 @@ import { sortSeats } from "./seat-sort";
 import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity, pinConnectionIdentity } from "./seat-pins";
 import { groupSeatPods, normalizeCollapsedPods } from "./seat-pods";
 import { useSettings } from "./SettingsContext";
+import { visibleInterval } from "./visible-interval";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15000);
-    return () => clearInterval(timer);
+    return visibleInterval(() => setNow(Date.now()), 15000);
   }, []);
   return <>{formatAge(now - Date.parse(sampledAt))}</>;
 }

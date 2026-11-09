@@ -23,6 +23,7 @@ import { attentionSeats, attentionJumpEligibility } from "./attention-inbox";
 import { pinConnectionIdentity } from "./seat-pins";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
 import { VirtualList } from "./VirtualList";
+import { visibleInterval } from "./visible-interval";
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const { effective } = useSettings();
   // Keep full raw identity internal. No display normalization grants authority.
@@ -199,10 +200,10 @@ export function AttentionPanel({
           if (active) setError(e.message);
         });
     load();
-    const timer = setInterval(load, 15000);
+    const stopPolling = visibleInterval(load, 15000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [owner]);
   const ownedBlocked = blockedOwner === owner ? blocked : null;

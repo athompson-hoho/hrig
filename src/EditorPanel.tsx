@@ -29,6 +29,7 @@ import {
   canPublishEditorChange,
   canAcknowledgeEditorChange,
 } from "./editor-external-change";
+import { visibleInterval } from "./visible-interval";
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === "json") return new JsonWorker();
@@ -455,14 +456,14 @@ export default function EditorPanel({
         checking = false;
       }
     };
-    const timer = setInterval(
+    const stopPolling = visibleInterval(
       check,
       config.connection.kind === "local" ? 2500 : 8000,
     );
     window.addEventListener("focus", check);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
       window.removeEventListener("focus", check);
     };
   }, [generation, diff, preferences["editor.autoReload"]]);

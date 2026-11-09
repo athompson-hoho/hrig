@@ -5,6 +5,7 @@ import { ErrorBox, Loading, Modal } from "./components";
 import { VirtualList } from "./VirtualList";
 import { pinConnectionIdentity } from "./seat-pins";
 import { groupTasks, searchTasks, type TaskGroupBy } from "./task-view";
+import { visibleInterval } from "./visible-interval";
 export default function TaskBoard({
   connection,
   rigName,
@@ -46,10 +47,10 @@ export default function TaskBoard({
           if (active) setError(e.message);
         });
     load();
-    const timer = setInterval(load, 15000);
+    const stopPolling = visibleInterval(load, 15000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [connection.id, rigName, refresh]);
   const addresses = seats.map((s) => ({
