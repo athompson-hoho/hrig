@@ -94,6 +94,88 @@ function assertNavigationOnly(view) {
   assert.equal(view.intervals.size, 0, 'no polling');
 }
 
+const listedRow = (view, path) => view.nodes().find(node =>
+  node.props.className?.split(' ').includes('file-row') &&
+  (node.props.title === path || node.props.title?.startsWith(path + ' —')));
+
+if (require.main === module) {
+  for (const name of ['x:y.ts', 'literal\\name.ts', 'line\nname.ts']) {
+    test(`odd listing actual POSIX file remains represented: ${JSON.stringify(name)}`, async t => {
+      const view = mountScenario({ handle: () => [entry('ordinary.ts'), entry(name)] });
+      t.after(() => view.unmount()); await view.settle();
+      assert.ok(listedRow(view, 'ordinary.ts'), 'ordinary actual FileTree sibling is represented');
+      assertNavigationOnly(view);
+      t.diagnostic('Positive setup: actual Sidebar Files completed its inert list and represented the ordinary sibling.');
+      const odd = listedRow(view, name);
+      assert.ok(odd, 'a legal POSIX file name must not silently disappear');
+      assert.ok(view.text(odd).includes(name), 'the exact name remains rendered as text');
+      if (!name.includes('\n')) {
+        view.event(odd, 'onClick');
+        assert.deepEqual(view.actions, [['onFile', name]], 'safe POSIX names open their exact captured identity');
+      } else if (odd.props.disabled || typeof odd.props.onClick !== 'function') {
+        assert.ok(view.text(odd).includes('cannot be opened here'), 'displayed refusal is explicit');
+      }
+    });
+  }
+  for (const name of ['x:y', 'literal\\folder']) {
+    test(`odd listing actual POSIX directory retains descendants: ${JSON.stringify(name)}`, async t => {
+      const child = `${name}/child.ts`;
+      const view = mountScenario({ handle: (_owner, request) => {
+        assert.equal(request.op, 'list');
+        if (request.path === '') return [entry('ordinary.ts'), entry(name, true)];
+        assert.equal(request.path, name, 'directory expansion preserves the exact literal path');
+        return [entry(child)];
+      } });
+      t.after(() => view.unmount()); await view.settle();
+      assert.ok(listedRow(view, 'ordinary.ts')); assertNavigationOnly(view);
+      t.diagnostic('Positive setup: actual root listing rendered the ordinary sibling without effects.');
+      const folder = listedRow(view, name);
+      assert.ok(folder, 'legal named directory remains visible');
+      view.event(folder, 'onClick'); await view.settle();
+      const file = listedRow(view, child);
+      assert.ok(file, 'the directory descendants retain their literal parent identity');
+      view.event(file, 'onClick'); assert.deepEqual(view.actions, [['onFile', child]]);
+    });
+  }
+  for (const name of ['file:stream', 'dir\\escape']) {
+    test(`odd listing Windows unsafe entry is visible and non-actionable: ${JSON.stringify(name)}`, async t => {
+      const windows = { ...connection, root: 'C:/Synthetic' };
+      const view = mountScenario({ platform: 'win32', props: { connection: windows, root: windows.root },
+        handle: (_owner, request) => { assert.equal(request.path, ''); return [entry('ordinary.ts'), entry(name)]; } });
+      t.after(() => view.unmount()); await view.settle();
+      const ordinary = listedRow(view, 'ordinary.ts'); assert.ok(ordinary);
+      view.event(ordinary, 'onClick'); assert.deepEqual(view.actions, [['onFile', 'ordinary.ts']]);
+      const requests = view.requests.length;
+      t.diagnostic('Positive setup: actual Windows consumer lists and explicitly opens the ordinary captured sibling.');
+      const odd = listedRow(view, name);
+      assert.ok(odd, 'unsafe current-platform entry must be visible instead of silently removed');
+      assert.ok(odd.props.disabled || typeof odd.props.onClick !== 'function', 'no active opening authority');
+      assert.ok(view.text(odd).includes('cannot be opened here'), 'the refusal reason is visible');
+      if (odd.props.onClick) odd.props.onClick();
+      assert.deepEqual(view.actions, [['onFile', 'ordinary.ts']], 'retained invocation cannot bypass refusal');
+      assert.equal(view.requests.length, requests, 'refused entry cannot expand or issue any file read');
+      assert.deepEqual(view.forbidden, []);
+    });
+  }
+  test('odd listing actual malformed or out-of-parent entries have an exact omission notice', async t => {
+    const view = mountScenario({ handle: () => [entry('ordinary.ts'), entry('../escape'), entry('other/foreign.ts')] });
+    t.after(() => view.unmount()); await view.settle();
+    assert.ok(listedRow(view, 'ordinary.ts')); assertNavigationOnly(view);
+    t.diagnostic('Positive setup: ordinary actual root row exists before checking returned-entry omissions.');
+    assert.ok(hasText(view, '2 paths not shown'), 'known refused entries must be counted without inventing backend totals');
+    assert.equal(listedRow(view, '../escape'), undefined);
+    assert.equal(listedRow(view, 'other/foreign.ts'), undefined);
+  });
+  test('odd listing actual returned cap omissions are counted without hiding the shown rows', async t => {
+    const view = mountScenario({ handle: () => Array.from({ length: 601 }, (_, i) => entry(`file${i}.ts`)) });
+    t.after(() => view.unmount()); await view.settle();
+    assert.equal(visibleRows(view).length, 600, 'the existing represented-row cap remains bounded');
+    t.diagnostic('Positive setup: actual FileTree already represents its bounded 600 ordinary rows.');
+    assert.ok(hasText(view, '1 paths not shown'), 'the known returned entry beyond the cap is disclosed');
+    assertNavigationOnly(view);
+  });
+}
+
 if (require.main === module) {
   test('Sidebar files ordinary lazy listing and explicit file click retain exact path', async (t) => {
     const view = mountFiles();

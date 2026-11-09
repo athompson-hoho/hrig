@@ -237,3 +237,35 @@ test('actual shared status refuses malformed prefix provenance for every consume
       /Malformed Git status/, 'overall prefix failure must not become a partial/clean Changes response');
   }
 });
+
+// L-02: execute the actual local listing branch with only inert filesystem calls.
+test('odd listing backend preserves literal POSIX backslash identity and Windows separators', async t => {
+  async function list(platform, root, relative, names) {
+    const fakePath = platform === 'win32' ? path.win32 : path.posix;
+    const module = { exports: {} }, calls = [];
+    const target = fakePath.resolve(root, relative);
+    vm.runInNewContext(source, { module, Buffer, process: { platform, env: {} }, require(id) {
+      if (id === 'node:path') return fakePath;
+      if (id === 'node:os') return { homedir: () => root };
+      if (id === 'node:child_process') return { execFile() { assert.fail('listing never invokes a host process'); } };
+      assert.equal(id, 'node:fs/promises');
+      return {
+        async realpath(value) { assert.ok([root, target].includes(value)); return value; },
+        async readdir(value, options) {
+          assert.equal(value, target); assert.equal(options.withFileTypes, true); calls.push(value);
+          return names.map(name => ({ name, isSymbolicLink: () => false, isDirectory: () => false }));
+        },
+      };
+    } });
+    const result = await module.exports.fileOperation({ id: 'synthetic', kind: 'local' },
+      { op: 'list', root, path: relative });
+    assert.equal(calls.length, 1);
+    return JSON.parse(JSON.stringify(result));
+  }
+  const windows = await list('win32', 'C:\\Synthetic', 'folder', ['ordinary.ts']);
+  assert.equal(windows[0].path, 'folder/ordinary.ts', 'ordinary Windows separators remain normalized');
+  const posix = await list('linux', '/synthetic-list', '', ['ordinary.ts', 'literal\\name.ts']);
+  assert.ok(posix.some(e => e.path === 'ordinary.ts'), 'actual inert POSIX listing returns an ordinary sibling');
+  t.diagnostic('Positive setup: actual local listing executed with inert paths, Dirents and one read on each platform.');
+  assert.ok(posix.some(e => e.path === 'literal\\name.ts'), 'literal POSIX backslash must not become a directory separator');
+});

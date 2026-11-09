@@ -94,4 +94,23 @@ if (require.main === module) {
     assert.equal(capped.filter(e => !e.directory).length, 100);
     assert.equal(capped.some(e => e.path === 'dir/100'), false);
   });
+  // L-02 changes legal POSIX name handling; Windows ambiguity stays refused.
+  test('odd listing pure POSIX opening preserves colon and literal backslash names', t => {
+    assert.equal(resolveRevealPath(connection, '/project', 'ordinary.ts', 'linux'), 'ordinary.ts');
+    t.diagnostic('Positive setup: the actual existing path helper accepts an ordinary bounded relative file.');
+    for (const kind of ['local', 'ssh', 'wsl']) {
+      const owner = { ...connection, kind };
+      const platform = kind === 'local' ? 'linux' : 'win32';
+      for (const name of ['x:y.ts', 'literal\\name.ts'])
+        assert.equal(resolveRevealPath(owner, '/project', name, platform), name,
+          'remote POSIX names stay literal even on a Windows desktop');
+    }
+  });
+  test('odd listing pure search projection retains legal names instead of silently removing them', t => {
+    const names = ['ordinary.ts', 'x:y.ts', 'literal\\name.ts', 'line\nname.ts'];
+    const projected = projectFileMatches(names.map(path => ({ name: path, path, directory: false })));
+    assert.ok(projected.some(e => e.path === 'ordinary.ts'), 'ordinary projection positive');
+    t.diagnostic('Positive setup: actual search projection represents the ordinary sibling.');
+    for (const name of names) assert.ok(projected.some(e => e.path === name), 'every legal returned POSIX name remains represented');
+  });
 }
