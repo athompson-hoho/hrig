@@ -2,6 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { pathToFileURL } = require('node:url');
@@ -51,6 +52,65 @@ function evaluate(source, scope = {}) {
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React,
   } }).outputText, context);
   return context.result;
+}
+
+function candidateAssetConsumer(root) {
+  const source = fs.readFileSync('scripts/renderer-benchmark.mjs', 'utf8');
+  const ast = ts.createSourceFile('renderer-benchmark.mjs', source, ts.ScriptTarget.Latest, true);
+  const matches = [];
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'candidateAssets') matches.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.equal(matches.length, 1, 'actual production collector must be unique');
+  return evaluate(`${matches[0].getText(ast)}\nresult = candidateAssets;`, {
+    fs: fs.promises, path, root,
+  });
+}
+
+async function representativeAssets() {
+  // Synthetic bytes in owned temporary trees only; never read checkout dist.
+  const files = new Map([
+    ['/index.html', Buffer.from('<html>synthetic built entry</html>')],
+    ['/assets/app.js', Buffer.from('// synthetic built module')],
+    ['/icon.svg', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><!-- synthetic 界 --></svg>')],
+    ['/popout.html', Buffer.from('<html>synthetic nonserved popout</html>')],
+  ]);
+  async function fixture(check) {
+    const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'hrig-asset-test-'));
+    try {
+      await fs.promises.mkdir(path.join(root, 'dist/assets'), { recursive: true });
+      for (const [name, body] of files) await fs.promises.writeFile(path.join(root, 'dist', name), body);
+      return await check(root, candidateAssetConsumer(root));
+    } finally {
+      await fs.promises.rm(root, { recursive: true, force: true });
+    }
+  }
+  // Each refusal has its own tree: an earlier unexpected entry cannot mask it.
+  for (const name of ['other.svg', 'other.html']) await fixture(async (root, collect) => {
+    await fs.promises.writeFile(path.join(root, 'dist', name), 'synthetic unexpected root');
+    await assert.rejects(collect, { message: 'assets-unavailable' }, `unknown root ${name} denied`);
+  });
+  for (const name of ['root-link.js', 'assets/nested-link.js', 'icon.svg', 'popout.html']) {
+    await fixture(async (root, collect) => {
+      const link = path.join(root, 'dist', name);
+      if (files.has(`/${name}`)) await fs.promises.unlink(link);
+      await fs.promises.symlink(path.join(root, 'dist/assets/app.js'), link);
+      assert.equal((await fs.promises.lstat(link)).isSymbolicLink(), true);
+      await assert.rejects(collect, { message: 'assets-unavailable' }, `${name} symlink denied`);
+    });
+  }
+  return fixture(async (root, collect) => {
+    let assets, rejection;
+    try { assets = await collect(); } catch (error) { rejection = error.message; }
+    assert.equal(rejection, undefined,
+      'actual collector accepts regular index/assets/favicon with nonserved popout');
+    assert.deepEqual(Array.from(assets.keys()).sort(), ['/assets/app.js', '/icon.svg', '/index.html']);
+    for (const [name, body] of assets) assert.deepEqual(body, files.get(name), `${name} bytes preserved`);
+    assert.equal(assets.has('/popout.html'), false, 'popout never enters served map');
+    return assets;
+  });
 }
 
 function readyConsumer() {
@@ -173,12 +233,9 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
   // ordering, selectors, routing and report acceptance without launching a
   // runtime. All clock values below are semantic test data, never measurements.
   const contexts = [], effects = [], served = [], requests = [];
-  let routePaths = ['/index.html', '/assets/app.js'], requestMethod = 'GET', expectAbort = false;
+  let routePaths = ['/index.html', '/assets/app.js', '/icon.svg'], requestMethod = 'GET', expectAbort = false;
   let failureMode = '';
-  const builtAssets = new Map([
-    ['/index.html', '<html>synthetic built entry</html>'],
-    ['/assets/app.js', '// synthetic built module'],
-  ]);
+  const builtAssets = await representativeAssets();
   const adapter = {
     now: (() => { let time = 0; return () => time += 5; })(),
     async availability() { return { available: true, browserVersion: 'synthetic-test-only' }; },
@@ -217,7 +274,12 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
                 requests.push(requestUrl);
                 let fulfilled = false;
                 await routeHandler({ request: () => ({ url: () => requestUrl, method: () => requestMethod }),
-                  async fulfill(response) { fulfilled = true; served.push(pathname); assert.ok(response.body); },
+                  async fulfill(response) {
+                    fulfilled = true; served.push(pathname); assert.ok(response.body);
+                    assert.equal(response.status, 200);
+                    assert.deepEqual(response.body, builtAssets.get(new URL(requestUrl).pathname));
+                    if (pathname === '/icon.svg') assert.equal(response.contentType, 'image/svg+xml');
+                  },
                   async abort() { assert.ok(expectAbort, 'allowed built asset denied'); },
                   async continue() { effects.push('unconfined-network'); },
                 });
@@ -250,11 +312,16 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
       assert.ok(Number.isFinite(sample[key]) && sample[key] >= 0, `${key}: finite monotonic accepted sample`);
   }
   assert.deepEqual(effects, [], 'authority: no forbidden host effects during actual runner');
-  assert.equal(served.length, 4);
-  assert.equal(requests.length, 4);
+  assert.equal(served.length, 6);
+  assert.equal(requests.length, 6);
 
+  // Forged map membership must never grant root routing authority.
+  builtAssets.set('/popout.html', Buffer.from('synthetic forged popout'));
+  builtAssets.set('/other.svg', Buffer.from('synthetic forged root'));
   for (const pathname of ['https://private.invalid/owner', '/electron/preload.cjs', '/assets/missing.js',
-    '/assets/app.js?owner=PRIVATE_SYNTHETIC', '/assets/%2e%2e/preload.cjs']) {
+    '/assets/app.js?owner=PRIVATE_SYNTHETIC', '/assets/%2e%2e/preload.cjs',
+    '/popout.html', '/other.svg', '/icon.svg?owner=PRIVATE_SYNTHETIC', '/icon.svg#fragment',
+    'https://private.invalid/icon.svg', '/assets/%2e%2e%2ficon.svg']) {
     routePaths = [pathname]; expectAbort = true;
     const rejected = await runControlledRendererBenchmark({ samples: 1, scenario: 'welcome-only', builtAssets, adapter });
     assert.equal(rejected.status, 'failed', 'unexpected network or asset must fail the run');
@@ -266,6 +333,13 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
   }
   routePaths = ['/index.html']; requestMethod = 'POST';
   assert.equal((await runControlledRendererBenchmark({ samples: 1, builtAssets, adapter })).reason, 'asset-denied');
+  routePaths = ['/icon.svg'];
+  for (const method of ['POST', 'HEAD']) {
+    requestMethod = method;
+    assert.equal((await runControlledRendererBenchmark({ samples: 1, builtAssets, adapter })).reason, 'asset-denied');
+  }
+  builtAssets.delete('/popout.html'); builtAssets.delete('/other.svg');
+  routePaths = ['/index.html'];
   requestMethod = 'GET'; expectAbort = false;
   for (const mode of ['page-error', 'capability', 'websocket']) {
     failureMode = mode;
