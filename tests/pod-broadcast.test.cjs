@@ -655,3 +655,53 @@ test("pod-broadcast inert: no app source imports it, nothing sends, and no setti
       assert.ok(/\*\/\s*$/.test(lines[i - 1]), "documented: " + line);
   });
 });
+
+test("pod-broadcast note: docs/pod-broadcast.md says it is not implemented, has the required headings and names the helper and the gate, and TERMINALS.md points to it once", () => {
+  const note = read("docs/pod-broadcast.md");
+  const lines = note.split("\n");
+  assert.equal(lines[0], "# Pod broadcast");
+  assert.ok(
+    lines
+      .find((line) => line.trim() !== "" && !line.startsWith("#"))
+      .startsWith("Design note only; not implemented."),
+  );
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("## ")),
+    [
+      "## Goal",
+      "## Current behavior",
+      "## Risks",
+      "## Options",
+      "## Recommendation",
+      "## Approval gate",
+      "## Tests an implementation must add",
+    ],
+  );
+  for (const part of [
+    "`src/pod-broadcast.ts`",
+    "`podGroups`",
+    "`previewRecipients`",
+    "`validateBroadcastText`",
+    "`confirmationPhrase`",
+    "`MAX_RECIPIENTS` (8)",
+    "`MAX_TEXT_CHARS`, 10,000",
+    "`sendMessage`",
+    "`rig send`",
+    "`--pod`",
+    "A person must approve this before anything is built",
+  ])
+    assert.ok(note.includes(part), "the note must say: " + part);
+  assert.ok(!/[^\n -~]/.test(note), "the note is printable ASCII");
+  assert.ok(note.endsWith("\n") && !note.endsWith("\n\n"));
+  const terminals = read("TERMINALS.md");
+  assert.equal(terminals.split("docs/pod-broadcast.md").length - 1, 1);
+  const paragraph = terminals
+    .split("\n\n")
+    .find((part) => part.includes("docs/pod-broadcast.md"));
+  assert.ok(paragraph.includes("docs/terminal-broadcast-input.md"));
+  assert.ok(paragraph.includes("several seats of a pod is not implemented"));
+  // The wave 9 terminal note is not edited: its sentence about this item stays true.
+  assert.ok(
+    read("docs/terminal-broadcast-input.md").includes("It is not in this tree"),
+  );
+});
