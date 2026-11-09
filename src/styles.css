@@ -1763,6 +1763,9 @@ button:hover {
   overflow-wrap: anywhere;
   white-space: normal;
 }
+.file-explorer .explorer-git.explorer-git-error {
+  color: var(--color-d69aa4);
+}
 .file-explorer .explorer-git button {
   margin: 4px 0 4px 8px;
 }

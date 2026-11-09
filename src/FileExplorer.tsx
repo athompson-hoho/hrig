@@ -140,7 +140,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
   const row = (file: FileEntry, depth: number, context = false) => {
     const reported = gitRowRecords(gitRecords, file.path, file.directory);
     const counts = gitCounts(reported);
-    const meaning = reported.length ? file.directory ? `Reported descendant statuses: ${counts.map(c => `${c.letter} ${c.count}`).join("; ")}` : reported[0].description : "";
+    const meaning = reported.length ? file.directory ? `Reported descendant statuses: ${counts.map(c => `${c.letter} ${c.count}`).join("; ")}. ${reported.map(gitRecordText).join(" ")}` : reported[0].description : "";
     const label = file.path + (meaning ? ` — ${meaning}` : "");
     const highlighted = !context && shownReveal?.state === "success" && shownReveal.path === file.path;
     const content = <>{file.directory ? expanded.has(file.path) || context ? <ChevronDown size={12} /> : <ChevronRight size={12} /> : <span className="tree-spacer" />}
@@ -167,7 +167,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       }}>{content}</button>;
   };
   return <div className="file-explorer sidebar-scroll">
-    <div className="explorer-git explorer-notice" role="status" aria-live="polite" aria-atomic="true" aria-busy={!snapshot}>
+    <div className={`explorer-git explorer-notice${snapshot?.state === "unavailable" ? " explorer-git-error" : ""}`} role="status" aria-live="polite" aria-atomic="true" aria-busy={!snapshot}>
       {!snapshot ? "Checking Git status…" : snapshot.state === "not-repository" ? "This project is not in a Git repository." : snapshot.state === "unavailable" ? "Git status is unavailable for this project. Retry Git status." : gitRecords.length ? `Git reported ${gitRecords.length} status records for this project.` : "No reported Git changes in this project."}
       {snapshot?.state !== "ready" && (snapshot || gitAttempt > 0) && <button type="button" disabled={!snapshot} onClick={() => {
         if (!gitCurrent()) return;
@@ -177,7 +177,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       {snapshot?.state === "ready" && <>
         <div>Reported Git status only. Unlisted paths are not confirmed clean; directory contents may not be individually reported.</div>
         {!!gitRecords.length && <>
-          <div aria-label="Reported descendant statuses:">{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>
+          <div aria-label={`Reported descendant statuses: ${gitCounts(gitRecords).map(c => `${c.letter} ${c.count}`).join("; ")}. ${gitRecords.map(gitRecordText).join(" ")}`}>{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>
           <details key={gitSignature} open={gitDetails === gitToken} onToggle={e => {
             if (gitCurrent()) setGitDetails(e.currentTarget.open ? gitToken : null);
           }}>
