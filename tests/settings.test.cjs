@@ -1274,3 +1274,55 @@ test("appearance.statusBarHidden is a text Appearance setting, empty by default,
     "SETTINGS.md must have an appearance.statusBarHidden row with an empty default",
   );
 });
+test("terminal.showOutputCounter is an off-by-default boolean Terminal setting that rejects non-booleans, sits right after terminal.showSizeOnResize and is documented in SETTINGS.md", () => {
+  const key = "terminal.showOutputCounter";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "terminal.showSizeOnResize");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Terminal");
+  assert.equal(row.label, "Show output counter");
+  assert.equal(row.options, undefined);
+  assert.equal(row.min, undefined);
+  assert.equal(row.max, undefined);
+  for (const part of [
+    "lines and bytes of output",
+    "Off by default",
+    "Diagnostics only",
+    "never the output text",
+    "at most four times a second",
+    "sends nothing to the shell or the seat",
+  ])
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  for (const value of [true, false]) {
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  }
+  for (const value of ["true", "yes", 1, 0, null, {}]) {
+    assert.throws(() => settings.validateOverrides({ [key]: value }));
+  }
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) => line.startsWith("| `" + key + "` |"));
+  assert.ok(at > 0, "SETTINGS.md must have a terminal.showOutputCounter row");
+  assert.ok(lines[at].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at].includes("See TERMINALS.md"));
+  assert.ok(
+    lines[at - 1].startsWith("| `terminal.showSizeOnResize` | `true` |"),
+  );
+  assert.ok(lines[at + 1].startsWith("| `terminal.bellStyle` |"));
+});

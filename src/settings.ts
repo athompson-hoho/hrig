@@ -36,6 +36,7 @@ export const defaults = {
   "terminal.copyTrimTrailingWhitespace": false,
   "terminal.confirmMultilinePaste": false,
   "terminal.showSizeOnResize": true,
+  "terminal.showOutputCounter": false,
   "terminal.bellStyle": "none",
   "terminal.minimumContrastRatio": 1,
   "terminal.macOptionIsMeta": false,
@@ -353,6 +354,13 @@ export const schema: Setting[] = [
     label: "Show size on resize",
     description:
       "Briefly show the terminal size as columns x rows after it is resized. Display only; nothing is sent to the shell or the seat.",
+  },
+  {
+    key: "terminal.showOutputCounter",
+    category: "Terminal",
+    label: "Show output counter",
+    description:
+      "Show a small counter at the top left of each terminal with the lines and bytes of output it has received since it attached or was last cleared, for example 1.2k lines and 3.4 MB. Off by default. Diagnostics only: it keeps two numbers, never the output text, updates at most four times a second, and sends nothing to the shell or the seat.",
   },
   {
     key: "terminal.bellStyle",

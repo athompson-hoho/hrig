@@ -15,6 +15,7 @@ import {
 } from "./terminal-reconnect";
 import TerminalScrollback from "./TerminalScrollback";
 import TerminalSize from "./TerminalSize";
+import TerminalOutputCounter from "./TerminalOutputCounter";
 import TerminalBell from "./TerminalBell";
 import TerminalAlerts from "./TerminalAlerts";
 import { useTerminalZoom } from "./useTerminalZoom";
@@ -525,6 +526,11 @@ export default function TerminalPanel({
         />
         <TerminalBell
           terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+        />
+        <TerminalOutputCounter
+          terminal={terminalRef}
+          id={config.terminalId!}
           generation={attempt * 2 + (ready ? 1 : 0)}
         />
       </div>
