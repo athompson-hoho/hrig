@@ -1,4 +1,4 @@
-export type TerminalCommand = "focus" | "clear" | "find" | "reconnect" | "reconnect-dropped" | "insert" | "run";
+export type TerminalCommand = "focus" | "clear" | "find" | "reconnect" | "reconnect-dropped" | "insert" | "run" | "task-from-selection";
 export interface TerminalSnippet { id: string; name: string; text: string }
 // A single printable line cannot submit input or inject terminal control keys.
 export function snippetError(text: string): string {

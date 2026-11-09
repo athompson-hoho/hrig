@@ -14,6 +14,7 @@ import {
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
 import TaskDetailBody from "./TaskDetailBody";
+import { ownerHint, reviewNote, type TaskDraft } from "./task-draft";
 import {
   MAX_FILTER_TEXT,
   TASK_STATES,
@@ -54,6 +55,8 @@ export default function TaskBoard({
   onSeat,
   savedFilters,
   onFilters,
+  draft,
+  onDraftTaken,
 }: {
   connection: Connection;
   rigName?: string;
@@ -61,6 +64,8 @@ export default function TaskBoard({
   onSeat: (seat: Seat) => void;
   savedFilters?: TaskFilters;
   onFilters?: (filters: TaskFilters) => void;
+  draft?: TaskDraft | null;
+  onDraftTaken?: () => void;
 }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState("");
@@ -74,6 +79,8 @@ export default function TaskBoard({
   const [body, setBody] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
+  // The draft the open Assign work dialog was prepared from, while that dialog is open.
+  const [prepared, setPrepared] = useState<TaskDraft | null>(null);
   // The card that last had focus (the board's one tab stop) and, while a refresh lands, the board that had focus.
   const [stop, setStop] = useState<Stop | null>(null);
   const [held, setHeld] = useState<Element | null>(null);
@@ -110,6 +117,33 @@ export default function TaskBoard({
     if (held.contains(document.activeElement)) return;
     held.querySelector<HTMLElement>('.task-card[tabindex="0"]')?.focus();
   }, [items]);
+  // A draft prepared from a terminal selection only fills the Assign work dialog: the owner stays empty, nothing is created until the person presses Create assigned task, and a task already being written is never overwritten.
+  useEffect(() => {
+    if (!draft) return;
+    if (create && (title.trim() || body.trim())) {
+      setError(
+        "The selection was not used because a task is already being written. Finish or close it, then try again.",
+      );
+    } else {
+      setError("");
+      setNotice("");
+      setSelected(null);
+      setDetail(null);
+      setTitle(draft.subject);
+      setBody(draft.body);
+      setDestination("");
+      setCreate(true);
+      setPrepared(draft);
+    }
+    onDraftTaken?.();
+  }, [draft]);
+  // Closing a prepared dialog throws its text away, so a selection never comes back in a later Assign work dialog.
+  useEffect(() => {
+    if (create || !prepared) return;
+    setPrepared(null);
+    setTitle("");
+    setBody("");
+  }, [create, prepared]);
   const addresses = seats.map((s) => ({
     seat: s,
     address: s.name + "@" + s.rigName,
@@ -427,6 +461,11 @@ export default function TaskBoard({
           wide
         >
           {error && <ErrorBox error={error} />}{" "}
+          {create && prepared && (
+            <p className="field-note" role="status">
+              {reviewNote(prepared)}
+            </p>
+          )}
           {create ? (
             <>
               <label className="field-label">
@@ -469,6 +508,9 @@ export default function TaskBoard({
               ))}
             </select>
           </label>
+          {create && prepared && ownerHint(prepared, seats) && (
+            <p className="field-note">{ownerHint(prepared, seats)}</p>
+          )}
           <div className="modal-actions">
             {!create && (
               <button

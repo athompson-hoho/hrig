@@ -115,6 +115,7 @@ import TerminalPanel from "./TerminalPanel";
 import TerminalSnippets from "./TerminalSnippets";
 import { snippetContext, type SnippetContext } from "./snippet-vars";
 import { onSnippetDraft, type SnippetDraft } from "./snippet-draft";
+import { onTaskDraft, type TaskDraft } from "./task-draft";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
@@ -1578,6 +1579,8 @@ export default function App() {
     setModal(null);
     addPanel("settings", "Settings", {}, "settings");
   };
+  // A terminal's Create task from selection arrives as a window event; the draft waits here, addressed to the Task queue tab that opens it, until that board takes it.
+  const [taskDraft, setTaskDraft] = useState<{tabId: string; draft: TaskDraft} | null>(null);
   const factory = (node: TabNode) => {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
@@ -1893,6 +1896,8 @@ export default function App() {
             rigName={config.mode}
             seats={freshSeats(config.connection)}
             onSeat={openSeat}
+            draft={taskDraft && taskDraft.tabId === node.getId() ? taskDraft.draft : null}
+            onDraftTaken={() => setTaskDraft(null)}
             savedFilters={resolveTaskFilters(
               state.taskFilters,
               config.connection.id,
@@ -1989,6 +1994,8 @@ export default function App() {
       })),
       {name: "Terminal: Saved snippets", hint: `${target.name} · ${config.connection.name} · ${target.id}`, icon: <Columns2 size={16} />,
         action: () => {model.doAction(Actions.selectTab(t.id!));setSnippetTarget(target);}},
+      {name: "Terminal: Create task from selection", hint: `${target.name} · ${config.connection.name} · ${target.id}`, icon: <Columns2 size={16} />,
+        action: () => {model.doAction(Actions.selectTab(t.id!));requestAnimationFrame(() => sendTerminalCommand(target.id, "task-from-selection"));}},
     ];
   });
   // A terminal's Save selection as snippet arrives as a window event; this only opens Saved snippets filled in, and it saves and sends nothing.
@@ -2001,6 +2008,19 @@ export default function App() {
     setSnippetDraft(draft);
   };
   useEffect(() => onSnippetDraft((id, draft) => openSnippetDraft.current(id, draft)), []);
+  // A terminal's Create task from selection only opens the Task queue's Assign work dialog filled in (the existing board for that connection, else a new one); it creates and sends nothing. The seat of that terminal travels along as a suggestion only.
+  const openTaskDraft = useRef<(id: string, draft: TaskDraft) => void>(() => undefined);
+  openTaskDraft.current = (id, draft) => {
+    const tab = terminalTabs.find(t => (t.config as PanelConfig).terminalId === id);
+    if (!tab) { notify("Create task from selection is not available in this terminal"); return; }
+    const cfg = tab.config as PanelConfig;
+    const board = allTabs().find(t => t.component === "queue" && (t.config as PanelConfig).connection.id === cfg.connection.id);
+    const tabId = board?.id || uid();
+    if (board) model.doAction(Actions.selectTab(tabId));
+    else addPanel("queue", "Task queue", {connection: cfg.connection, mode: currentRig?.name}, tabId);
+    setTaskDraft({tabId, draft: {...draft, suggested: cfg.seat ? cfg.seat.name + "@" + cfg.seat.rigName : ""}});
+  };
+  useEffect(() => onTaskDraft((id, draft) => openTaskDraft.current(id, draft)), []);
   const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
   const reconnectDropped = () => {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));

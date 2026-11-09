@@ -11,6 +11,7 @@ import { useSettings } from "./SettingsContext";
 import { createCopyOnSelect, COPY_SELECT_DELAY_MS } from "./terminal-copy-select";
 import { copyTextForClipboard } from "./terminal-copy-text";
 import { draftFromSelection, publishSnippetDraft } from "./snippet-draft";
+import { requestTaskDraft } from "./task-draft";
 import type { TerminalLink, TerminalLinks } from "./terminal-link-at";
 import {
   historyKeyDirection,
@@ -28,12 +29,14 @@ export default function TerminalTools({
   terminal,
   generation,
   findRequest = 0,
+  taskRequest = 0,
   terminalId,
   links,
 }: {
   terminal: RefObject<Terminal | null>;
   generation: number;
   findRequest?: number;
+  taskRequest?: number;
   terminalId: string;
   links?: RefObject<TerminalLinks>;
 }) {
@@ -87,6 +90,9 @@ export default function TerminalTools({
     if (draft.ok) publishSnippetDraft(terminalId, draft.text);
     else setNotice(draft.error);
   };
+  // Opens the Assign work dialog filled in from the selection; nothing is created or sent until the person presses Create assigned task there, and a selection that cannot become a task is explained here instead.
+  const createTaskFromSelection = () => setNotice(requestTaskDraft(terminalId, selectedText()));
+  useEffect(() => { if (taskRequest) createTaskFromSelection(); }, [taskRequest]);
   // term.paste honors bracketed-paste mode and normalizes newlines; the text
   // reaches the shell only through the terminal's normal input path.
   const [hasImage,setHasImage]=useState(false);

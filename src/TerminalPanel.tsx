@@ -68,6 +68,7 @@ export default function TerminalPanel({
   const [ready, setReady] = useState(false);
   const retries = useRef(0);
   const [findRequest, setFindRequest] = useState(0);
+  const [taskRequest, setTaskRequest] = useState(0);
   const [commandNotice, setCommandNotice] = useState("");
   useEffect(() => { setCommandNotice(""); }, [attempt, ready]);
   useEffect(() => {
@@ -87,6 +88,7 @@ export default function TerminalPanel({
       if (command === "focus") term.focus();
       if (command === "clear") {term.clear();term.focus();}
       if (command === "find") setFindRequest(n => n + 1);
+      if (command === "task-from-selection") setTaskRequest(n => n + 1);
       if (command === "reconnect") {
         void window.hrig.closeTerminal(id).then(() => {retries.current=0;setAttempt(n=>n+1);}).catch(e=>setError(e.message));
       }
@@ -508,6 +510,7 @@ export default function TerminalPanel({
       <TerminalSessionTools terminal={terminalRef} id={config.terminalId!} generation={attempt * 2 + (ready ? 1 : 0)} />
       <TerminalTools
         findRequest={findRequest}
+        taskRequest={taskRequest}
         terminalId={config.terminalId!}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
