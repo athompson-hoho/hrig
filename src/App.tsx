@@ -2344,7 +2344,10 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="layout-host">
+            <div
+              className="layout-host"
+              data-workspace-model-ready={loaded && !bootError && modelOwners.current.get(model) === workspace ? "true" : undefined}
+            >
               <Layout
                 ref={layout}
                 model={model}
