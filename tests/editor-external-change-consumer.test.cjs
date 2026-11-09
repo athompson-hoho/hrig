@@ -273,6 +273,29 @@ for (const typing of ['new text 分支', 'away-and-back']) {
   });
 }
 
+// WR-01: failed/malformed reads must retire confirmations invalidated by typing.
+for (const outcome of ['rejected', 'malformed']) for (const typing of ['newer', 'away-and-back']) {
+  test(`${outcome} reload after ${typing} typing preserves edits and requires fresh confirmation`, async t => {
+    const v = await detected(t), index = startReload(v);
+    v.type('newer local text 分支');
+    if (typing === 'away-and-back') v.type(local);
+    const before = preserved(v), text = v.editor().props.value;
+    if (outcome === 'rejected') await v.reject(index, Error('synthetic pending read failure'));
+    else await v.resolve(index, {});
+    unchanged(v, before);
+    assert.equal(v.editor().props.value, text);
+    assert.equal(v.requests.filter(r => r.request.op === 'save').length, 0);
+    assert.ok(v.visibleText().includes('Reload canceled because you edited'), 'Typing-invalidated failure explains preserved edits');
+    assert.ok(!v.button('Discard edits and reload'), 'Obsolete confirmation must close');
+    assert.ok(!v.button('Reloading…'), 'Current failed request must release busy state');
+    const retry = startReload(v);
+    await v.resolve(retry, fresh);
+    assert.equal(v.editor().props.value, fresh.content);
+    assert.equal(v.buffer().saved, fresh.content);
+    assert.equal(v.draftBytes(), '{}');
+  });
+}
+
 for (const cancel of ['Keep editing', 'Close dialog', 'Escape']) {
   test(`pending reload canceled by ${cancel} cannot clear a newer request busy state`, async t => {
     const v = await detected(t, { actualModal: cancel === 'Escape' });
