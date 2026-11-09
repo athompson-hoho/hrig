@@ -51,7 +51,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `editor.minimap` | `false` | Show a compact document overview beside the code. |
 | `editor.lineNumbers` | `on` | Display absolute, relative, or no line numbers. |
 | `editor.fontLigatures` | `false` | Combine supported character sequences when using a compatible font. |
-| `editor.renderWhitespace` | `selection` | Show spaces and tabs for the selected text, everywhere, or nowhere. |
+| `editor.renderWhitespace` | `selection` | Show spaces and tabs for the selected text (`selection`), only at word boundaries (`boundary`), only trailing spaces (`trailing`), everywhere (`all`), or nowhere (`none`). The editor and diff view share the same display options; a damaged value falls back to the default. |
 | `editor.bracketPairs` | `true` | Use matching colors for nested bracket pairs. |
 | `editor.formatOnSave` | `false` | On an explicit Save, first format JSON, CSS/SCSS/Less, HTML, JavaScript and TypeScript with the editor's built-in formatter (no external tools). Other languages and files over 500,000 characters are saved as written; if formatting fails the file is saved as written. The change is visible in the editor and a "Formatted on save" notice appears. |
 | `editor.breadcrumbs` | `false` | Show the open file path as folder breadcrumbs (the last 8 folders and the file) in the editor toolbar. Display only; crumbs do not navigate. |

@@ -238,8 +238,8 @@ export const schema: Setting[] = [
     category: "Editor",
     label: "Render whitespace",
     description:
-      "Show spaces and tabs for the selected text, everywhere, or nowhere.",
-    options: options("selection", "all", "none"),
+      "Show spaces and tabs for the selected text, only at word boundaries, only trailing spaces, everywhere, or nowhere. Trailing is handy when reviewing diffs.",
+    options: options("selection", "boundary", "trailing", "all", "none"),
   },
   {
     key: "editor.bracketPairs",

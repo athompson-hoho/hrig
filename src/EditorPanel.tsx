@@ -22,6 +22,7 @@ import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { breadcrumbs } from "./breadcrumb";
 import { motionReduced } from "./reduced-motion";
+import { monacoEditorOptions } from "./editor-options";
 import { shouldFormatOnSave, FORMAT_TIMEOUT_MS } from "./format-on-save";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
@@ -141,23 +142,10 @@ export default function EditorPanel({
     );
     monaco.editor.setTheme("hrig-settings");
   }, [colorTheme, preferences["appearance.accent"]]);
-  const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
-    fontSize: preferences["editor.fontSize"],
-    fontFamily: preferences["editor.fontFamily"],
-    tabSize: preferences["editor.tabSize"],
-    insertSpaces: preferences["editor.insertSpaces"],
-    detectIndentation: false,
-    wordWrap: preferences["editor.wordWrap"] as "on" | "off",
-    minimap: { enabled: preferences["editor.minimap"] },
-    lineNumbers: preferences["editor.lineNumbers"] as "on" | "relative" | "off",
-    fontLigatures: preferences["editor.fontLigatures"],
-    renderWhitespace: preferences["editor.renderWhitespace"] as
-      "selection" | "all" | "none",
-    bracketPairColorization: { enabled: preferences["editor.bracketPairs"] },
-    automaticLayout: true,
-    scrollBeyondLastLine: false,
-    smoothScrolling: !motionReduced(preferences["appearance.reduceMotion"]),
-  };
+  const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = monacoEditorOptions(
+    preferences,
+    motionReduced(preferences["appearance.reduceMotion"]),
+  );
   const owner = editorChangeOwner(id, config, diff);
   const lifetime = useRef({ owner, active: true, edit: 0, request: 0, busy: false,
     buffer: buffers.get(id) });
