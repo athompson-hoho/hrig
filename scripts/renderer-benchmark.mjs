@@ -123,8 +123,9 @@ async function candidateAssets() {
     for (const item of await fs.readdir(directory, { withFileTypes: true })) {
       const relative = `${prefix}/${item.name}`;
       if (item.isDirectory()) await walk(path.join(directory, item.name), relative);
-      else if (item.isFile() && (relative === "/index.html" || relative.startsWith("/assets/")))
+      else if (item.isFile() && (relative === "/index.html" || relative === "/icon.svg" || relative.startsWith("/assets/")))
         assets.set(relative, await fs.readFile(path.join(directory, item.name)));
+      else if (item.isFile() && relative === "/popout.html") continue; // known output, never served
       else throw new Error("assets-unavailable"); // includes symlinks
     }
   }
@@ -197,7 +198,7 @@ export async function runControlledRendererBenchmark(options = {}) {
           const url = new URL(request.url());
           const body = assets.get(url.pathname);
           if (url.origin !== origin || url.search || url.hash || request.method() !== "GET" || !body ||
-              !(url.pathname === "/index.html" || /^\/assets\/[A-Za-z0-9_.-]+$/.test(url.pathname))) {
+              !(url.pathname === "/index.html" || url.pathname === "/icon.svg" || /^\/assets\/[A-Za-z0-9_.-]+$/.test(url.pathname))) {
             refuse("asset-denied"); await route.abort(); return;
           }
           const extension = path.extname(url.pathname);
