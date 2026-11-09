@@ -15,6 +15,7 @@ import {
   tagOptions,
   type TaskFilters,
 } from "./task-filters";
+import { reasonOf } from "./task-reason";
 export default function TaskBoard({
   connection,
   rigName,
@@ -124,6 +125,14 @@ export default function TaskBoard({
   const clearFilters = () => {
     setFilters(emptyFilters());
     onFilters?.(emptyFilters());
+  };
+  const reasonNote = (item: any) => {
+    const reason = reasonOf(item);
+    return reason ? (
+      <span data-reason={reason.kind} title={reason.title}>
+        {reason.line}
+      </span>
+    ) : null;
   };
   return (
     <div className="tool-panel">
@@ -271,6 +280,7 @@ export default function TaskBoard({
                   >
                     <strong>{item.title}</strong>
                     <span>{item.destination}</span>
+                    {reasonNote(item)}
                     <small className="badge">{item.status}</small>
                   </button>
                 ))}

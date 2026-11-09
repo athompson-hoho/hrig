@@ -2,6 +2,12 @@
 
 The Task queue panel (Tools, or search Task queue in the command center) lists the active OpenRig queue items in columns by state. This page describes the task details dialog and the panel's filters. HRig reads the queue to show it; assigning work and requesting a handoff are separate, explicit actions.
 
+### Card details
+
+A card for a blocked task shows why under the owner, for example `Blocked on qitem-20261108170835-ab12cd34ef56ab78`. HRig reads the reason from the task's `blockedOn` field, which OpenRig sets when a task is parked on a blocker (another task, a typed gate or a human seat), and from the fields `blockedReason` and `reason` when a version of OpenRig sends them; the first of these fields that holds text wins. A task held on purpose (state held, on-hold or parked; OpenRig itself parks a held task as blocked, so these names only matter if a version sends them) reads `heldReason`, `holdReason`, `reason` and `blockedOn` the same way. Only text is read. A task in any other state shows no reason, and a blocked task without a reason keeps its card as it was.
+
+The reason line is cut after 80 characters with three dots, and its tooltip holds up to 400 characters. Control, zero-width and direction-changing characters are removed and line breaks become spaces. The reason is shown as plain text only. This is display only: no task or seat is changed, nothing is sent to OpenRig, and the board makes no extra request and starts no timer.
+
 ## Task details
 
 Selecting a task on the board opens its details. The text of the task is shown as formatted text, taken from the first of its body, bodyPreview and summary fields that holds text (when only the summary is used, the dialog says so). The Raw JSON button switches to the whole item exactly as OpenRig returns it, and a task with no text, or a failed read, shows only that JSON. Viewing a task is read only: nothing is sent to OpenRig, no task or seat is changed, and the owner and handoff controls below the text work as before.
