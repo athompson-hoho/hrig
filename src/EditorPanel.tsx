@@ -482,10 +482,13 @@ export default function EditorPanel({
       setReloadConfirm(false);
       setNotice("Reloaded changes from disk");
     } catch (e) {
-      if (current(captured)) {
+      if (!current(captured, false)) return;
+      if (!current(captured)) {
+        setNotice("Reload canceled because you edited this file while it was loading. Your edits are preserved. Choose Reload from disk to try again.");
+      } else {
         setError("Could not reload from disk. Your edits are preserved. Choose Reload from disk to try again.\n" + (e as Error).message);
-        setReloadConfirm(false);
       }
+      setReloadConfirm(false);
     } finally {
       if (ownsBuffer() && buffers.get(id) === buffer && generation.request === captured.request) {
         generation.busy = false;
