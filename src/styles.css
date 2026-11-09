@@ -1527,6 +1527,25 @@ button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.seat-details .seat-badges {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.seat-details .badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 1px 5px;
+  line-height: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seat-details .badge[data-kind="runtime"] {
+  flex-shrink: 0;
+}
 .seat-row .grip {
   color: var(--color-4a5363);
   opacity: 0;

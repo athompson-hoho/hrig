@@ -11,6 +11,7 @@ export const defaults = {
   "appearance.statusBar": true,
   "appearance.statusBarHidden": "",
   "appearance.windowTitleDetails": false,
+  "appearance.seatBadges": false,
   "editor.fontSize": 13,
   "editor.fontFamily": '"Cascadia Code", Consolas, monospace',
   "editor.tabSize": 2,
@@ -170,6 +171,13 @@ export const schema: Setting[] = [
     label: "Show project and panel in the window title",
     description:
       "Show the project folder name and the active panel's name in the window title, as Panel - project - hRig, in the taskbar and the window switcher. Off by default, so the title stays hRig. The names are cleaned of control and direction characters and the whole title is cut to 100 characters; nothing else (no file text, seat output, host or secret) is put in it. Main window only: detached windows keep hRig. The title bar drawn inside HRig does not change.",
+  },
+  {
+    key: "appearance.seatBadges",
+    category: "Appearance",
+    label: "Show runtime and model badges on sessions",
+    description:
+      "Show two small badges under each session's name in the sidebar list: its runtime (Claude, Codex or the name the inventory gives) and its model. Off by default, so the list looks exactly as before. The text comes from the OpenRig inventory and is cleaned of control and direction characters, then cut to 16 characters for the runtime and 24 for the model; the tooltip keeps up to 80. A session whose inventory names no model, or only the generic agent runtime, shows no badge for it. Display only: nothing is sent to the shell or the seat, and nothing is saved.",
   },
   {
     key: "editor.fontSize",

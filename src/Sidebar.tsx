@@ -17,6 +17,8 @@ import {
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { SeatBadgeRow } from "./SeatBadgeRow";
+import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -194,6 +196,7 @@ export default function Sidebar({
   const [isRepository, setIsRepository] = useState(true);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitRevision, setGitRevision] = useState(0);
+  const settings = useSettings();
   useEffect(() => {
     if (section !== "changes") return;
     let active = true;
@@ -436,6 +439,9 @@ export default function Sidebar({
                       <small>
                         {s.rigName} · {s.runtime}
                       </small>
+                      {settings.effective["appearance.seatBadges"] && (
+                        <SeatBadgeRow seat={s} />
+                      )}
                     </span>
                     <StatusDot status={s.status} />
                     <GripVertical size={12} className="grip" />
