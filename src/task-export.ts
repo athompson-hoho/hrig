@@ -111,6 +111,12 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
 }
 
+/** One markdown table cell: one line, cut, and the characters that make a table, code, a link, an image or HTML are escaped with a backslash. */
+function mdCell(value: unknown): string {
+  const text = cut(clean(value, false).replace(/ {2,}/g, " ").trim(), MAX_CELL);
+  return text.replace(/[\\|`<>[\]]/g, "\\$&");
+}
+
 /** The rows of a list: only the entries that are objects, at most 1000. */
 function listOf(rows: unknown): Record<string, unknown>[] {
   const list: Record<string, unknown>[] = [];
@@ -181,6 +187,21 @@ export function toCsv(rows: unknown): string {
   return lines.join("\r\n") + "\r\n";
 }
 
+/** The rows as a markdown pipe table, lines ending in a line feed; every cell is one line and its pipes, backslashes, backticks, angle brackets and square brackets are escaped. */
+export function toMarkdown(rows: unknown): string {
+  const lines = [
+    "| " + EXPORT_COLUMNS.join(" | ") + " |",
+    "| " + EXPORT_COLUMNS.map(() => "---").join(" | ") + " |",
+  ];
+  for (const row of listOf(rows))
+    lines.push(
+      "| " +
+        EXPORT_COLUMNS.map((c) => mdCell(cellOf(row, c))).join(" | ") +
+        " |",
+    );
+  return lines.join("\n") + "\n";
+}
+
 const pad = (n: number, width: number) => String(n).padStart(width, "0");
 
 /** The file name for a format and a time in epoch milliseconds: hrig-tasks-YYYYMMDD-HHMM with the extension csv or md, in the computer's local time and never with a connection or rig name; a time that is not a usable date gives hrig-tasks with the extension. */
@@ -213,6 +234,12 @@ export function exportFile(
       name: exportName("csv", at),
       text: toCsv(rows),
       type: "text/csv;charset=utf-8",
+    };
+  if (format === "md")
+    return {
+      name: exportName("md", at),
+      text: toMarkdown(rows),
+      type: "text/markdown;charset=utf-8",
     };
   throw new Error("Unsupported export format.");
 }

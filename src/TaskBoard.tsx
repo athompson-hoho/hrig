@@ -174,6 +174,7 @@ export default function TaskBoard({
   const columns = boardColumns(visible);
   const shown = columns.reduce((n, c) => n + c.items.length, 0);
   const exportCsv = exportButton("csv", shown);
+  const exportMarkdown = exportButton("md", shown);
   const tab = tabCell(columns, stop);
   const tags = tagOptions(items || []);
   const stale = staleFilters(
@@ -261,6 +262,15 @@ export default function TaskBoard({
         >
           <Download size={13} />
           {exportCsv.text}
+        </button>
+        <button
+          className="small-button"
+          onClick={() => exportShown("md", visible, now)}
+          disabled={!shown}
+          title={exportMarkdown.title}
+        >
+          <Download size={13} />
+          {exportMarkdown.text}
         </button>
         <button
           className="primary-button"
