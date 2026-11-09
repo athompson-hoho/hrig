@@ -1,11 +1,12 @@
 ﻿# Project and panel navigation
 
-When the status bar is visible, its Source control button shows Git information for the selected workspace connection and exact project root. It follows the workspace, including when an editor or terminal belongs to another context. The eight display states are:
+When the status bar is visible, its Source control button shows Git information for the selected workspace connection and exact project root. It follows the workspace, including when an editor or terminal belongs to another context. The underlying snapshot states and explicit command-support outcome are:
 
 | Display | Meaning |
 |---------|---------|
 | Checking Git… | The current workspace read is pending. |
-| Git unavailable | The read failed, is unsupported, or returned invalid metadata; no branch or counts are inferred. |
+| Git unavailable | The read failed or returned invalid metadata; no branch or counts are inferred. |
+| Git unsupported | Git on the project host does not support a required metadata command; no branch or counts are inferred. |
 | No Git repository | A validated result positively confirms this workspace is outside a Git repository. |
 | `{branch} ↑{ahead} ↓{behind}` | Commits ahead of and behind the configured upstream's locally stored ref. Confirmed `↑0 ↓0` is a known comparison. |
 | `{branch} · no upstream` | No upstream is configured; counts are unavailable. |
@@ -13,7 +14,9 @@ When the status bar is visible, its Source control button shows Git information 
 | Detached HEAD | No branch is checked out; counts are unavailable. |
 | `{branch} · no commits` | The symbolic branch is proven unborn; counts are unavailable. |
 
-This is a local Git snapshot; no remote fetch occurs. Counts compare commits against the locally stored upstream ref, which may be stale. Neither zero counts nor any other indicator establishes worktree cleanliness or the current remote state. Long summaries may truncate visually; the button's full title and accessible name retain the represented branch, upstream and comparison meaning.
+This is a local Git snapshot, not a live indicator; no remote fetch occurs. Terminal checkouts or commits need Files → Refresh files before they appear. The button title and accessible name explain this manual-refresh boundary. Counts compare commits against the locally stored upstream ref, which may be stale. Neither zero counts nor any other indicator establishes worktree cleanliness or the current remote state. Long summaries may truncate visually; the button's full title and accessible name retain the represented branch, upstream and comparison meaning.
+
+Metadata reads use established Git forms (`rev-parse --verify --quiet` with fixed HEAD or validated full refs, and `show-ref --verify --quiet`) without depending on newer option forms. A positively unsupported required command produces the fixed Git unsupported explanation; other failures remain Git unavailable. No unverified minimum Git version is claimed.
 
 Explicitly activate Source control to open Changes in every state. Metadata completion alone does not navigate, write files, run Git mutations, send seat/shell input or change terminal lifecycle. For another read, open Files and use Refresh files; this rechecks local metadata without fetching. Existing saves/file-revision changes also renew the snapshot while the bar is visible. Connection/root/revision changes hide old results immediately, and obsolete successes or errors cannot replace the current result. A fresh valid read can recover from Git unavailable. Hiding the status bar unmounts its reader; there is no timer or polling.
 
