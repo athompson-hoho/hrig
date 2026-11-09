@@ -25,6 +25,7 @@ import {
   type SettingsScope,
 } from "./settings";
 import { themes } from "./themes";
+import { overrideNote, summarizeOverrides } from "./settings-overrides";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
 import UpdateSettings from './UpdateSettings';
@@ -64,6 +65,8 @@ function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
     }
   };
   const modified = Object.hasOwn(own, row.key);
+  const note =
+    scope === "user" ? overrideNote(row, context.user, context.project) : null;
   return (
     <div
       className={`setting-row ${modified ? "modified" : ""}`}
@@ -76,6 +79,15 @@ function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
         {modified && (
           <span className="setting-badge">
             {scope === "project" ? "Project override" : "Modified"}
+          </span>
+        )}
+        {note && (
+          <span
+            className="setting-badge"
+            data-override={note.state}
+            title={note.title}
+          >
+            {note.text}
           </span>
         )}
       </div>
@@ -163,6 +175,7 @@ export default function SettingsPage({ project }: { project: string }) {
     [notice, setNotice] = useState("");
   const file = useRef<HTMLInputElement>(null),
     own = scope === "user" ? context.user : context.project;
+  const summary = summarizeOverrides(context.user, context.project);
   const text = query.trim().toLowerCase();
   const matches = schema.filter(
     (row) =>
@@ -297,6 +310,15 @@ export default function SettingsPage({ project }: { project: string }) {
               ? "Project overrides are saved locally in HRig for this connection and folder. Reset a row to inherit your user setting."
               : "User settings are saved on this computer. Project overrides take precedence."}
           </p>
+          {summary.text && (
+            <p
+              className="settings-scope-note"
+              data-overrides={summary.count}
+              title={summary.title}
+            >
+              {summary.text}
+            </p>
+          )}
           {notice && (
             <p className="settings-notice" role="status">
               <Check size={13} />

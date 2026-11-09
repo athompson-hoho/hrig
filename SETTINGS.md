@@ -29,6 +29,8 @@ Changing terminal appearance updates the existing xterm view, without replacing 
 
 The Settings JSON view exports preferences only, including any configured default-root preference; it excludes saved connections, credentials, current project bindings, layouts and terminal output. Imports replace only the selected scope after full key/type/range validation. Unknown keys, invalid values, oversized files and malformed JSON are rejected before any preference is applied.
 
+Project override indicator: a setting the open project overrides can hide behind the value you see, because the value shown in the User scope is not the value in effect for that project. In the User scope a row shows a note when the open project overrides that setting: Overridden in this project: followed by the project value (a choice shows its label and a switch shows On or Off), or Also set in this project (same value) when the project sets the very value your user setting has, which it keeps if you later change your user setting. A line under the scope note counts them, for example This project overrides 5 settings; 3 differ from your user values., and its tooltip lists the keys (the first ten). The Project scope, which already marks its own rows with Project override and has Remove project override, is unchanged, and the count also shows there; its rows are the overrides, and Modified only lists the ones in the current category. The indicator reads the open project's own saved overrides and follows them as they change, so it is always about the project you have open. Nothing is saved, changed or sent by the indicator: it is display only, and saving, resetting and the scopes work as before.
+
 ## Settings catalog
 
 | Key | Default | Behavior |
