@@ -75,6 +75,35 @@ function language(path = "") {
     )[ext || ""] || "plaintext"
   );
 }
+
+// Hide every local value as soon as its owner changes, before effect cleanup.
+// Setters retained by an obsolete widget/request cannot revive that value.
+function useEditorState<T>(generation: { active: boolean }, initial: T | (() => T)) {
+  const fallback = useRef<{ generation: object; value: T } | null>(null);
+  if (fallback.current?.generation !== generation) {
+    fallback.current = { generation, value: typeof initial === "function"
+      ? (initial as () => T)() : initial };
+  }
+  const initialValue = fallback.current.value;
+  const [state, setState] = useState(() => ({ generation, value: initialValue }));
+  const value = state.generation === generation ? state.value : initialValue;
+  const update = (action: T | ((previous: T) => T)) => {
+    if (!generation.active) return;
+    setState(previous => {
+      if (!generation.active) return previous;
+      return { generation, value: typeof action === "function"
+        ? (action as (previous: T) => T)(previous.generation === generation ? previous.value : initialValue)
+        : action };
+    });
+  };
+  return [value, update] as const;
+}
+
+function diskRead(result: { content?: unknown; revision?: unknown }) {
+  if (!result || typeof result.content !== "string" || typeof result.revision !== "string")
+    throw new Error("Could not read a complete disk version.");
+  return { content: result.content, revision: result.revision };
+}
 export default function EditorPanel({
   id,
   config,
@@ -116,34 +145,39 @@ export default function EditorPanel({
     scrollBeyondLastLine: false,
     smoothScrolling: !preferences["appearance.reduceMotion"],
   };
-  const [value, setValue] = useState<string | undefined>(
-    buffers.get(id)?.content,
-  );
-  const [original, setOriginal] = useState("");
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [externalState, setExternalState] = useState<{
+  const owner = editorChangeOwner(id, config, diff);
+  const lifetime = useRef({ owner, active: true, edit: 0, request: 0, busy: false,
+    buffer: buffers.get(id) });
+  if (lifetime.current.owner !== owner) {
+    lifetime.current.active = false;
+    lifetime.current = { owner, active: true, edit: 0, request: 0, busy: false,
+      buffer: buffers.get(id) };
+  }
+  const generation = lifetime.current;
+  const [value, setValue] = useEditorState<string | undefined>(generation, () => {
+    const registered = bufferConfigs.get(id);
+    return !diff && registered && editorChangeOwner(id, registered) === owner
+      ? generation.buffer?.content : undefined;
+  });
+  const [original, setOriginal] = useEditorState(generation, "");
+  const [error, setError] = useEditorState(generation, "");
+  const [saving, setSaving] = useEditorState(generation, false);
+  const [dirty, setDirty] = useEditorState(generation, false);
+  const [externalState, setExternalState] = useEditorState<{
     content: string;
     revision: string;
     lifetime: object;
     buffer: object | undefined;
-  } | null>(null);
-  const [compare, setCompare] = useState(false);
-  const [reloadConfirm, setReloadConfirm] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [acknowledged, setAcknowledged] = useState<string | null>(null);
-  const [reloading, setReloading] = useState(false);
-  const owner = editorChangeOwner(id, config, diff);
-  const lifetime = useRef({ owner, active: true, edit: 0, request: 0, busy: false });
-  if (lifetime.current.owner !== owner) {
-    lifetime.current.active = false;
-    lifetime.current = { owner, active: true, edit: 0, request: 0, busy: false };
-  }
-  const generation = lifetime.current;
+  } | null>(generation, null);
+  const [compare, setCompare] = useEditorState(generation, false);
+  const [reloadConfirm, setReloadConfirm] = useEditorState(generation, false);
+  const [notice, setNotice] = useEditorState(generation, "");
+  const [acknowledged, setAcknowledged] = useEditorState<string | null>(generation, null);
+  const [reloading, setReloading] = useEditorState(generation, false);
   const ownsBuffer = () => {
     const registered = bufferConfigs.get(id);
     return generation.active && lifetime.current === generation &&
+      buffers.get(id) === generation.buffer &&
       editorChangeOwner(id, config, diff) === owner &&
       !!registered && editorChangeOwner(id, registered, diff) === owner;
   };
@@ -166,11 +200,11 @@ export default function EditorPanel({
     config.root,
     config.path,
   );
-  const [recovery, setRecovery] = useState<{
+  const [recovery, setRecovery] = useEditorState<{
     content: string;
     saved: string;
     revision: string;
-  } | null>(() => {
+  } | null>(generation, () => {
     if (diff || buffers.has(id)) return null;
     try {
       return readDraft(recoveryKey)?.data || null;
@@ -178,6 +212,10 @@ export default function EditorPanel({
       return null;
     }
   });
+  const representedRecovery = useRef(recovery);
+  representedRecovery.current = recovery;
+  const rendered = capture();
+  const currentRecovery = () => !!recovery && representedRecovery.current === recovery && current(rendered);
   const persist = () => {
     if (!ownsBuffer()) return;
     try {
@@ -188,6 +226,7 @@ export default function EditorPanel({
   };
   useEffect(() => {
     const cleared = () => {
+      if (!ownsBuffer()) return;
       try {
         if (!readDraft(recoveryKey)) setRecovery(null);
       } catch (e) {
@@ -196,7 +235,7 @@ export default function EditorPanel({
     };
     window.addEventListener("hrig:drafts-cleared", cleared);
     return () => window.removeEventListener("hrig:drafts-cleared", cleared);
-  }, [recoveryKey]);
+  }, [generation, recoveryKey]);
   const saveRef = useRef<() => void>(() => {});
   const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -269,7 +308,7 @@ export default function EditorPanel({
     });
     (diff
       ? Promise.all([
-          read.catch(() => ({ content: "" })),
+          read,
           window.hrig.file(config.connection, {
             op: "original",
             root: config.root,
@@ -278,18 +317,25 @@ export default function EditorPanel({
         ])
       : Promise.all([read])
     )
-      .then(([current, base]) => {
+      .then(([result, base]) => {
         if (!active || !generation.active || lifetime.current !== generation ||
           editorChangeOwner(id, config, diff) !== owner ||
+          (!diff && !ownsBuffer()) ||
           !canPublishEditorChange(opening, capture())) return;
-        if (diff) setOriginal(base.content);
-        else if (!buffers.has(id))
+        const disk = diskRead(result);
+        if (diff) {
+          if (!base || typeof base.content !== "string")
+            throw new Error("Could not read the original file version.");
+          setOriginal(base.content);
+        } else if (!buffers.has(id)) {
           buffers.set(id, {
-            content: current.content,
-            saved: current.content,
-            revision: current.revision,
+            content: disk.content,
+            saved: disk.content,
+            revision: disk.revision,
           });
-        setValue(buffers.get(id)?.content ?? current.content);
+          generation.buffer = buffers.get(id);
+        }
+        setValue(diff ? disk.content : buffers.get(id)?.content);
         const b = buffers.get(id);
         const isDirty = !!b && b.content !== b.saved;
         setDirty(isDirty);
@@ -297,6 +343,8 @@ export default function EditorPanel({
       })
       .catch((e) => {
         if (active && generation.active && lifetime.current === generation &&
+          editorChangeOwner(id, config, diff) === owner &&
+          (diff || ownsBuffer()) &&
           canPublishEditorChange(opening, capture())) setError(e.message);
       });
     return () => {
@@ -312,7 +360,13 @@ export default function EditorPanel({
   }, [generation]);
   useEffect(() => {
     const sync = () => {
-      if (!ownsBuffer()) return;
+      if (!ownsBuffer()) {
+        // A registry replacement is a refusal, never an invitation to adopt it.
+        if (generation.active && lifetime.current === generation &&
+          buffers.get(id) !== generation.buffer)
+          setError("This panel belongs to a different file buffer. Reopen the original file to recover your edits.");
+        return;
+      }
       const b = buffers.get(id);
       if (b) {
         setValue(b.content);
@@ -333,26 +387,27 @@ export default function EditorPanel({
       const captured = capture();
       checking = true;
       try {
-        const current = await window.hrig.edit(config.connection, {
+        const result = await window.hrig.edit(config.connection, {
           op: "read",
           root: config.root,
           path: config.path,
         });
+        const disk = diskRead(result);
         const buffer = buffers.get(id);
         if (!active || !buffer || !ownsBuffer() ||
-          !canPublishEditorChange(captured, capture()) || buffer.revision === current.revision) return;
+          !canPublishEditorChange(captured, capture()) || buffer.revision === disk.revision) return;
         if (
           buffer.content === buffer.saved &&
           preferences["editor.autoReload"]
         ) {
-          buffer.content = current.content;
-          buffer.saved = current.content;
-          buffer.revision = current.revision;
-          setValue(current.content);
+          buffer.content = disk.content;
+          buffer.saved = disk.content;
+          buffer.revision = disk.revision;
+          setValue(disk.content);
           setAcknowledged(null);
           setExternal(null);
           setNotice("Reloaded changes from disk");
-        } else setExternal(current);
+        } else setExternal(disk);
       } catch (e) {
         if (active && ownsBuffer() && canPublishEditorChange(captured, capture()))
           setNotice("Could not check disk changes. Your edits are preserved. HRig will check again on focus or at the next disk check.");
@@ -389,10 +444,11 @@ export default function EditorPanel({
     setReloading(true);
     setError("");
     try {
-      const disk = await window.hrig.edit(config.connection, {
+      const result = await window.hrig.edit(config.connection, {
         op: "read", root: config.root, path: config.path,
       });
       if (!current(captured, false)) return;
+      const disk = diskRead(result);
       if (!current(captured)) {
         setNotice("Reload canceled because you edited this file while it was loading. Your edits are preserved. Choose Reload from disk to try again.");
         setReloadConfirm(false);
@@ -425,7 +481,8 @@ export default function EditorPanel({
   };
   // A retained buffer belongs to its registered file, never to a same-id retarget.
   const registered = bufferConfigs.get(id);
-  if (!diff && buffers.has(id) && (!registered || editorChangeOwner(id, registered) !== owner))
+  if (!diff && (buffers.get(id) !== generation.buffer ||
+    (buffers.has(id) && (!registered || editorChangeOwner(id, registered) !== owner))))
     return <div className="editor-panel"><ErrorBox error="This panel belongs to a different file buffer. Reopen the original file to recover your edits." /></div>;
   return (
     <div className="editor-panel">
@@ -456,7 +513,7 @@ export default function EditorPanel({
             className="small-button"
             onClick={() => {
               const b = buffers.get(id);
-              if (!b || !ownsBuffer()) return;
+              if (!b || !currentRecovery()) return;
               generation.edit++;
               const disk = { ...b };
               Object.assign(b, recovery);
@@ -474,6 +531,7 @@ export default function EditorPanel({
           <button
             className="small-button"
             onClick={() => {
+              if (!currentRecovery()) return;
               try {
                 draftOperation("delete", recoveryKey);
                 setRecovery(null);
@@ -534,13 +592,19 @@ export default function EditorPanel({
       ) : diff || compare ? (
         <DiffEditor
           onMount={(editor) => {
+            if (!generation.active || lifetime.current !== generation ||
+              buffers.get(id) !== generation.buffer) return;
             diffRef.current = editor;
-            const focus = () => editor.focus();
+            const focus = () => {
+              if (generation.active && lifetime.current === generation &&
+                editorChangeOwner(id, config, diff) === owner &&
+                buffers.get(id) === generation.buffer) editor.focus();
+            };
             focusRef.current = focus;
             editorFocusers.set(id, focus);
             if (onReady?.(id)) focus();
           }}
-          original={compare ? external?.content || "" : original}
+          original={compare ? external?.content ?? "" : original}
           modified={value}
           language={language(config.path)}
           theme="hrig-settings"
@@ -573,8 +637,9 @@ export default function EditorPanel({
             onDirty(id, d);
           }}
           onMount={(editor) => {
+            if (!ownsBuffer()) return;
             editorRef.current = editor;
-            const focus = () => editor.focus();
+            const focus = () => { if (ownsBuffer()) editor.focus(); };
             focusRef.current = focus;
             editorFocusers.set(id, focus);
             if (onReady?.(id)) focus();
@@ -582,11 +647,12 @@ export default function EditorPanel({
               editor.revealLineInCenter(config.line);
               editor.setPosition({ lineNumber: config.line, column: 1 });
             }
-            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () =>
-              saveRef.current(),
-            );
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+              if (ownsBuffer()) saveRef.current();
+            });
           }}
           onValidate={(markers) => {
+            if (!ownsBuffer()) return;
             problems.set(
               id,
               markers.map((m) => ({
@@ -616,7 +682,7 @@ export default function EditorPanel({
           subtitle="The version currently on disk will replace your unsaved text."
           onClose={cancelReload}
         >
-          <div className="modal-actions">
+          <div className="modal-actions editor-reload-actions">
             <button
               className="secondary-button"
               onClick={cancelReload}
