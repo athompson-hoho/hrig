@@ -313,6 +313,7 @@ handle("editor:operation", (_event, connection, request) =>
   backend.edit(connection, request),
 );
 handle("ports:list", (_event, connection) => features.ports(connection));
+require('./seat-notifications.cjs').registerSeatNotifications({ handle, Notification });
 handle("attention:notify", (_event, title, body) => {
   if (
     Notification.isSupported() &&

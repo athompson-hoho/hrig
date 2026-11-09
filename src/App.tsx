@@ -82,6 +82,7 @@ import Sidebar from "./Sidebar";
 import { fileTreeOwner } from "./file-tree";
 import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
 import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
+import { advanceSeatNotifications, type SeatNotificationState } from "./seat-notifications";
 import { SettingsContext } from "./SettingsContext";
 import {
   safeOverrides,
@@ -430,7 +431,7 @@ export default function App() {
     past: [],
     future: [],
   });
-  const attentionSeen = useRef(new Set<string>());
+  const seatNotificationState = useRef<SeatNotificationState>({ owner: null, armed: false, attentionIds: [] });
   const log = useCallback(
     (text: string, kind: ActivityEntry["kind"] = "info") =>
       setEvents((old) =>
@@ -526,25 +527,18 @@ export default function App() {
   }, [model]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
-    if (!inventory || inventoryError || !preferences["notifications.desktop"])
-      return;
-    const current = new Set<string>();
-    for (const seat of inventory.seats.filter(
-      (s) => s.status === "attention" || (s.status === "failed" && s.error),
-    )) {
-      const key =
-        connection.id + ":" + seat.id + ":" + (seat.error || seat.activity);
-      current.add(key);
-      if (!attentionSeen.current.has(key))
-        void window.hrig.notifyAttention(
-          seat.name + " needs your attention",
-          seat.rigName +
-            " · " +
-            (seat.error || seat.activity || "Input requested"),
-        );
+    const next = advanceSeatNotifications(seatNotificationState.current, {
+      enabled: preferences["notifications.desktop"], connection, inventory,
+      inventoryError, health: inventoryHealth.current,
+    });
+    // Advance before transport so failed or repeated requests never replay content.
+    seatNotificationState.current = next.state;
+    for (const request of next.requests) {
+      void window.hrig.notifySeatAttention(request).catch(() => {});
     }
-    attentionSeen.current = current;
-  }, [inventory, preferences["notifications.desktop"], connection.id]);
+  }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
+    inventoryHealth.current.key, inventoryHealth.current.verified,
+    inventoryHealth.current.failures]);
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(

@@ -230,7 +230,8 @@ export function AttentionPanel({
       <h3>Needs your attention</h3><p>{connection.name} · {connection.kind} · {connection.host || connection.distro || "Local desktop"} · represented inventory only</p>
     </div></div>
     <label className="checkbox-label"><input type="checkbox" checked={notifications}
-      onChange={(e) => onNotifications(e.target.checked)} />Windows notifications when a seat newly needs input</label>
+      onChange={(e) => onNotifications(e.target.checked)} />Desktop notifications when a seat newly needs input</label>
+    <p>Seat name only. Applies to verified inventory for the current connection. Enabling starts silently; only later changes notify. Desktop notification support and OS settings may prevent display.</p>
     <p>{scope.reason}</p>
     {refusal && <ErrorBox error={refusal} />}
     <h4>{inventory && !scope.ready ? "Last known needs input" : "Needs input"}{inventory ? ` (${seats.length})` : ""}</h4>
