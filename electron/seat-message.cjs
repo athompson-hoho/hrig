@@ -8,7 +8,10 @@ const MAX_PENDING = 20;
 
 function createSeatMessage({ inventory, runRig, now = Date.now, uuid = crypto.randomUUID }) {
   const pending = new Map();
-  const owner = (c) => JSON.stringify([c.id, c.kind, c.host ?? null, c.user ?? null, c.port ?? null]);
+  // Same tuple as the renderer's pinConnectionIdentity: a repointed saved
+  // connection (other host, port, WSL distro or rig binary) never matches.
+  const owner = (c) =>
+    JSON.stringify([c.id, c.kind, c.host ?? null, c.port ?? null, c.distro ?? null, c.rigBinary ?? null]);
   const prune = () => {
     for (const [k, v] of pending) if (v.expires <= now()) pending.delete(k);
     while (pending.size >= MAX_PENDING) pending.delete(pending.keys().next().value);
@@ -29,7 +32,14 @@ function createSeatMessage({ inventory, runRig, now = Date.now, uuid = crypto.ra
       throw Error("Enter a message first.");
     if (message.length > MAX_MESSAGE)
       throw Error(`Keep the message under ${MAX_MESSAGE} characters.`);
-    if (/\0/.test(message)) throw Error("The message contains an unsupported character.");
+    message = message.replace(/\r\n/g, "\n");
+    // The reviewed text must be exactly what the seat receives: refuse anything
+    // that renders invisibly or acts as a keystroke (controls, ESC, bare CR,
+    // DEL, C1, bidi/format characters, line/paragraph separators). \n and \t are fine.
+    if (/[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]|\p{Cf}/u.test(message))
+      throw Error(
+        "The message contains control or invisible formatting characters. Remove them and review again.",
+      );
     const seat = await resolve(connection, id);
     prune();
     const token = uuid();

@@ -57,7 +57,12 @@ test('rejects empty, oversized, NUL, missing and unsafe recipients before any to
   const f = fixture();
   for (const m of ['', '   \n', undefined, 5]) await assert.rejects(f.api.operation(conn, { op: 'prepare', id: 'r:a', message: m }), /Enter a message/);
   await assert.rejects(prep(f, 'x'.repeat(MAX_MESSAGE + 1)), /under/);
-  await assert.rejects(prep(f, 'a\0b'), /unsupported/);
+  for (const bad of ['a\0b', 'x\x03', 'x\x04y', 'esc\x1b[31m', 'bare\rcr', 'del\x7f', 'c1\x85',
+    'bidi\u202Eevil', 'zw\u200Bspace', 'sep\u2028', 'bom\uFEFFx'])
+    await assert.rejects(prep(f, bad), /control or invisible/, JSON.stringify(bad));
+  const ok = await prep(f, 'tab\there\nline2 é 日本 😀');
+  assert.equal(ok.payload, 'tab\there\nline2 é 日本 😀');
+  assert.equal((await prep(f, 'a\r\nb')).payload, 'a\nb', 'CRLF normalized, shown as reviewed');
   await assert.rejects(prep(fixture({ gone: true })), /no longer available/);
   await assert.rejects(f.api.operation(conn, { op: 'nope' }), /Unsupported/);
 });
@@ -99,4 +104,20 @@ test('actual Sidebar offers the message control on every session row, disabled w
   assert.deepEqual(opened, ['a']);
   props.inventoryError = 'down'; view.update(props);
   assert.ok(btns().every(b => b.props.disabled));
+});
+
+test('token owner includes distro and rigBinary: a repointed saved connection cannot send', async () => {
+  const f = fixture(); const base = { id: 'w', kind: 'wsl', distro: 'Ubuntu', rigBinary: 'rig' };
+  const r = await f.api.operation(base, { op: 'prepare', id: 'r:a', message: 'hi' });
+  for (const other of [{ ...base, distro: 'Debian' }, { ...base, rigBinary: '/opt/rig' }, { ...base, port: 2222 }])
+    await assert.rejects(f.api.operation(other, { op: 'send', id: 'r:a', token: r.token }), /expired/);
+  assert.equal(f.calls.length, 0);
+  const r2 = await f.api.operation(base, { op: 'prepare', id: 'r:a', message: 'hi' });
+  await f.api.operation(base, { op: 'send', id: 'r:a', token: r2.token });
+  assert.equal(f.calls.length, 1);
+});
+
+test('review copy discloses envelope, Enter and shell execution', () => {
+  const ui = fs.readFileSync('src/SeatMessage.tsx', 'utf8');
+  assert.match(ui, /From\/To message envelope/); assert.match(ui, /presses Enter/); assert.match(ui, /runs as commands/);
 });

@@ -98,3 +98,7 @@ test('wiring is capture-only: IPC, preload, and dialog expose no send path', () 
   assert.doesNotMatch(ui, /rigAction|rigControl|\.send|sendMessage|<input|<textarea/);
   assert.match(ui, /seatPrompt\(connection, seat\.id\)/);
 });
+
+test('cleanPromptText strips bidi override/isolate controls but keeps ordinary text', () => {
+  assert.equal(cleanPromptText('ok \u202Eevil\u202C \u2066x\u2069 \u200F日本 😀').text, 'ok evil x 日本 😀');
+});

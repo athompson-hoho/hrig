@@ -67,7 +67,8 @@ export default function SeatMessage({
         <>
           <div className="editor-notice">
             Nothing is sent until you review the recipient and exact text and
-            choose Send. Messages are typed into the session's terminal.
+            choose Send. Messages are typed into the session's terminal with an OpenRig message
+            envelope, followed by Enter.
           </div>
           <label className="field-label">
             MESSAGE
@@ -99,8 +100,10 @@ export default function SeatMessage({
             {review.payload}
           </pre>
           <p role="status">
-            Not sent yet. This review expires in {review.expiresInSeconds} seconds. Sending types the
-            text into the session; it cannot be undone.
+            Not sent yet. This review expires in {review.expiresInSeconds} seconds. Sending adds OpenRig's
+            From/To message envelope, types the text into the session, and
+            presses Enter. On a shell session the text runs as commands. It
+            cannot be undone.
           </p>
           {error && <ErrorBox error={error} />}
           <div className="modal-actions">
