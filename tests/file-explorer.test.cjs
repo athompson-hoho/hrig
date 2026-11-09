@@ -7,8 +7,9 @@ const root = connection.root;
 const directory = Object.freeze({ name: 'src', path: 'src', directory: true });
 const leaf = Object.freeze({ name: 'needle.ts', path: 'src/needle.ts', directory: false });
 
-function mountFiles() {
-  const requests = [], actions = [];
+const inertGit = (_owner, root) => ({ isRepository: true, root, projectPrefix: '', entries: [] });
+function mountFiles({ handleGit = inertGit } = {}) {
+  const requests = [], actions = [], gitRequests = [];
   const props = {
     section: 'files', connection, root, inventory: null, inventoryError: '',
     busy: false, selectedRig: '', fileRevision: 0,
@@ -20,7 +21,10 @@ function mountFiles() {
   const view = mountComponent('src/Sidebar.tsx', 'default', props, {
     actualComponents: true,
     settings: { effective: { 'rig.seatSort': 'name', 'appearance.density': 'compact' }, project: {}, update() {} },
-    api: { platform: 'linux', file(owner, request) {
+    api: { platform: 'linux', git(owner, root) {
+      gitRequests.push({ owner, root });
+      return Promise.resolve().then(() => handleGit(owner, root));
+    }, file(owner, request) {
       requests.push({ owner, request: { ...request } });
       assert.equal(owner, connection, 'requests retain the supplied synthetic owner');
       assert.equal(request.root, root);
@@ -34,7 +38,7 @@ function mountFiles() {
       return Promise.resolve([leaf]);
     } },
   });
-  return Object.assign(view, { requests, actions });
+  return Object.assign(view, { requests, actions, gitRequests });
 }
 
 function fileRow(view, path) {
@@ -51,8 +55,8 @@ const visibleRows = view => view.nodes().filter(n => n.type === 'button' && n.pr
 function typeQuery(view, query) { view.event(input(view), 'onChange', { target: { value: query } }); }
 async function searchFor(view, query) { typeQuery(view, query); view.advanceTime(200); await view.settle(); }
 function mountScenario({ handle = (_owner, request) => request.op === 'search' ? [leaf] : request.path ? [leaf] : [directory],
-  props: overrides = {}, platform = 'linux', beforeChildEffects } = {}) {
-  const requests = [], actions = [], forbidden = [];
+  props: overrides = {}, platform = 'linux', beforeChildEffects, handleGit = inertGit } = {}) {
+  const requests = [], actions = [], forbidden = [], gitRequests = [];
   const props = {
     section: 'files', connection, root, inventory: null, inventoryError: '', busy: false,
     selectedRig: '', fileRevision: 0, pinnedSeats: [], pinsAvailable: true, collapsedPods: [], podsAvailable: true,
@@ -60,7 +64,10 @@ function mountScenario({ handle = (_owner, request) => request.op === 'search' ?
       'onRelaunch', 'onDrag', 'onFile', 'onDiff', 'onTogglePod', 'onToggleSeatPin'].map(name => [name, (...args) => actions.push([name, ...args])])),
     ...overrides,
   };
-  const api = new Proxy({ platform, file(owner, request) {
+  const api = new Proxy({ platform, git(owner, root) {
+    gitRequests.push({ owner, root });
+    return Promise.resolve().then(() => handleGit(owner, root));
+  }, file(owner, request) {
     assert.ok(['list', 'search'].includes(request.op), 'only existing read-only operations');
     assert.deepEqual(Object.keys(request).sort(), request.op === 'search' ? ['op', 'path', 'query', 'root'] : ['op', 'path', 'root']);
     requests.push({ owner, request: { ...request } });
@@ -78,7 +85,7 @@ function mountScenario({ handle = (_owner, request) => request.op === 'search' ?
       };
     } } : {}),
     settings: { effective: { 'rig.seatSort': 'name', 'appearance.density': 'compact' }, project: {}, update() { forbidden.push(['settings']); } } });
-  return Object.assign(view, { requests, actions, forbidden, props });
+  return Object.assign(view, { requests, actions, forbidden, props, gitRequests });
 }
 
 function assertNavigationOnly(view) {
@@ -93,6 +100,7 @@ if (require.main === module) {
     t.after(() => view.unmount());
     await view.settle();
     assert.deepEqual(view.requests.map(({ request }) => request), [{ op: 'list', root, path: '' }]);
+    assert.deepEqual(view.gitRequests, [{ owner: connection, root }], 'Git capture stays separate from file request ordering');
     assert.ok(fileRow(view, 'src'), 'existing Sidebar files branch renders the directory');
     assert.equal(fileRow(view, leaf.path), undefined, 'child stays lazy until explicit expansion');
     assert.deepEqual(view.actions, []);
@@ -105,6 +113,7 @@ if (require.main === module) {
     assert.deepEqual(view.actions, []);
     view.event(fileRow(view, leaf.path), 'onClick');
     assert.deepEqual(view.actions, [['onFile', leaf.path]]);
+    assert.equal(view.gitRequests.length, 1, 'ordinary expansion and navigation do not refetch Git');
   });
 
   test('Sidebar files filters descendants and Clear restores mounted manual expansion', async (t) => {
@@ -138,6 +147,7 @@ if (require.main === module) {
     assert.equal(fileRow(view, leaf.path), normalLeaf, 'Clear retains the same manually expanded leaf');
     assert.ok(!view.nodes().some(node => node.props.hidden === true && node.contains(normalLeaf)));
     assert.equal(view.requests.length, 3, 'Clear sends neither search nor replacement listings');
+    assert.equal(view.gitRequests.length, 1, 'query and Clear leave the independent Git snapshot alone');
     assert.deepEqual(view.actions, []);
     view.unmount();
     assert.equal(view.timeouts.size, 0, 'component cancels its pending debounce on unmount');
@@ -228,7 +238,7 @@ if (require.main === module) {
     assert.equal(view.timeouts.size, 1);
     view.advanceTime(150); await view.settle();
     assert.deepEqual(view.requests.at(-1).request, { op: 'search', root, path: '', query: 'abc' });
-    const statuses = view.nodes().filter(n => n.props.role === 'status');
+    const statuses = view.nodes().filter(n => n.props.role === 'status' && !n.props.className?.split(' ').includes('explorer-git'));
     assert.equal(statuses.length, 1);
     assert.equal(statuses[0].props['aria-live'], 'polite');
     assert.equal(statuses[0].props['aria-atomic'], 'true');

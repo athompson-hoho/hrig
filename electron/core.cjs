@@ -268,7 +268,7 @@ target=os.path.realpath(os.path.join(root,a.get('path','')))
 if os.path.commonpath([root,target])!=root: raise Exception('The file is outside the project folder')
 op=a['op']
 def git_run(args):
- try: return subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C'))
+ try: return subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C',**({'GIT_OPTIONAL_LOCKS':'0'} if op=='git' else {})))
  except FileNotFoundError:
   print('Git is not installed on this machine. Install Git on the project host.',file=sys.stderr);sys.exit(1)
 def git_fail(result):
@@ -295,9 +295,13 @@ elif op=='git':
   if b'not a git repository' in r.stderr.lower(): print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
   git_fail(r)
  if r.stdout.strip()!=b'true': print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
+ p=git_run(['rev-parse','--show-prefix'])
+ if p.returncode!=0: git_fail(p)
+ prefix=p.stdout.decode('utf-8')
+ prefix=prefix[:-2] if prefix.endswith('\\r\\n') else prefix[:-1] if prefix.endswith('\\n') else prefix
  r=git_run(['status','--porcelain=v1','-z','--untracked-files=normal'])
  if r.returncode!=0: git_fail(r)
- print(json.dumps({'raw':r.stdout.decode('utf-8'),'isRepository':True,'root':root}))
+ print(json.dumps({'raw':r.stdout.decode('utf-8'),'isRepository':True,'root':root,'projectPrefix':prefix}))
 elif op=='diff':
  r=git_run(['diff','--no-ext-diff','HEAD','--',a['path']])
  if r.returncode!=0: git_fail(r)
@@ -432,7 +436,7 @@ async function fileOperation(connection, request) {
     return { saved: true };
   }
   if (request.op === "git") {
-    const env = { ...process.env, LC_ALL: "C" };
+    const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" };
     let inside;
     try {
       inside = await execute(
@@ -450,11 +454,12 @@ async function fileOperation(connection, request) {
     return {
       isRepository: true,
       root: target,
+      projectPrefix: (await execute("git", ["-C", target, "rev-parse", "--show-prefix"], { env })).replace(/\r?\n$/, ""),
       raw: await execute(
         "git",
         [
           "-C",
-          request.root,
+          target,
           "status",
           "--porcelain=v1",
           "-z",
@@ -492,15 +497,19 @@ async function fileOperation(connection, request) {
   }
 }
 function parseGitStatus(raw) {
+  if (typeof raw !== "string" || (raw && !raw.endsWith("\0"))) throw new Error("Malformed Git status.");
+  if (!raw) return [];
   const fields = raw.split("\0");
+  fields.pop();
   const result = [];
   for (let i = 0; i < fields.length; i++) {
     const entry = fields[i];
-    if (!entry) continue;
     const status = entry.slice(0, 2);
     const file = entry.slice(3);
-    result.push({ path: file, status: status.trim() || "M" });
-    if (/[RC]/.test(status)) i++;
+    if (!/^(?:[ MADRCT]{2}|DD|AU|UD|UA|DU|AA|UU|\?\?)$/.test(status) || status === "  " || entry[2] !== " " || !file)
+      throw new Error("Malformed Git status.");
+    result.push({ path: file, status: status.trim() });
+    if (/[RC]/.test(status) && !fields[++i]) throw new Error("Malformed Git status.");
   }
   return result;
 }
@@ -509,6 +518,7 @@ async function gitStatus(connection, root) {
   return {
     isRepository: result.isRepository !== false,
     root: result.root || root,
+    ...(result.isRepository !== false ? { projectPrefix: result.projectPrefix } : {}),
     entries: parseGitStatus(result.raw),
   };
 }
