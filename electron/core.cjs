@@ -196,7 +196,12 @@ async function nodeList(connection, runRig) {
   try {
     return await runRig(connection, [...NODE_LIST, "--full"]);
   } catch (error) {
-    if (!/unknown option|unrecognized|unexpected argument|--full/i.test(String(error?.message || error)))
+    // Retry only when rig itself rejects the flag, never on timeouts or other failures.
+    if (
+      !/(unknown|unrecognized) (option|argument)[^\n]*--full|--full[^\n]*(unknown|unrecognized|not supported)/i.test(
+        String(error?.message || error),
+      )
+    )
       throw error;
     return runRig(connection, NODE_LIST);
   }

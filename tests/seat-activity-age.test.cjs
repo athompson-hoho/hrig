@@ -136,3 +136,17 @@ test('nodeList falls back to the compact list only when --full is rejected', asy
   await assert.rejects(nodeList({}, down), /connection refused/);
   assert.equal(calls.length, 1, 'real failures are not doubled');
 });
+
+test('nodeList does not retry on errors that merely mention --full', async () => {
+  const { nodeList } = require('../electron/core.cjs');
+  for (const msg of ['timed out running rig ps --full', 'ssh: connection closed (--full)', 'invalid JSON near --full']) {
+    let n = 0;
+    await assert.rejects(nodeList({}, async () => { n++; throw new Error(msg); }), new RegExp(msg.split(' ')[0]));
+    assert.equal(n, 1, msg);
+  }
+  for (const msg of ["error: unknown option '--full'", "error: unrecognized option --full", "--full is not supported"]) {
+    let n = 0;
+    await nodeList({}, async (c, a) => { n++; if (a.includes('--full')) throw new Error(msg); return '[]'; });
+    assert.equal(n, 2, msg);
+  }
+});
