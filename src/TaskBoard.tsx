@@ -4,6 +4,7 @@ import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
 import { VirtualList } from "./VirtualList";
 import { pinConnectionIdentity } from "./seat-pins";
+import { groupTasks, searchTasks, type TaskGroupBy } from "./task-view";
 export default function TaskBoard({
   connection,
   rigName,
@@ -20,6 +21,7 @@ export default function TaskBoard({
   const [filter, setFilter] = useState("");
   const [owner, setOwner] = useState("");
   const [stateFilter, setStateFilter] = useState("");
+  const [groupBy, setGroupBy] = useState<TaskGroupBy>("state");
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<any>(null);
@@ -95,19 +97,11 @@ export default function TaskBoard({
       setBusy(false);
     }
   };
-  const visible = (items || []).filter(
-    (i) =>
-      (!stateFilter || i.status === stateFilter) &&
-      (!owner || i.destination === owner) &&
-      (!filter || String(i.title).toLowerCase().includes(filter.toLowerCase())),
+  const visible = searchTasks(items || [], filter).filter(
+    (i) => (!stateFilter || i.status === stateFilter) && (!owner || i.destination === owner),
   );
   const taskScope = JSON.stringify([pinConnectionIdentity(connection), rigName]);
-  const columns = ["pending", "in-progress", "blocked", "other"].map(state => ({
-    state,
-    items: visible.filter(i => state === "other"
-      ? !["pending", "in-progress", "blocked"].includes(i.status)
-      : i.status === state),
-  }));
+  const columns = groupTasks(visible, groupBy);
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -148,7 +142,7 @@ export default function TaskBoard({
       <div className="form-grid">
         <input
           aria-label="Filter tasks"
-          placeholder="Filter tasks…"
+          placeholder="Search title, owner, state or id…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
@@ -171,6 +165,14 @@ export default function TaskBoard({
           {["pending", "in-progress", "blocked", "failed"].map((s) => (
             <option key={s}>{s}</option>
           ))}
+        </select>
+        <select
+          aria-label="Group tasks by"
+          value={groupBy}
+          onChange={(e) => setGroupBy(e.target.value === "seat" ? "seat" : "state")}
+        >
+          <option value="state">Group by state</option>
+          <option value="seat">Group by seat</option>
         </select>
       </div>
       {items === null && !error ? (
@@ -201,19 +203,19 @@ export default function TaskBoard({
             </div>
           )}
         <div className="task-board">
-          {columns.map(({ state, items: columnItems }) => (
+          {columns.map(({ key: state, label, items: columnItems }) => (
             <section className="task-column" key={state}>
               <h4>
-                {state === "other" ? "Other states" : state}
+                {label}
                 <span>
                   {columnItems.length}
                 </span>
               </h4>
               <VirtualList
                 rows={columnItems}
-                scopeKey={JSON.stringify([taskScope, state, filter, owner, stateFilter])}
+                scopeKey={JSON.stringify([taskScope, state, filter, owner, stateFilter, groupBy])}
                 itemKey={item => JSON.stringify([taskScope, "task", item.id])}
-                label={state === "other" ? "Other-state tasks" : `${state[0].toUpperCase()}${state.slice(1)} tasks`}
+                label={groupBy === "seat" ? `Tasks for ${label}` : state === "other" ? "Other-state tasks" : `${state[0].toUpperCase()}${state.slice(1)} tasks`}
                 maxHeight={360}
                 className="task-card-viewport"
                 renderRow={item => (
