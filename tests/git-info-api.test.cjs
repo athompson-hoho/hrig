@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 // Actual core, with synthetic paths and inert process/filesystem boundaries.
-function metadataCore() {
+function metadataCore(respond) {
   const module = { exports: {} }, calls = [];
   const root = '/synthetic canonical/project';
   const oid = 'a'.repeat(40), upstreamOid = 'b'.repeat(40);
@@ -29,6 +29,14 @@ function metadataCore() {
       assert.equal(options.env.LC_ALL, 'C');
       assert.equal(options.env.GIT_OPTIONAL_LOCKS, '0');
       const argv = Array.from(args.slice(2)); calls.push(argv);
+      if (respond) {
+        const result = respond(argv, calls.length);
+        if (result) {
+          callback(result.code ? Object.assign(new Error('synthetic Git failure'), { code: result.code }) : null,
+            result.stdout || '', result.stderr || '');
+          return { stdin: { on() {}, end() {} } };
+        }
+      }
       let stdout;
       if (argv.join(' ') === 'rev-parse --is-inside-work-tree') stdout = 'true\n';
       else if (argv.join(' ') === 'symbolic-ref --quiet HEAD') stdout = 'refs/heads/topic\n';
@@ -74,6 +82,17 @@ test('actual core gitInfo returns attached branch and asymmetric immutable compa
 });
 
 module.exports = { metadataCore, ordinaryRead };
+
+test('actual local gitInfo refuses ambiguous bare context rather than claiming no repository', async () => {
+  const h = metadataCore(argv => argv.join(' ') === 'rev-parse --is-inside-work-tree'
+    ? { stdout: 'false\n' } : undefined);
+  await ordinaryRead(h);
+  const outcome = await h.core.fileOperation(h.connection, { op: 'gitInfo', root: '/synthetic-alias' })
+    .then(value => ({ value }), error => ({ error: error.message }));
+  assert.equal(outcome.error, 'Git information is unavailable.',
+    'false is compatible with bare Git context and cannot positively prove absence');
+  assert.equal(h.calls.length, 1, 'ambiguous context terminates without a status scan');
+});
 
 test('actual generated Python gitInfo executes bounded canonical metadata reads', () => {
   const ts = require('typescript');
