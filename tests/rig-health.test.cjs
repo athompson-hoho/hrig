@@ -9,12 +9,12 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../src/ri
 const { rigHealthSummary } = exp;
 const seat = (status, rigId = 'r1') => ({ id: status + Math.random(), rigId, status });
 
-test('counts working (incl. running), idle, attention; others are separate', () => {
+test('counts only known-working as working; running-unknown, stopped, failed are "other"', () => {
   const h = rigHealthSummary([seat('working'), seat('running'), seat('idle'), seat('attention'), seat('attention'),
     seat('stopped'), seat('failed'), seat('unknown')], 'Rig', true);
-  assert.deepEqual([h.working, h.idle, h.attention, h.other, h.total], [2, 1, 2, 3, 8]);
-  assert.equal(h.text, '2 working · 1 idle · 2 attention');
-  assert.match(h.detail, /3 other \(stopped, failed or unknown\)/);
+  assert.deepEqual([h.working, h.idle, h.attention, h.other, h.total], [1, 1, 2, 4, 8]);
+  assert.equal(h.text, '1 working · 1 idle · 2 attention');
+  assert.match(h.detail, /4 other \(running with unknown activity, stopped, failed or unknown\)/);
   assert.match(h.detail, /last inventory snapshot/);
 });
 
@@ -34,8 +34,16 @@ test('singular wording and scope name in detail', () => {
 test('RigHealthStatus consumer scopes by selected rig and takes verified scope from attentionScope', () => {
   const ui = fs.readFileSync('src/RigHealthStatus.tsx', 'utf8');
   assert.match(ui, /!rigId \|\| s\.rigId === rigId/);
-  assert.match(ui, /rigHealthSummary\(seats, scopeName, ready\)/);
+  assert.match(ui, /rigHealthSummary\(seats, scopeName, ready, /);
   const app = fs.readFileSync('src/App.tsx', 'utf8');
   assert.match(app, /<RigHealthStatus[^>]*\n\s*scope=\{attentionScope\(connection, connection, inventory, inventoryHealth\.current, inventoryError\)\}/);
   assert.doesNotMatch(ui, /setInterval|setTimeout|window\.hrig/);
+});
+
+test('a selected rig missing from a verified inventory reads "Rig not found", not an empty healthy rig', () => {
+  const h = rigHealthSummary([], 'Selected rig', true, true);
+  assert.equal(h.text, 'Rig not found'); assert.equal(h.available, false);
+  assert.doesNotMatch(h.text, /No sessions/); assert.match(h.detail, /not in the represented inventory/);
+  const ui = fs.readFileSync('src/RigHealthStatus.tsx', 'utf8');
+  assert.match(ui, /!!rigId && !!inventory && !rig/);
 });

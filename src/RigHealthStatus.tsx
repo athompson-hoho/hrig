@@ -16,7 +16,7 @@ export default function RigHealthStatus({
   const rig = rigId ? inventory?.rigs.find((r) => r.id === rigId) : undefined;
   const scopeName = rigId ? rig?.name || "Selected rig" : "All rigs";
   const seats = inventory ? inventory.seats.filter((s) => !rigId || s.rigId === rigId) : null;
-  const health = rigHealthSummary(seats, scopeName, ready);
+  const health = rigHealthSummary(seats, scopeName, ready, !!rigId && !!inventory && !rig);
   return (
     <button
       type="button"

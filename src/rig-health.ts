@@ -14,15 +14,23 @@ export interface RigHealth {
 }
 
 /**
- * Working/idle/attention counts for the displayed seats. "working" counts the
- * same statuses the status filter does (working + running). Stopped, failed,
- * unknown and other statuses are reported as "other", never folded into idle.
+ * Working/idle/attention counts for the displayed seats. Only seats whose
+ * activity is known to be working count as working. A session that is running
+ * with unknown activity, and stopped/failed/unknown seats, are reported as
+ * "other" (never folded into working or idle).
  */
 export function rigHealthSummary(
   seats: readonly Seat[] | null | undefined,
   scopeName: string,
   current: boolean,
+  missingRig = false,
 ): RigHealth {
+  if (missingRig)
+    return {
+      available: false, current, working: 0, idle: 0, attention: 0, other: 0, total: 0,
+      text: "Rig not found",
+      detail: `${scopeName} is not in the represented inventory (removed or renamed?). Choose another rig in the sidebar.`,
+    };
   if (!seats)
     return {
       available: false, current: false, working: 0, idle: 0, attention: 0, other: 0, total: 0,
@@ -31,7 +39,7 @@ export function rigHealthSummary(
     };
   let working = 0, idle = 0, attention = 0, other = 0;
   for (const s of seats) {
-    if (s.status === "working" || s.status === "running") working++;
+    if (s.status === "working") working++;
     else if (s.status === "idle") idle++;
     else if (s.status === "attention") attention++;
     else other++;
@@ -41,7 +49,7 @@ export function rigHealthSummary(
   const stale = current ? "" : " · stale";
   const detail =
     `${scopeName}: ${total} ${total === 1 ? "session" : "sessions"}: ${parts.join(", ")}` +
-    (other ? `, ${other} other (stopped, failed or unknown)` : "") +
+    (other ? `, ${other} other (running with unknown activity, stopped, failed or unknown)` : "") +
     (current
       ? ". Counts come from the last inventory snapshot."
       : ". Inventory is stale or not verified, so these are last known counts.");
