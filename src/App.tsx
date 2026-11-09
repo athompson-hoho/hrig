@@ -157,6 +157,7 @@ import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { useHumanItemNotices } from "./useHumanItemNotices";
+import { useSeatNeedsInputSound } from "./useSeatNeedsInputSound";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import ShortcutSheet from "./ShortcutSheet";
 import {
@@ -704,6 +705,13 @@ export default function App() {
     connection,
     intervalSeconds: preferences["workspace.refreshInterval"],
     refresh,
+    log,
+  });
+  useSeatNeedsInputSound({
+    enabled: loaded && preferences["notifications.seatNeedsInputSound"],
+    connection,
+    seats: inventory?.seats ?? null,
+    inventoryError,
     log,
   });
   useEffect(() => {

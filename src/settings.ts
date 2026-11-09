@@ -57,6 +57,7 @@ export const defaults = {
   "notifications.terminalBell": false,
   "notifications.terminalQuiet": false,
   "notifications.humanItems": false,
+  "notifications.seatNeedsInputSound": false,
   "shortcuts.overrides": "",
 };
 export type Preferences = typeof defaults;
@@ -512,6 +513,13 @@ export const schema: Setting[] = [
     label: "Notify about queue items for me",
     description:
       "Notify when a new Task queue item addressed to a person appears (a human@host, human@kernel or name@external destination). Off by default and separate from Desktop attention notifications: this setting alone is the opt-in. Read only: HRig reads the queue list it already reads, and never claims, answers or changes an item or sends anything to a seat. The notification gives the count and at most the first item's summary, cut to 80 characters, never an item's text, id or address. Items already waiting when you turn it on or switch connection, and quiet updates, do not notify.",
+  },
+  {
+    key: "notifications.seatNeedsInputSound",
+    category: "Notifications",
+    label: "Sound when a seat needs input",
+    description:
+      "Play one short, soft tone when a seat newly needs input. Off by default and separate from Desktop attention notifications: this setting alone is the opt-in, and the tone plays whether or not HRig is in front. The tone is made by the app itself (no audio file), is quiet, lasts under a second and plays at most once every 10 seconds, however many seats change together. A seat that was already waiting when you turn it on, when HRig starts or when you switch connection, a seat whose session failed with an error and a person's own seat make no sound. It shows and sends no text and never sends anything to a seat or shell.",
   },
   {
     key: "shortcuts.overrides",
