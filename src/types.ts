@@ -169,6 +169,7 @@ export interface HrigAPI {
       content?: string;
       revision?: string;
       query?: string;
+      allowMissing?: boolean;
     },
   ): Promise<any>;
   rigAction(
