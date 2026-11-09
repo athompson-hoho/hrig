@@ -179,6 +179,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
           if (typeof node.ref === 'function') node.ref(null); else if (node.ref) node.ref.current = null;
           dom.delete(key);
         }
+        // Optional observation before effect cleanup/setup, for owner hiding checks.
+        options.onRender?.(tree);
       }
       while (pending.length) pending.shift()();
     }

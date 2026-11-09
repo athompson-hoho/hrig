@@ -19,6 +19,10 @@ function mountEditorPanel(options = {}) {
     ...options.props,
   };
   const api = new Proxy({
+    file(owner, request) {
+      requests.push({ owner, request });
+      return new Promise((resolve, reject) => pending.push({ resolve, reject }));
+    },
     edit(owner, request) {
       requests.push({ owner, request });
       return new Promise((resolve, reject) => pending.push({ resolve, reject }));
@@ -35,7 +39,7 @@ function mountEditorPanel(options = {}) {
     if (key in target) return target[key];
     throw new Error(`Unexpected editor API: ${String(key)}`);
   } });
-  let registry, drafts, react;
+  let registry, drafts, react, actualModal;
   function widget(kind) {
     return function InertEditor(props) {
       react.useEffect(() => {
@@ -54,7 +58,7 @@ function mountEditorPanel(options = {}) {
   }
   const Worker = class InertWorker {};
   const view = mountComponent('src/EditorPanel.tsx', 'default', props, {
-    api, windowEvents: true,
+    api, windowEvents: true, onRender: options.onRender,
     globals: { self: {}, Event: class SyntheticEvent { constructor(type) { this.type = type; } } },
     settings: { effective: { 'editor.fontSize': 13, 'editor.autoReload': false,
       'editor.wordWrap': 'off', 'editor.diffSideBySide': true, ...options.preferences } },
@@ -70,7 +74,7 @@ function mountEditorPanel(options = {}) {
       './components': {
         Loading: props => react.createElement('loading', null, props.text),
         ErrorBox: props => react.createElement('error-box', null, props.error),
-        Modal: props => react.createElement('section', { role: 'dialog', 'aria-label': props.title },
+        Modal: props => options.actualModal ? react.createElement(actualModal, props, props.children) : react.createElement('section', { role: 'dialog', 'aria-label': props.title },
           props.title, props.subtitle,
           react.createElement('button', { onClick: props.onClose, 'aria-label': 'Close dialog' }, 'Close dialog'),
           props.children),
@@ -80,12 +84,18 @@ function mountEditorPanel(options = {}) {
       react = context.react;
       registry = context.load('src/editor-buffers.ts');
       drafts = context.load('src/drafts.ts');
+      if (options.actualModal) actualModal = context.load('src/components.tsx').Modal;
       options.seed?.({ registry, drafts, props, draftStore });
       return context.load('src/EditorPanel.tsx').default;
     },
   });
   return Object.assign(view, {
     props, registry, drafts, requests, pending, draftCalls, draftStore, dirtyCalls, savedCalls, widgetCalls,
+    retarget(next) { Object.assign(props, next); view.update(next); },
+    dispatch(type, extra = {}) {
+      for (const fn of [...(view.listeners.get(type) || [])]) fn({ type, stopPropagation() {}, ...extra });
+      view.flush();
+    },
     button(label) { return view.nodes().find(n => n.type === 'button' && view.text(n) === label); },
     click(label) {
       const button = this.button(label);
