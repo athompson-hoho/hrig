@@ -106,7 +106,8 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
   const duration = timing.observeStartupDuration;
   assert.equal(typeof duration, 'function');
   for (const [start, end, expected] of [[10, 14, 4], [10, 10, 0], [10, 9, null],
-    [NaN, 10, null], [10, Infinity, null], [undefined, 10, null], [10, undefined, null]]) {
+    [NaN, 10, null], [10, Infinity, null], [undefined, 10, null], [10, undefined, null],
+    [-Number.MAX_VALUE, Number.MAX_VALUE, null]]) {
     const completion = { completed: false };
     assert.equal(duration(completion, start, end), expected, 'finite monotonic duration semantics');
     if (expected !== null) assert.equal(duration(completion, start, end + 1), null, 'one accepted completion');
@@ -127,6 +128,20 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
     assert.ok(state.connections.every(c => c.kind === 'local' && !c.host));
     const encodedState = JSON.stringify(state);
     assert.ok(!encodedState.includes('"terminal"'), 'measurement fixtures have zero terminals');
+    const tabs = Object.values(state.layouts)[0].layout.children[0].children;
+    assert.deepEqual(Array.from(tabs, tab => tab.component), scenario === 'restored-hidden'
+      ? ['welcome', 'editor', 'diff', 'settings'] : ['welcome'], 'exact optional component keys');
+    assert.equal(await api.saveState({ privateMarker }), undefined, 'persistence is inert');
+    assert.equal(api.flushState({ privateMarker }).saved, true);
+    assert.equal((await api.inventory(state.connections[0])).seats.length, 0);
+    assert.equal((await api.file(state.connections[0], { op: 'list', root: '/synthetic', path: '' }))[0].name, 'benchmark.ts');
+    assert.equal((await api.edit(state.connections[0], { op: 'read', root: '/synthetic', path: 'benchmark.ts' })).revision, 'synthetic');
+    for (const op of ['write', 'delete', 'create', 'rename', 'read界']) {
+      await assert.rejects(() => api.edit(state.connections[0], { op, root: '/synthetic', path: 'benchmark.ts' }));
+      await assert.rejects(() => api.file(state.connections[0], { op, root: '/synthetic', path: '' }));
+    }
+    await assert.rejects(() => api.edit({ ...state.connections[0], host: privateMarker }, { op: 'read', root: '/synthetic', path: 'benchmark.ts' }));
+    await assert.rejects(() => api.updates({ op: 'install' }));
     for (const name of ['createTerminal', 'closeTerminal', 'writeTerminal', 'sendMessage', 'rigControl', 'unknownCapability']) {
       await assert.rejects(async () => api[name]({ secret: privateMarker }), 'deny unexpected authority');
     }
@@ -158,6 +173,8 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
   // ordering, selectors, routing and report acceptance without launching a
   // runtime. All clock values below are semantic test data, never measurements.
   const contexts = [], effects = [], served = [], requests = [];
+  let routePaths = ['/index.html', '/assets/app.js'], requestMethod = 'GET', expectAbort = false;
+  let failureMode = '';
   const builtAssets = new Map([
     ['/index.html', '<html>synthetic built entry</html>'],
     ['/assets/app.js', '// synthetic built module'],
@@ -178,6 +195,10 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
           events.push('preload');
         },
         async route(pattern, handler) { assert.equal(typeof pattern, 'string'); routeHandler = handler; },
+        async routeWebSocket(pattern, handler) {
+          assert.equal(pattern, '**/*');
+          if (failureMode === 'websocket') handler({ close() { events.push('websocket-denied'); } });
+        },
         async newPage() {
           const control = selector => ({
             async waitFor() { selectors.push(selector); },
@@ -186,20 +207,21 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
           });
           return {
             setDefaultTimeout() {},
-            on() {},
+            on(event, handler) { if (failureMode === 'page-error' && event === 'pageerror') handler(new Error('PRIVATE_SYNTHETIC')); },
+            async evaluate() { return failureMode === 'capability' ? 1 : 0; },
             async goto(url) {
               assert.ok(events.includes('preload'), 'synthetic API installed before app scripts');
               assert.equal(typeof routeHandler, 'function');
-              for (const pathname of ['/index.html', '/assets/app.js']) {
+              for (const pathname of routePaths) {
                 const requestUrl = new URL(pathname, url).href;
                 requests.push(requestUrl);
                 let fulfilled = false;
-                await routeHandler({ request: () => ({ url: () => requestUrl, method: () => 'GET' }),
+                await routeHandler({ request: () => ({ url: () => requestUrl, method: () => requestMethod }),
                   async fulfill(response) { fulfilled = true; served.push(pathname); assert.ok(response.body); },
-                  async abort() { throw new Error('allowed built asset denied'); },
+                  async abort() { assert.ok(expectAbort, 'allowed built asset denied'); },
                   async continue() { effects.push('unconfined-network'); },
                 });
-                assert.ok(fulfilled, 'allowlisted asset served from inert current candidate');
+                assert.equal(fulfilled, !expectAbort, 'only allowlisted built assets served');
               }
             },
             locator: control,
@@ -230,4 +252,69 @@ test('controlled benchmark preserves explicit authority and honest timings', asy
   assert.deepEqual(effects, [], 'authority: no forbidden host effects during actual runner');
   assert.equal(served.length, 4);
   assert.equal(requests.length, 4);
+
+  for (const pathname of ['https://private.invalid/owner', '/electron/preload.cjs', '/assets/missing.js',
+    '/assets/app.js?owner=PRIVATE_SYNTHETIC', '/assets/%2e%2e/preload.cjs']) {
+    routePaths = [pathname]; expectAbort = true;
+    const rejected = await runControlledRendererBenchmark({ samples: 1, scenario: 'welcome-only', builtAssets, adapter });
+    assert.equal(rejected.status, 'failed', 'unexpected network or asset must fail the run');
+    assert.equal(rejected.reason, 'asset-denied');
+    assert.equal(rejected.samples.length, 0);
+    assert.equal(rejected.metrics, null);
+    assert.ok(contexts.at(-1).closed, 'failed context closes');
+    assert.ok(!JSON.stringify(rejected).includes('PRIVATE_SYNTHETIC'), 'privacy: route errors are fixed labels');
+  }
+  routePaths = ['/index.html']; requestMethod = 'POST';
+  assert.equal((await runControlledRendererBenchmark({ samples: 1, builtAssets, adapter })).reason, 'asset-denied');
+  requestMethod = 'GET'; expectAbort = false;
+  for (const mode of ['page-error', 'capability', 'websocket']) {
+    failureMode = mode;
+    const rejected = await runControlledRendererBenchmark({ samples: 1, builtAssets, adapter });
+    assert.equal(rejected.status, 'failed', 'unexpected browser capability/error fails closed');
+    assert.equal(rejected.metrics, null);
+    assert.ok(!JSON.stringify(rejected).includes('PRIVATE_SYNTHETIC'));
+    assert.ok(contexts.at(-1).closed);
+  }
+  failureMode = '';
+  const eagerAssets = new Map([...builtAssets, ['/assets/EditorPanel-canary.js', '// synthetic eager module']]);
+  routePaths = ['/index.html', '/assets/EditorPanel-canary.js'];
+  const eager = await runControlledRendererBenchmark({ samples: 1, builtAssets: eagerAssets, adapter });
+  assert.equal(eager.status, 'failed', 'actual module routing detects eager optional chunk before activation');
+  assert.equal(eager.metrics, null);
+  routePaths = ['/index.html'];
+  for (const now of [() => NaN, () => Infinity, (() => { let n = 100; return () => --n; })()]) {
+    const rejected = await runControlledRendererBenchmark({ samples: 1, builtAssets, adapter: { ...adapter, now } });
+    assert.equal(rejected.status, 'failed');
+    assert.equal(rejected.reason, 'invalid-clock', 'real runner uses production monotonic acceptance');
+    assert.equal(rejected.metrics, null);
+    assert.ok(contexts.at(-1).closed);
+  }
+  const zero = await runControlledRendererBenchmark({ samples: 1, scenario: 'welcome-only', builtAssets,
+    adapter: { ...adapter, now: () => 10 } });
+  assert.equal(zero.status, 'available');
+  assert.equal(zero.samples[0].workspaceReadyMs, 0, 'valid same-clock zero is test data');
+  for (const samples of [null, 0, -1, 21, NaN, Infinity, 1.5, '5']) {
+    const before = contexts.length;
+    const rejected = await runControlledRendererBenchmark({ samples, builtAssets, adapter });
+    assert.equal(rejected.reason, 'invalid-input');
+    assert.equal(contexts.length, before, 'invalid sample count does not create a context');
+  }
+  const invalidScenario = await runControlledRendererBenchmark({ samples: 1, scenario: 'restored-hidden界', builtAssets, adapter });
+  assert.equal(invalidScenario.reason, 'invalid-input', 'Unicode cannot widen exact scenario equality');
+  const missingAssets = await runControlledRendererBenchmark({ samples: 1, builtAssets: new Map(), adapter });
+  assert.equal(missingAssets.status, 'failed');
+  const thrown = await runControlledRendererBenchmark({ builtAssets, adapter: { ...adapter, async createContext() { throw new Error('PRIVATE_SYNTHETIC'); } } });
+  assert.equal(thrown.status, 'failed');
+  assert.equal(thrown.metrics, null);
+  assert.ok(!JSON.stringify(thrown).includes('PRIVATE_SYNTHETIC'), 'privacy: exceptions never serialized');
+  for (const samples of [null, {}, 'PRIVATE_SYNTHETIC', [null], [{ scenario: 'welcome-only', workspaceReadyMs: 0 }]]) {
+    const projected = projectReport({ status: 'available', samples });
+    assert.equal(projected.status, 'failed', 'malformed sample cannot become available measurement');
+    assert.equal(projected.metrics, null);
+    assert.equal(projected.sampleCount, 0);
+  }
+  assert.equal(projectReport(null).status, 'failed');
+  assert.equal((await runControlledRendererBenchmark(null)).reason, 'invalid-input');
+  const defaults = await runControlledRendererBenchmark({ scenario: 'welcome-only', builtAssets, adapter });
+  assert.equal(defaults.samples.length, 5, 'bounded default uses five fresh sample contexts');
 });
