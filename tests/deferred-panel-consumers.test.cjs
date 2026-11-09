@@ -69,6 +69,16 @@ function harness(selected, options = {}) {
         return React.createElement('button', { 'data-editor': props.id, onClick: () => setLocal('edited') }, local);
       };
       return options.importModule ? options.importModule({ default: inertEditor }, events) : { default: inertEditor };
+    }, './SettingsPage': () => {
+      events.push('settings-module-evaluation');
+      const Settings = props => {
+        const token = React.useRef({});
+        const [local, setLocal] = React.useState('Appearance');
+        React.useEffect(() => { mounts.push({ id: 'settings', token: token.current }); return () => cleanups.push('settings'); }, []);
+        propsSeen.push(props);
+        return React.createElement('button', { 'data-settings': true, onClick: () => setLocal('Editor') }, local);
+      };
+      return options.settingsModule ? options.settingsModule({ default: Settings }, events) : { default: Settings };
     } },
     root(env) {
       React = env.react;
@@ -78,8 +88,20 @@ function harness(selected, options = {}) {
     },
   });
   const factoryNode = unique(app, n => ts.isVariableDeclaration(n) && n.name.getText(app) === 'factory');
+  // Execute any actual eager Settings edge as well as the adapter's literal
+  // dynamic edge. An inert component replaces only the module's external UI.
+  const eagerSettings = app.statements.filter(n => ts.isImportDeclaration(n) && n.moduleSpecifier.text === './SettingsPage');
+  let SettingsPage;
+  for (const edge of eagerSettings) SettingsPage = evaluate(`${edge.getText(app)}; result = ${edge.importClause.name.text};`, {
+    exports: {},
+    require(id) {
+      assert.equal(id, './SettingsPage');
+      events.push('settings-module-evaluation');
+      return { default: props => { propsSeen.push(props); return null; } };
+    },
+  });
   const scope = {
-    React, DeferredPanel, SettingsPage: 'settings', Loading: 'loading',
+    React, DeferredPanel, SettingsPage, Loading: 'loading', root: '.',
     TerminalPanel: props => { events.push('terminal-mount'); propsSeen.push(props); return null; },
     Welcome: () => null, openConnect() {}, openProject() {}, openShell() {}, openAll() {}, seats: [],
     connection: fixture(0).layout.children[0].children[1].config.connection,
@@ -379,4 +401,66 @@ test('Retry focus handoff stays in its visible wrapper and respects moved focus'
   await h.ui.settle();
   assert.equal(h.events.length, count, 'hidden retry cannot request or move focus');
   assert.equal(h.ui.document.activeElement, outside);
+});
+
+const settingsFixture = json => {
+  json.layout.children[0].children.push({ type: 'tab', id: 'settings', component: 'settings', enableRenderOnDemand: false });
+};
+const settingsButton = h => h.ui.nodes().find(n => n.props['data-settings']);
+
+test('unopened Settings executes no eager or deferred module edge through actual App imports and controller', async () => {
+  const h = harness(0, { configure: settingsFixture });
+  const portals = await h.render();
+  assert.equal(h.events.filter(e => e === 'settings-module-evaluation').length, 0,
+    'unopened Settings must evaluate neither the static nor literal deferred import');
+  assert.equal(portals.has('settings'), false);
+  assert.equal(roles(h, 'status').length, 0);
+});
+
+test('Settings selection consumes literal module with project props and retains category state on revisit', async () => {
+  const h = harness(0, { configure: settingsFixture });
+  await h.render();
+  h.model.doAction(Actions.selectTab('settings'));
+  await h.render();
+  assert.ok(settingsButton(h), 'actual Settings literal export must reach the factory consumer');
+  assert.equal(h.propsSeen.find(p => p.project).project, 'Fixture / .');
+  h.ui.event(settingsButton(h), 'onClick');
+  const token = h.mounts.find(m => m.id === 'settings').token;
+  h.model.doAction(Actions.selectTab('welcome'));
+  await h.render();
+  h.model.doAction(Actions.selectTab('settings'));
+  await h.render();
+  assert.equal(h.ui.text(settingsButton(h)), 'Editor');
+  assert.equal(h.mounts.filter(m => m.id === 'settings').length, 1);
+  assert.equal(h.mounts.find(m => m.id === 'settings').token, token);
+  assert.equal(h.events.filter(e => e === 'settings-module-evaluation').length, 1);
+  assert.deepEqual(h.cleanups, []);
+});
+
+test('Settings pending and local failure use fixed copy and explicit single inflight Retry', async () => {
+  const pending = deferred();
+  const h = harness(3, { configure: settingsFixture, settingsModule(module, events) {
+    return events.filter(e => e === 'settings-module-evaluation').length === 1 ? pending.promise : module;
+  } });
+  await h.render();
+  assert.equal(roles(h, 'status').length, 1, 'selected Settings exposes local pending status');
+  assert.match(text(h), /Opening settings…/);
+  assert.equal(roles(h, 'status')[0].props['aria-live'], 'polite');
+  assert.equal(roles(h, 'status')[0].props['aria-atomic'], 'true');
+  pending.reject(new Error('synthetic-private-settings-marker'));
+  await h.ui.settle();
+  assert.equal(roles(h, 'alert').length, 1);
+  assert.match(text(h), /Could not open settings\. Select Retry to try again\./);
+  assert.doesNotMatch(text(h), /synthetic-private-settings-marker/);
+  assert.equal(button(h).props.type, 'button');
+  await h.render();
+  assert.equal(h.events.filter(e => e === 'settings-module-evaluation').length, 1);
+  const retry = button(h);
+  h.ui.event(retry, 'onClick');
+  h.ui.event(retry, 'onClick');
+  assert.equal(button(h), undefined);
+  await h.ui.settle();
+  assert.ok(settingsButton(h));
+  assert.equal(h.events.filter(e => e === 'settings-module-evaluation').length, 2);
+  assert.ok(h.events.includes('terminal-mount'));
 });
