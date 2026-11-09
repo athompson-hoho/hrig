@@ -930,3 +930,258 @@ test("file-references component: reads the same text the dialog shows, lists at 
     hostile.view.unmount();
   }
 });
+
+// ---------------------------------------------------------------------------
+// Task 3: the wiring is pinned as text, and the docs say what the feature does.
+
+const strip = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const collapse = (text) => text.replace(/\s+/g, " ").trim();
+const tight = (text) => text.replace(/\s+/g, "");
+const count = (text, part) => text.split(part).length - 1;
+const importsOf = (text) =>
+  [...text.matchAll(/^import [^;]*?from "([^"]+)";/gms)].map((m) => m[1]);
+const exportsOf = (text) =>
+  [
+    ...text.matchAll(
+      /^export (?:default )?(?:const|function|type|interface) (\w+)/gm,
+    ),
+  ]
+    .map((m) => m[1])
+    .sort();
+const plainAscii = (text) => !/[^\n -~]/.test(text);
+
+test("file-references wiring: the module is pure with its exact exports, only the new component reads a file, only the board knows the component, the board and the app change in one place each, the style block sits beside Task details, and nothing else knows the feature", () => {
+  // The module: one import, no page, storage, clock or network, the exact exports, a doc comment on each.
+  const moduleText = read("src/file-references.ts");
+  const mod = strip(moduleText);
+  assert.ok(plainAscii(moduleText));
+  assert.deepEqual(importsOf(mod), ["./terminal-path-links"]);
+  assert.ok(
+    !/(^|[^A-Za-z.])(window|document|fetch|process|require|localStorage|sessionStorage|navigator|clipboard|setTimeout|setInterval|console|innerHTML)([^A-Za-z]|$)|Date\.now|new Date|Math\.random/.test(
+      mod,
+    ),
+  );
+  assert.deepEqual(exportsOf(moduleText), [
+    "FileReference",
+    "MAX_LABEL_CHARS",
+    "MAX_LINE",
+    "MAX_PATH_CHARS",
+    "MAX_REFS",
+    "MAX_SCAN_CHARS",
+    "fileReferences",
+  ]);
+  assert.ok(!/^export default/m.test(moduleText));
+  for (const m of moduleText.matchAll(/^export .*$/gm)) {
+    const above = moduleText.slice(0, m.index).trimEnd().split("\n").pop();
+    assert.ok(
+      above.startsWith("/** ") && above.endsWith(" */"),
+      "doc comment above: " + m[0],
+    );
+  }
+
+  // The component: only react, the type of a connection, the module and the body picker; one read and no other call.
+  const componentText = read("src/TaskFileReferences.tsx");
+  const component = strip(componentText);
+  assert.ok(plainAscii(componentText));
+  assert.deepEqual(importsOf(component), [
+    "react",
+    "./types",
+    "./file-references",
+    "./markdown-safe",
+  ]);
+  assert.deepEqual(exportsOf(componentText), ["TaskFileReferences"]);
+  assert.deepEqual(
+    [...component.matchAll(/window\s*\.hrig\s*\.(\w+)/g)].map((m) => m[1]),
+    ["edit"],
+  );
+  assert.equal(count(tight(component), 'op:"read"'), 1);
+  assert.equal(count(component, "op:"), 1, "no other operation");
+  assert.equal(count(component, "onFile("), 1, "one way to open");
+  assert.ok(
+    !/dangerouslySetInnerHTML|innerHTML|outerHTML|href|src=|style=|className=\{|document\.|localStorage|sessionStorage|indexedDB|sendMessage|rigAction|openTerminalLink|setTimeout|setInterval|eval\(|new Function|Date\.|navigator|clipboard|fetch\(/.test(
+      component,
+    ),
+    "the component has no HTML sink, link, style, timer or other call",
+  );
+  assert.deepEqual(
+    [...componentText.matchAll(/className="([^"]+)"/g)].map((m) => m[1]).sort(),
+    ["field-label", "field-note", "small-button", "task-file-refs"],
+  );
+  // The body component and the text picker are not touched by the feature.
+  const bodyText = read("src/TaskDetailBody.tsx");
+  assert.ok(!/TaskFileReferences|file-references|onFile|edit/.test(bodyText));
+  assert.deepEqual(importsOf(strip(bodyText)), ["react", "./markdown-safe"]);
+
+  // The board: one import, one element after the body and before the owner control, two optional props, the bridge unchanged.
+  const boardSource = read("src/TaskBoard.tsx");
+  const board = collapse(strip(boardSource));
+  assert.equal(
+    count(board, 'import TaskFileReferences from "./TaskFileReferences";'),
+    1,
+  );
+  assert.equal(count(board, "<TaskFileReferences"), 1);
+  assert.ok(
+    board.includes(
+      "{!create && detail && onFile && root && ( <TaskFileReferences detail={detail} connection={connection} root={root} onFile={onFile} /> )}",
+    ),
+  );
+  assert.equal(count(board, "root?: string;"), 1);
+  assert.equal(
+    count(board, "onFile?: (path: string, line?: number) => void;"),
+    1,
+  );
+  assert.ok(
+    board.indexOf("</TaskDetailBody>") < board.indexOf("<TaskFileReferences") &&
+      board.indexOf("<TaskFileReferences") < board.indexOf("OWNER"),
+  );
+  assert.deepEqual(
+    [...strip(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g)]
+      .map((m) => m[1])
+      .sort(),
+    ["queue", "rigAction", "rigAction", "sendMessage"],
+  );
+  assert.equal(count(boardSource, "style="), 0);
+  assert.equal(count(boardSource, "className={"), 0);
+
+  // The app: the queue panel gets its folder and the same handler a terminal gets.
+  const app = collapse(strip(read("src/App.tsx")));
+  assert.equal(count(app, "<TaskBoard"), 1);
+  const element = app.slice(
+    app.indexOf("<TaskBoard"),
+    app.indexOf("/>", app.indexOf("<TaskBoard")),
+  );
+  assert.equal(count(element, "root={config.root}"), 1);
+  assert.equal(
+    count(
+      element,
+      "onFile={(path, line) => openFile(path, false, line, config)}",
+    ),
+    1,
+  );
+
+  // The stylesheet: one block after the Task details block and before the output counter rule, two rules, no colour of its own.
+  const css = read("src/styles.css");
+  const end = css.indexOf("/* end of Task details */");
+  const at = css.indexOf("/* Task details: the files a task mentions");
+  const next = css.indexOf("/* Output counter");
+  assert.ok(end >= 0 && at > end && next > at);
+  const block = css.slice(at, next);
+  assert.deepEqual(
+    [...block.matchAll(/^(\.[^{]+) \{/gm)].map((m) => m[1]),
+    [".task-file-refs", ".task-file-refs .small-button"],
+  );
+  assert.ok(
+    !/@import|url\(|expression\(|content:|!important|#[0-9a-f]{3,8}\b/i.test(
+      block,
+    ),
+  );
+
+  // Nothing else knows the feature: not the settings, the types, the shortcuts, the terminal, the main process or any other component.
+  const users = fs
+    .readdirSync(path.join(repo, "src"))
+    .filter((f) => /\.tsx?$/.test(f) && f !== "file-references.ts")
+    .filter((f) => read("src/" + f).includes("file-references"))
+    .sort();
+  assert.deepEqual(users, ["TaskFileReferences.tsx"]);
+  const boards = fs
+    .readdirSync(path.join(repo, "src"))
+    .filter((f) => /\.tsx?$/.test(f) && f !== "TaskFileReferences.tsx")
+    .filter((f) => read("src/" + f).includes("TaskFileReferences"))
+    .sort();
+  assert.deepEqual(boards, ["TaskBoard.tsx"]);
+  for (const file of [
+    "src/settings.ts",
+    "src/types.ts",
+    "src/shortcuts.ts",
+    "src/SettingsPage.tsx",
+    "src/TerminalPanel.tsx",
+    "src/terminal-path-links.ts",
+    "src/markdown-safe.ts",
+    "src/EditorPanel.tsx",
+    ...fs
+      .readdirSync(path.join(repo, "electron"))
+      .filter((f) => /\.(cjs|mjs|js)$/.test(f))
+      .map((f) => "electron/" + f),
+  ])
+    assert.ok(
+      !/file-references|fileReferences|TaskFileReferences/.test(read(file)),
+      file,
+    );
+});
+
+test("file-references docs: TASKS.md has one Files mentioned in a task section ahead of Keyboard navigation that says what is listed, what a click does, what is left out and that task links stay unclickable; TERMINALS.md points to it", () => {
+  const doc = read("TASKS.md");
+  assert.ok(plainAscii(doc), "plain ASCII");
+  const heading = "\n### Files mentioned in a task\n";
+  assert.equal(count(doc, heading), 1);
+  // The level 2 structure other pages pin is unchanged.
+  assert.equal(count(doc, "\n## "), 2);
+  assert.equal(count(doc, "\n## Task details\n"), 1);
+  const at = doc.indexOf(heading);
+  assert.ok(at > doc.indexOf("\n### Creating a task from a selection\n"));
+  assert.ok(at < doc.indexOf("\n### Keyboard navigation\n"));
+  assert.ok(at < doc.indexOf("\n## Task details\n"));
+  const next = doc.indexOf("\n### ", at + 1);
+  assert.ok(next > at && next < doc.indexOf("\n## "));
+  const section = doc.slice(at + 1, next);
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 3);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line each");
+  const flat = collapse(section);
+  for (const part of [
+    "a FILES MENTIONED list shows the files the text refers to, as buttons",
+    "the first of the body, bodyPreview and summary fields that holds text",
+    "only its first " +
+      lib.MAX_SCAN_CHARS.toLocaleString("en-US") +
+      " characters",
+    "lists at most " + lib.MAX_REFS + " files",
+    "`src/App.tsx`",
+    "`:12`, `:12:5`, `(12,5)` or `#L12`",
+    "the same file at two different lines is listed twice and a repeat is listed once",
+    "cut from the left to " + lib.MAX_LABEL_CHARS + " characters",
+    "its tooltip holds the whole path",
+    "a task that mentions no file shows no list",
+    "a version number such as 1.2.3",
+    "Clicking a button opens that file in the editor, scrolled to the line, the same way clicking a path in a terminal does",
+    "HRig first reads the file in the project folder of the Task queue panel, with the same read the editor uses",
+    "the reason is shown in a line under the list",
+    "and nothing opens",
+    "Nothing opens until you click",
+    "nothing is sent to OpenRig or to a seat, no task is changed",
+    "Only paths inside that project folder are listed.",
+    "relative to it, or absolute and under it",
+    "a path with a `..` part, a web address, `~`",
+    "Control, zero-width and direction-changing characters are removed",
+    "a link written in the text of a task still cannot be clicked",
+    "HRig does not look for the file in other projects or on other hosts",
+  ])
+    assert.ok(flat.includes(part), "docs say: " + part);
+  // The sentence the Task details section pins is still there, once.
+  assert.equal(
+    count(
+      collapse(doc),
+      "cannot be clicked, so HRig never opens anything from a task",
+    ),
+    1,
+  );
+  // The claims match the code.
+  assert.equal(lib.MAX_SCAN_CHARS.toLocaleString("en-US"), "20,000");
+  assert.equal(lib.MAX_REFS, 10);
+  assert.equal(lib.MAX_LABEL_CHARS, 80);
+
+  // The terminal page names the difference in the paragraph about path links, on the same line as before.
+  const lines = read("TERMINALS.md").split("\n");
+  const links = lines.filter((l) =>
+    l.startsWith("HTTP/HTTPS links require native confirmation"),
+  );
+  assert.equal(links.length, 1);
+  assert.ok(
+    links[0].includes(
+      "A file path written in the text of a queue item is not a terminal link: the task details dialog lists it as a button in its FILES MENTIONED list and opens it the same way",
+    ),
+  );
+  assert.ok(links[0].endsWith("(the task board notes describe it)."));
+  assert.equal(count(read("TERMINALS.md"), "FILES MENTIONED"), 1);
+});
