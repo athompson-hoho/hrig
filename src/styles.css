@@ -823,6 +823,23 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--color-394b3f);
 }
+.editor-panel .external-change > span {
+  min-width: 0;
+  flex-basis: 180px;
+  overflow-wrap: anywhere;
+}
+.editor-panel .editor-notice {
+  overflow-wrap: anywhere;
+}
+.editor-panel .external-change > button,
+.editor-reload-actions > button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.editor-reload-actions {
+  flex-wrap: wrap;
+}
 .task-board {
   display: flex;
   gap: 12px;

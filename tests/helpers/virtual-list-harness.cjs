@@ -72,6 +72,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
     }).outputText;
     vm.runInNewContext(compiled, {
+      ...options.globals,
       exports, document, ResizeObserver,
       // Timers stay inert; synthetic consumers never poll real hosts.
       setInterval(fn, delay) { const id = ++timerSerial; intervals.set(id, { fn, delay }); return id; },
@@ -83,6 +84,12 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       window: { hrig: options.api || {},
         addEventListener(name, fn) { if (!listeners.has(name)) listeners.set(name, new Set()); listeners.get(name).add(fn); },
         removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
+        ...(options.windowEvents ? {
+          dispatchEvent(event) {
+            for (const fn of [...(listeners.get(event.type) || [])]) fn(event);
+            return !event.defaultPrevented;
+          },
+        } : {}),
       },
       require(id) {
         if (Object.hasOwn(options.imports || {}, id)) return options.imports[id]();
@@ -172,6 +179,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
           if (typeof node.ref === 'function') node.ref(null); else if (node.ref) node.ref.current = null;
           dom.delete(key);
         }
+        // Optional observation before effect cleanup/setup, for owner hiding checks.
+        options.onRender?.(tree);
       }
       while (pending.length) pending.shift()();
     }
