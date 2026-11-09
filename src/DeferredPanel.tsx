@@ -2,15 +2,17 @@ import { useEffect, useRef, useState, type ComponentProps, type ComponentType } 
 import type { TabNode } from "flexlayout-react";
 import { ErrorBox, Loading } from "./components";
 import type EditorPanel from "./EditorPanel";
+import type SettingsPage from "./SettingsPage";
 
 type EditorProps = ComponentProps<typeof EditorPanel>;
+type SettingsProps = ComponentProps<typeof SettingsPage>;
 // Successful modules and concurrent imports are shared; failures are never cached.
-function editorLoader() {
-  let ready: { default: ComponentType<EditorProps> } | undefined;
-  let pending: Promise<{ default: ComponentType<EditorProps> }> | undefined;
+function sharedLoader<P extends object>(load: () => Promise<{ default: ComponentType<P> }>) {
+  let ready: { default: ComponentType<P> } | undefined;
+  let pending: Promise<{ default: ComponentType<P> }> | undefined;
   return () => {
     if (ready) return Promise.resolve(ready);
-    if (!pending) pending = import("./EditorPanel").then(module => {
+    if (!pending) pending = load().then(module => {
       ready = module;
       pending = undefined;
       return module;
@@ -21,12 +23,29 @@ function editorLoader() {
     return pending;
   };
 }
-const loadEditor = editorLoader();
-export const optionalPanelLoaders = { editor: loadEditor, diff: loadEditor };
+const loadEditor = sharedLoader(() => import("./EditorPanel"));
+const loadSettings = sharedLoader(() => import("./SettingsPage"));
+export const optionalPanelLoaders = { editor: loadEditor, diff: loadEditor, settings: loadSettings };
 
-export default function DeferredPanel({ node, panelProps }: { node: TabNode; panelProps: EditorProps }) {
-  const loader = optionalPanelLoaders[node.getComponent() as keyof typeof optionalPanelLoaders];
-  const [state, setState] = useState<{ Component?: ComponentType<EditorProps>; failed: boolean }>({ failed: false });
+export default function DeferredPanel({ node, panelProps }: { node: TabNode; panelProps: EditorProps | SettingsProps }) {
+  // The prop shape selects the matching typed loader; App supplies the existing
+  // project prop for Settings and the existing editor callbacks for editor/diff.
+  if ("project" in panelProps)
+    return <DeferredContent node={node} panelProps={panelProps} loader={loadSettings} settings />;
+  return <DeferredContent node={node} panelProps={panelProps} loader={loadEditor} />;
+}
+
+function DeferredContent<P extends object>({ node, panelProps, loader, settings = false }: {
+  node: TabNode;
+  panelProps: P;
+  loader: () => Promise<{ default: ComponentType<P> }>;
+  settings?: boolean;
+}) {
+  const loadingText = settings ? "Opening settings…" : "Opening editor…";
+  const errorText = settings
+    ? "Could not open settings. Select Retry to try again."
+    : "Could not open the editor. Select Retry to try again.";
+  const [state, setState] = useState<{ Component?: ComponentType<P>; failed: boolean }>({ failed: false });
   const [visible, setVisible] = useState(() => node.isVisible());
   const active = useRef(false);
   const attempt = useRef(0);
@@ -71,7 +90,7 @@ export default function DeferredPanel({ node, panelProps }: { node: TabNode; pan
       {state.failed ? (
         <>
           <div role={visible ? "alert" : undefined}>
-            <ErrorBox error="Could not open the editor. Select Retry to try again." />
+            <ErrorBox error={errorText} />
           </div>
           <button type="button" className="small-button" ref={retry} onClick={() => {
             if (!node.isVisible()) return;
@@ -86,8 +105,8 @@ export default function DeferredPanel({ node, panelProps }: { node: TabNode; pan
         </>
       ) : (
         <div role={visible ? "status" : undefined} aria-live={visible ? "polite" : "off"} aria-atomic="true">
-          <div aria-hidden="true"><Loading text="Opening editor…" /></div>
-          <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}>Opening editor…</span>
+          <div aria-hidden="true"><Loading text={loadingText} /></div>
+          <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}>{loadingText}</span>
         </div>
       )}
     </div>

@@ -134,6 +134,9 @@ for (const route of ['active', 'action', 'no-tabset']) test(`actual addPanel ${r
   const model = route === 'no-tabset'
     ? Model.fromJson({ layout: { type: 'row', children: [] }, global: { tabEnableRenderOnDemand: false } })
     : policy.restoreModel(fixture());
+  // Flexlayout inserts an empty tabset itself. Inject only the absent-tabset
+  // lookup to reach App's fallback; the callback and fallback Model stay real.
+  if (route === 'no-tabset') model.getFirstTabSet = () => undefined;
   const handed = [], selected = [];
   callback('addPanel', { model, Actions, DockLocation, uid: () => 'fixture-id', root: '.',
     connection: { id: 'synthetic', name: 'Fixture' }, history: { current: {} },

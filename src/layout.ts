@@ -61,6 +61,7 @@ export function restoreModel(json?: IJsonModel) {
 }
 export function arrangement(tabs: IJsonTabNode[], preset: string): Model {
   if (!tabs.length) return initialModel();
+  tabs = tabs.map(normalizeOptionalTab);
   const tabset = (children: IJsonTabNode[], weight = 100, selected = 0) => ({
     type: "tabset" as const,
     weight,

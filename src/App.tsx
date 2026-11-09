@@ -66,6 +66,8 @@ import {
   restoreModel,
   roleSnapshot,
   instantiateRoles,
+  normalizeOptionalPanels,
+  normalizeOptionalTab,
 } from "./layout";
 import {
   Empty,
@@ -78,7 +80,6 @@ import {
 import Sidebar from "./Sidebar";
 import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
 import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
-import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
 import {
   safeOverrides,
@@ -706,7 +707,7 @@ export default function App() {
     const json = from.pop();
     if (!json) return;
     to.push(model.toJson());
-    const next = Model.fromJson(json, model);
+    const next = Model.fromJson(normalizeOptionalPanels(json), model);
     setModel(next);
     modelChanged(next);
   };
@@ -883,13 +884,13 @@ export default function App() {
       modelChanged(model);
       return;
     }
-    const tab: IJsonTabNode = {
+    const tab: IJsonTabNode = normalizeOptionalTab({
       type: "tab",
       id: id || uid(),
       name,
       component,
       config: { connection: { ...connection }, root, ...config },
-    };
+    });
     history.current = { past: [], future: [] };
     if (!layout.current?.addTabToActiveTabSet(tab)) {
       const first = model.getFirstTabSet();
@@ -1321,7 +1322,7 @@ export default function App() {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
       case "settings":
-        return <SettingsPage project={connection.name + " / " + root} />;
+        return <DeferredPanel node={node} panelProps={{ project: connection.name + " / " + root }} />;
       case "terminal":
         return (
           <TerminalPanel
