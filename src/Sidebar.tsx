@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
-import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { formatAge } from "./inventory-health";
+import { connectionStatus } from "./connection-status";
 import { seatActivityAge } from "./seat-activity-age";
 import { seatWorkSummary } from "./seat-work";
 import { filterSeats } from "./seat-search";
@@ -154,6 +155,12 @@ export default function Sidebar({
   const selectOnly = effective["rig.seatClick"] === "select";
   const activityClock = Date.now(); // reader clock; refreshed by existing inventory rerenders, no timer
   const ageCurrent = !inventoryError && pinsAvailable;
+  const connState = connectionStatus({
+    error: inventoryError,
+    hasInventory: !!inventory,
+    busy,
+    local: connection.kind === "local",
+  });
   const renderSeat = (s: Seat) => {
     const age = seatActivityAge(s.lastActivityAt, activityClock, ageCurrent);
     const work = seatWorkSummary(s.assignedWork, s.pendingWork, ageCurrent);
@@ -465,13 +472,13 @@ export default function Sidebar({
             <span className="count">{seats.length}</span>
           </div>
           <div className="sidebar-scroll sidebar-session-container">
-            {inventoryError === CHECKING_SNAPSHOT && inventory && (
+            {connState.banner === "refreshing" && inventory && (
               <div className="sidebar-empty" role="status">
                 Refreshing · showing the last known snapshot… Last updated{" "}
                 <InventoryAge sampledAt={inventory.sampledAt} />.
               </div>
             )}
-            {inventoryError && inventoryError !== CHECKING_SNAPSHOT && inventory && (
+            {connState.banner === "stale" && inventory && (
               <div className="error-box" role="status">
                 Stale inventory · last updated{" "}
                 <InventoryAge sampledAt={inventory.sampledAt} />. {inventoryError}{" "}

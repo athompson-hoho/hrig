@@ -137,6 +137,7 @@ import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import DeferredPanel from "./DeferredPanel";
 import PanelBoundary from "./PanelBoundary";
+import { connectionStatus } from "./connection-status";
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
   DoctorPanel,
@@ -2274,28 +2275,20 @@ export default function App() {
                 <span className="current-rig">
                   {currentRig?.name || "Workspace"}
                 </span>
-                <span
-                  className={`connection-state ${inventoryError && inventoryError !== CHECKING_SNAPSHOT ? "error" : ""}`}
-                >
-                  <StatusDot
-                    status={
-                      busy && !inventory
-                        ? "unknown"
-                        : connection.kind === "local" || inventory
-                          ? "running"
-                          : "unknown"
-                    }
-                  />
-                  {busy && !inventory
-                    ? "Connecting"
-                    : inventoryError && inventoryError !== CHECKING_SNAPSHOT
-                      ? "Unavailable"
-                      : connection.kind === "local"
-                        ? "Local"
-                        : inventory
-                          ? "Connected"
-                          : "Ready"}
-                </span>
+                {(() => {
+                  const status = connectionStatus({
+                    error: inventoryError,
+                    hasInventory: !!inventory,
+                    busy,
+                    local: connection.kind === "local",
+                  });
+                  return (
+                    <span className={`connection-state ${status.error ? "error" : ""}`}>
+                      <StatusDot status={status.dot} />
+                      {status.label}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="workspace-actions">
                 <IconButton
