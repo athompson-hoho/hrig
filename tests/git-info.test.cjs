@@ -46,3 +46,15 @@ test('pure metadata rejects missing unsafe control-bearing and contradictory env
   for (const input of invalid) assert.deepEqual(plain(project(input)), { state: 'unavailable' });
   assert.equal(project({ ...known, comparison: 'unknown', upstream: undefined, ahead: undefined, behind: undefined }).comparison, 'unknown');
 });
+
+test('pure unsupported reason is closed and completed snapshot copy is explicitly not live', () => {
+  const value = { state: 'unavailable', root: '/canonical', reason: 'unsupported-git' };
+  assert.deepEqual(plain(project(value)), value);
+  const copy = describe(project(value));
+  assert.equal(copy.summary, 'Git unsupported');
+  assert.match(copy.detail, /Git on this host does not support the required metadata commands\./);
+  for (const result of [known, value, { state: 'not-repository', root: '/canonical' }]) {
+    assert.ok(describe(project(result)).detail.includes('Snapshot, not live. Terminal checkouts or commits need Refresh files.'));
+  }
+  for (const extra of [{ reason: 'PRIVATE_CANARY' }, { branch: 'topic' }, { ahead: 0 }, { head: 'attached' }]) assert.deepEqual(plain(project({ ...value, ...extra })), { state: 'unavailable' });
+});

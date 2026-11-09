@@ -133,3 +133,14 @@ if (require.main === module) {
     view.unmount();
   });
 }
+
+if (require.main === module) require('node:test').test('actual core unsupported command reaches actual App fixed explanation and manual snapshot name', async t => {
+  const h = metadataCore(args => args[0] === 'symbolic-ref' ? { code: 129, stderr: 'usage: unsupported PRIVATE_CANARY' } : undefined);
+  await ordinaryRead(h);
+  const v = mountGitInfoApp({ connection: h.connection, file: (owner, request) => h.core.fileOperation(owner, request) });
+  t.after(() => v.unmount()); v.event(v.sourceButton(), 'onClick');
+  assert.deepEqual(v.events.splice(0), [['section', 'changes'], ['sidebar', true]]);
+  await v.settle(); assert.equal(v.text(v.sourceButton()), 'Git unsupported');
+  assert.ok(v.sourceButton().props.title.includes('Snapshot, not live. Terminal checkouts or commits need Refresh files.'));
+  assert.doesNotMatch(v.sourceButton().props.title, /PRIVATE_CANARY|usage:/);
+});

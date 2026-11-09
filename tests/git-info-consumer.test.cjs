@@ -99,3 +99,15 @@ test('actual GitInfo finite states safe full text navigation and fresh error rec
   assert.equal(v.summary(), 'topic ↑3 ↓1'); const count = v.requests.length;
   v.update({ connection: { ...base } }); await v.settle(); assert.equal(v.requests.length, count); safe(v);
 });
+
+test('actual consumer rejects stale unsupported and exposes fresh fixed nonlive meaning', async t => {
+  const v = mount(); t.after(() => v.unmount()); await v.settle();
+  v.update({ revision: 1 }); await v.settle();
+  v.pending[0].resolve({ state: 'unavailable', root: '/canonical', reason: 'unsupported-git' }); await v.settle();
+  assert.equal(v.summary(), 'Checking Git…');
+  v.pending[1].resolve({ state: 'unavailable', root: '/canonical', reason: 'unsupported-git' }); await v.settle();
+  assert.equal(v.summary(), 'Git unsupported');
+  assert.ok(v.button().props['aria-label'].includes('Snapshot, not live. Terminal checkouts or commits need Refresh files.'));
+  assert.equal(v.button().props.title, v.button().props['aria-label']); safe(v);
+  v.event(v.button(), 'onClick'); assert.deepEqual(v.actions.splice(0), ['open']);
+});

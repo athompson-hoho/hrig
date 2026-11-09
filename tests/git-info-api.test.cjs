@@ -139,14 +139,14 @@ print(json.dumps(dict(value=json.loads(out.getvalue()),calls=calls)))
 
 // One independently authored command transcript feeds both actual implementations.
 // It permits no filesystem, status scan, shell command, or host environment read.
-function pythonTranscript(script, root) {
+function pythonTranscript(script, root, legacy = false) {
   const ts = require('typescript');
   const ast = ts.createSourceFile('core.cjs', fs.readFileSync('electron/core.cjs', 'utf8'), ts.ScriptTarget.Latest, true);
   let source;
   const visit = n => { if (ts.isVariableDeclaration(n) && n.name.getText(ast) === 'PYTHON_FILES') source = vm.runInNewContext(n.initializer.getText(ast)); ts.forEachChild(n, visit); };
   visit(ast);
   const runner = `import sys,json,types,io,contextlib
-source,script,root=json.loads(sys.argv[1])
+source,script,root,legacy=json.loads(sys.argv[1])
 calls=[]
 fakeos=types.ModuleType('os');fakeos.environ={}
 fakeos.path=types.SimpleNamespace(realpath=lambda p:root,expanduser=lambda p:p,join=lambda *p:root,commonpath=lambda p:root)
@@ -154,7 +154,9 @@ sub=types.ModuleType('subprocess')
 def run(argv,**kw):
  assert argv[:3]==['git','-C',root]
  assert kw==dict(capture_output=True,env=dict(LC_ALL='C',GIT_OPTIONAL_LOCKS='0'))
- args=argv[3:];entry=script[len(calls)];calls.append(args)
+ args=argv[3:]
+ if legacy and ('--end-of-options' in args or '--exists' in args): return types.SimpleNamespace(returncode=129,stdout=b'',stderr=b'usage: git: unknown option')
+ entry=script[len(calls)];calls.append(args)
  assert args==entry['args'],(args,entry)
  if entry.get('missing'): raise FileNotFoundError()
  return types.SimpleNamespace(returncode=entry.get('code',0),stdout=entry.get('stdout','').encode(),stderr=entry.get('stderr','').encode())
@@ -169,7 +171,7 @@ except Exception as e: error=str(e)
 if not error: value=json.loads(out.getvalue())
 print(json.dumps(dict(value=value,error=error,calls=calls)))
 `;
-  const result = require('node:child_process').spawnSync('python3', ['-c', runner, JSON.stringify([source, script, root])], { encoding: 'utf8', timeout: 5000 });
+  const result = require('node:child_process').spawnSync('python3', ['-c', runner, JSON.stringify([source, script, root, legacy])], { encoding: 'utf8', timeout: 5000 });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout);
 }
@@ -222,10 +224,40 @@ for (const [name, script, expected] of matrices) test(`actual local and Python m
   const python = pythonTranscript(script, root);
   assert.equal(cursor, script.length); assert.equal(python.calls.length, script.length); assert.ok(cursor <= 10);
   if (expected) {
-    assert.deepEqual(JSON.parse(JSON.stringify(local.value)), { ...expected, root });
+    assert.deepEqual(local.value === undefined ? undefined : JSON.parse(JSON.stringify(local.value)), { ...expected, root });
     assert.deepEqual(python.value, { ...expected, root });
   } else {
     assert.ok(local.error, 'local failure cannot become metadata');
     assert.equal(python.error, 'Git information is unavailable.');
   }
+});
+
+for (const [name, original, expected] of [
+  ['attached', [inside, ...attached, count, ...attached], { ...repo, comparison: 'known', upstream: 'refs/remotes/origin/topic', ahead: 3, behind: 1 }],
+  ['zero', [inside, ...attached, { ...count, stdout: '0\t0\n' }, ...attached], { ...repo, comparison: 'known', upstream: 'refs/remotes/origin/topic', ahead: 0, behind: 0 }],
+  ['unborn', [inside, ...unborn, ...unborn], { state: 'repository', head: 'unborn', branch: 'topic', comparison: 'none' }],
+]) test(`legacy host actual local and Python supports ${name} without newer flags`, async () => {
+  const root = '/legacy canonical';
+  const script = original.map(step => ({ ...step, args: step.args[0] === 'show-ref' ? ['show-ref', '--verify', '--quiet', 'refs/heads/topic'] : step.args.filter(a => a !== '--end-of-options'), ...(step.args[0] === 'show-ref' ? { code: 1 } : {}) }));
+  let cursor = 0;
+  const h = metadataCore(args => {
+    if (args.includes('--end-of-options') || args.includes('--exists')) return { code: 129, stderr: 'usage: git: unknown option' };
+    const step = script[cursor++]; assert.deepEqual(args, step.args); return step;
+  }, root);
+  await ordinaryRead(h);
+  const local = await h.core.fileOperation(h.connection, { op: 'gitInfo', root: '/synthetic-alias' }).then(value => ({ value }), error => ({ error: error.message }));
+  const python = pythonTranscript(script, root, true);
+  assert.deepEqual(local.value === undefined ? undefined : JSON.parse(JSON.stringify(local.value)), { ...expected, root }, 'supported legacy commands must yield actual local metadata');
+  assert.deepEqual(python.value, { ...expected, root }, 'actual Python legacy metadata must succeed');
+  assert.equal(cursor, script.length);
+});
+test('actual local and Python required command usage returns closed unsupported reason', async () => {
+  const root = '/unsupported canonical', script = [inside, { ...sym, code: 129, stdout: '', stderr: 'usage: git symbolic-ref: unsupported option PRIVATE_CANARY' }];
+  let i = 0; const h = metadataCore(args => { const step = script[i++]; assert.deepEqual(args, step.args); return step; }, root);
+  await ordinaryRead(h);
+  const local = await h.core.fileOperation(h.connection, { op: 'gitInfo', root: '/synthetic-alias' }).then(value => ({ value }), error => ({ error: error.message }));
+  const python = pythonTranscript(script, root);
+  const expected = { state: 'unavailable', root, reason: 'unsupported-git' };
+  assert.deepEqual(local.value === undefined ? undefined : JSON.parse(JSON.stringify(local.value)), expected, 'unsupported required command needs fixed explicit reason');
+  assert.deepEqual(python.value, expected);
 });
