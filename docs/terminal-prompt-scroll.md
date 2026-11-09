@@ -31,7 +31,7 @@ A reliable answer to "where is the prompt" has to come from the shell. The conve
 ## Options, in order of preference
 
 1. Read OSC 133 (A, B, C and D) when the person's shell already emits it, with `term.parser.registerOscHandler(133, ...)` and a marker per prompt start. No injection, nothing sent to the shell. It works only where the marks are printed (some prompt tools and shells can be set to; which ones, and how, was not verified here).
-2. A user-initiated snippet that inserts, never runs, a documented prompt-hook line for the person to read, adapt and add to their own shell configuration. It reuses the reviewed insert channel (`sendTerminalCommand` in `src/terminal-commands.ts`, no Enter). It is per shell (bash, zsh, fish, PowerShell, none for Command Prompt), HRig cannot know which shell is running, and a wrong line is harmful, so this needs shell-specific text and a warning.
+2. A user-initiated snippet that inserts, never runs, a documented prompt-hook line for the person to read, adapt and add to their own shell configuration. It reuses the reviewed insert channel (`sendTerminalCommand` in `src/terminal-commands.ts`, no Enter). It is per shell (bash, zsh, fish, PowerShell; Command Prompt was not examined), HRig cannot know which shell is running, and a wrong line is harmful, so this needs shell-specific text and a warning.
 3. A regex on the prompt line. Rejected for the reasons above.
 4. Manual marks, which exist (Mark view).
 

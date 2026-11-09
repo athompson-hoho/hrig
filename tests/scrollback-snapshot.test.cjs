@@ -97,6 +97,13 @@ test("CRLF counts as one line break and the pair is never split", () => {
   assert.ok(!cut.text.startsWith("\n"));
   assert.ok(bytes(cut.text) <= 3);
   assert.equal(cut.truncated, true);
+  // The cut may land between CR and LF: the pair is kept whole or dropped whole.
+  const one = boundSnapshot("abc\r\n", { ...big, maxBytes: 1 });
+  assert.equal(one.text, "");
+  assert.equal(one.truncated, true);
+  const two = boundSnapshot("abc\r\n", { ...big, maxBytes: 2 });
+  assert.equal(two.text, "\r\n");
+  assert.equal(two.truncated, true);
 });
 
 test("multi-byte text is counted in UTF-8 bytes, not characters", () => {
