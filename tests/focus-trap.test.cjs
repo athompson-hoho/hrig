@@ -632,3 +632,171 @@ test("focus-trap rings: the global ring lists summary, links, tabindex 0 and rol
     "the mouse path still stops the click from restoring the layout",
   );
 });
+
+// ---- the other overlays: one attribute each, nothing else ----
+
+test("focus-trap overlays: the terminal menu gained its label and the panel list its status role, the other menus and dialogs keep what they had, and nothing beyond those two attributes changed", () => {
+  const tools = collapse(read("src/TerminalTools.tsx"));
+  assert.equal(
+    count(
+      tools,
+      '<div className="dropdown terminal-context-menu" role="menu" aria-label="Terminal" style={{',
+    ),
+    1,
+  );
+  assert.equal(count(tools, 'role="menu"'), 1);
+  assert.equal(count(tools, 'role="menuitem"'), 9);
+
+  // The panel tab menu already had its label; the navigator now announces its count like Quick Open does.
+  const panelMenu = collapse(read("src/PanelContextMenu.tsx"));
+  assert.equal(count(panelMenu, 'role="menu" aria-label="Panel"'), 1);
+  const navigator = collapse(read("src/PanelNavigator.tsx"));
+  assert.equal(
+    count(navigator, '<div className="navigation-status" role="status">'),
+    1,
+  );
+  assert.equal(count(navigator, 'role="listbox"'), 1);
+  assert.equal(count(navigator, 'aria-label="Open workspace panels"'), 1);
+  const quick = collapse(read("src/QuickOpen.tsx"));
+  assert.equal(
+    count(quick, '<div className="navigation-status" role="status">'),
+    1,
+  );
+
+  // Dialogs: the shared one is a modal dialog named by its title; the update restart screen is an alert dialog.
+  const components = collapse(read("src/components.tsx"));
+  assert.equal(
+    count(components, 'role="dialog" aria-modal="true" aria-label={title}'),
+    1,
+  );
+  const app = collapse(read("src/App.tsx"));
+  assert.equal(
+    count(
+      app,
+      'role="alertdialog" aria-modal="true" aria-label="Installing update"',
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      collapse(read("src/AccountStatus.tsx")),
+      'role="dialog" aria-label="Available accounts"',
+    ),
+    1,
+  );
+});
+
+// ---- the wiring: one pure module, one reader, the rest of the dialog as it was ----
+
+test("focus-trap wiring: the module is plain ASCII, pure, has no import and the exact exports; only the shared dialog uses it, and the dialog keeps its Escape, first focus, restore and dependency list", () => {
+  const raw = read("src/focus-trap.ts");
+  assert.ok(/^[\t\n\r -~]*$/.test(raw), "printable ASCII");
+  const code = raw
+    .split("\n")
+    .filter((line) => !/^\s*(\/\*\*|\*|\/\/)/.test(line))
+    .join("\n");
+  assert.equal(count(code, " from "), 0, "no import");
+  assert.ok(!/^\s*import\b/m.test(code), "no import");
+  assert.ok(
+    !/\b(window|document|fetch|process|require|localStorage|sessionStorage|navigator|setTimeout|setInterval|console)\b|Date\.now|new Date|Math\.random|innerHTML/.test(
+      code,
+    ),
+    "no page, storage, clock, timer or network use",
+  );
+  assert.deepEqual(
+    raw.split("\n").filter((line) => line.startsWith("export ")),
+    [
+      "export interface FocusCandidate {",
+      "export function isFocusable(candidate: FocusCandidate): boolean {",
+      "export function nextFocusIndex(",
+    ],
+  );
+  // A doc comment sits directly above every export.
+  const lines = raw.split("\n");
+  lines.forEach((line, i) => {
+    if (line.startsWith("export ")) {
+      const above = lines[i - 1];
+      assert.ok(
+        above.trimStart().startsWith("/**") || above.trim() === "*/",
+        "doc comment above " + line,
+      );
+    }
+  });
+
+  // Only the shared dialog knows the module.
+  const users = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((name) => /\.(ts|tsx)$/.test(name))
+    .filter((name) => /focus-trap/.test(read("src/" + name)))
+    .sort();
+  assert.deepEqual(users, ["components.tsx"]);
+  const components = read("src/components.tsx");
+  assert.equal(
+    count(
+      components,
+      'import { isFocusable, nextFocusIndex, type FocusCandidate } from "./focus-trap";',
+    ),
+    1,
+  );
+  assert.equal(count(components, "isFocusable("), 1);
+  assert.equal(count(components, "nextFocusIndex("), 1);
+  assert.equal(count(components, "querySelectorAll"), 1);
+  assert.equal(
+    count(
+      components,
+      'const TABBABLE = "button,input,select,textarea,summary,a[href],[tabindex]";',
+    ),
+    1,
+  );
+  assert.equal(count(components, 'disabled: el.matches(":disabled"),'), 1);
+  assert.equal(
+    count(components, "hidden: el.hidden || el.offsetParent === null,"),
+    1,
+  );
+
+  // What did not change in the dialog, character for character.
+  for (const piece of [
+    'if (event.key === "Escape") {\n        event.stopPropagation();\n        closeRef.current();\n      }',
+    'ref.current?.querySelector<HTMLElement>("input,select,textarea") ||\n      ref.current?.querySelector<HTMLElement>("button")',
+    'window.addEventListener("keydown", handler);',
+    'window.removeEventListener("keydown", handler);',
+    "// Respect a destination that an action already focused outside this dialog.",
+    "if (!active || active === document.body || dialog?.contains(active)) previous?.focus();",
+    "}, [title]);",
+    'role="dialog"\n        aria-modal="true"\n        aria-label={title}',
+  ])
+    assert.equal(count(components, piece), 1, piece);
+});
+
+// ---- the docs ----
+
+test("focus-trap docs: NAVIGATION.md has one Accessibility paragraph after the last project one that says what the rings, the dialog Tab trap and the announcements do, keeps its byte order mark, ASCII and single final line feed, and leaves the paragraph before it untouched", () => {
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark stays");
+  const nav = raw.slice(1);
+  assert.ok(/^[\t\n -~]*$/.test(nav), "plain ASCII");
+  assert.ok(nav.endsWith(".\n") && !nav.endsWith("\n\n"));
+  const lines = nav.split("\n");
+  const mine = lines.filter((line) => line.startsWith("Accessibility: "));
+  assert.equal(mine.length, 1);
+  assert.equal(count(nav, "\nAccessibility: "), 1);
+  // It follows the Reopen the last project paragraph directly (a later note may follow it).
+  const at = lines.indexOf(mine[0]);
+  assert.equal(lines[at - 1], "");
+  assert.ok(lines[at - 2].startsWith("Reopen the last project: "));
+  for (const part of [
+    "keyboard focus ring (the mint outline, white in the High Contrast theme)",
+    "the arrow of an expandable section",
+    "the delete control of a saved layout in the Arrange menu",
+    "pressed with Enter or Space",
+    "Filter sessions box and the command center search box",
+    "Tab and Shift+Tab stay inside an open dialog",
+    "disabled and hidden controls are skipped",
+    "when focus was outside the dialog the next Tab moves it back in",
+    "announces an error box as an alert and a loading message as a status update",
+    "no setting or shortcut was added",
+  ])
+    assert.ok(mine[0].includes(part), "NAVIGATION.md says: " + part);
+  // The paragraph before it is the one the last project tests read.
+  assert.equal(count(nav, "\nReopen the last project: "), 1);
+});

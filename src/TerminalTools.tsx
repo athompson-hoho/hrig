@@ -332,6 +332,7 @@ export default function TerminalTools({
         <div
           className="dropdown terminal-context-menu"
           role="menu"
+          aria-label="Terminal"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
             top: Math.min(menu.y, window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0) - (historyItem ? HISTORY_ITEM_HEIGHT : 0)),

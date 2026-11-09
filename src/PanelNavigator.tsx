@@ -133,7 +133,7 @@ export default function PanelNavigator({
             {window.hrig.platform === "darwin" ? "Cmd Shift P" : "Ctrl Shift P"}
           </kbd>
         </label>
-        <div className="navigation-status">
+        <div className="navigation-status" role="status">
           {items.length} open {items.length === 1 ? "panel" : "panels"} ·{" "}
           {query ? "Best matches" : "Most recently used first"}
         </div>
