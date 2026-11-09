@@ -4,8 +4,6 @@ import {
   useEffect,
   useRef,
   useState,
-  lazy,
-  Suspense,
 } from "react";
 import { flushSync } from "react-dom";
 import { attentionScope, attentionJumpEligibility } from "./attention-inbox";
@@ -68,6 +66,8 @@ import {
   restoreModel,
   roleSnapshot,
   instantiateRoles,
+  normalizeOptionalPanels,
+  normalizeOptionalTab,
 } from "./layout";
 import {
   Empty,
@@ -80,7 +80,6 @@ import {
 import Sidebar from "./Sidebar";
 import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
 import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
-import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
 import {
   safeOverrides,
@@ -128,7 +127,7 @@ import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
-const EditorPanel = lazy(() => import("./EditorPanel"));
+import DeferredPanel from "./DeferredPanel";
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
   DoctorPanel,
@@ -708,7 +707,7 @@ export default function App() {
     const json = from.pop();
     if (!json) return;
     to.push(model.toJson());
-    const next = Model.fromJson(json, model);
+    const next = Model.fromJson(normalizeOptionalPanels(json), model);
     setModel(next);
     modelChanged(next);
   };
@@ -885,13 +884,13 @@ export default function App() {
       modelChanged(model);
       return;
     }
-    const tab: IJsonTabNode = {
+    const tab: IJsonTabNode = normalizeOptionalTab({
       type: "tab",
       id: id || uid(),
       name,
       component,
       config: { connection: { ...connection }, root, ...config },
-    };
+    });
     history.current = { past: [], future: [] };
     if (!layout.current?.addTabToActiveTabSet(tab)) {
       const first = model.getFirstTabSet();
@@ -1323,7 +1322,7 @@ export default function App() {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
       case "settings":
-        return <SettingsPage project={connection.name + " / " + root} />;
+        return <DeferredPanel node={node} panelProps={{ project: connection.name + " / " + root }} />;
       case "terminal":
         return (
           <TerminalPanel
@@ -1589,12 +1588,13 @@ export default function App() {
       case "editor":
       case "diff":
         return (
-          <Suspense fallback={<Loading text="Opening editor…" />}>
-            <EditorPanel
-              id={node.getId()}
-              config={config}
-              diff={node.getComponent() === "diff"}
-              onReady={(id) => {
+          <DeferredPanel
+            node={node}
+            panelProps={{
+              id: node.getId(),
+              config,
+              diff: node.getComponent() === "diff",
+              onReady: (id) => {
                 if (pendingFileFocus.current !== id) return false;
                 pendingFileFocus.current = null;
                 return (
@@ -1604,14 +1604,14 @@ export default function App() {
                     ?.getSelectedNode()
                     ?.getId() === id
                 );
-              }}
-              onDirty={markDirty}
-              onSaved={() => {
+              },
+              onDirty: markDirty,
+              onSaved: () => {
                 setFileRevision((n) => n + 1);
                 notify("File saved");
-              }}
-            />
-          </Suspense>
+              },
+            }}
+          />
         );
       case "queue":
         return (

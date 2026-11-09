@@ -2626,6 +2626,32 @@ button:hover {
 .error-box svg {
   margin-top: 2px;
 }
+.deferred-panel {
+  height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere;
+}
+.deferred-panel .panel-empty {
+  height: auto;
+}
+.deferred-panel .error-box {
+  max-height: none;
+  overflow: visible;
+}
+.deferred-panel .error-box span {
+  min-width: 0;
+}
+.deferred-panel .error-box svg {
+  flex-shrink: 0;
+}
+.deferred-panel > .small-button {
+  margin: 0 12px 12px;
+  max-width: calc(100% - 24px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .tool-panel {
   height: 100%;
   overflow: auto;

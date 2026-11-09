@@ -12,6 +12,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const observers = new Set(), pending = [];
   const intervals = new Map(), listeners = new Map(), animationFrames = new Map();
   let timerSerial = 0;
+  const observations = { stateUpdates: 0 };
   const document = { activeElement: null };
   let current, dirty = true, tree, props = initialProps, serial = 0;
   const element = (type, props, key) => ({ type, key, props: props || {} });
@@ -27,6 +28,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       const owner = current, i = owner.cursor++;
       if (!(i in owner.slots)) owner.slots[i] = typeof initial === 'function' ? initial() : initial;
       return [owner.slots[i], value => {
+        observations.stateUpdates++;
         const next = typeof value === 'function' ? value(owner.slots[i]) : value;
         if (!Object.is(next, owner.slots[i])) { owner.slots[i] = next; dirty = true; }
       }];
@@ -79,6 +81,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
         removeEventListener(name, fn) { listeners.get(name)?.delete(fn); },
       },
       require(id) {
+        if (Object.hasOwn(options.imports || {}, id)) return options.imports[id]();
+        if (Object.hasOwn(options.dependencies || {}, id)) return options.dependencies[id];
         if (id in dependencies) return dependencies[id];
         if (id.startsWith('.')) {
           const base = path.resolve(path.dirname(filename), id);
@@ -91,7 +95,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
     }, { filename });
     return exports;
   }
-  const Component = load(file)[exportName];
+  const Component = options.root ? options.root({ react, load }) : load(file)[exportName];
   function descendants(node) { return [node, ...(node.children || []).flatMap(descendants)]; }
   function render(value, location, parent, seenInstances, seenDom) {
     if (Array.isArray(value)) return value.flatMap((v, i) => render(v, `${location}/${v?.key ?? i}`, parent, seenInstances, seenDom));
@@ -119,6 +123,13 @@ function mountComponent(file, exportName, initialProps, options = {}) {
         contains(target) { return descendants(this).includes(target); },
         matches(selector) { return selector.includes('button') && this.type === 'button' && !this.props.disabled; },
         focus() { document.activeElement = this; },
+        ownerDocument: document,
+        closest(selector) {
+          for (let node = this; node; node = node.parentElement) {
+            if (selector.startsWith('.') && node.props.className?.split(' ').includes(selector.slice(1))) return node;
+          }
+          return null;
+        },
         querySelectorAll(selector) {
           return descendants(this).slice(1).filter(n => n && typeof n === 'object' &&
             (selector.includes('button') ? n.type === 'button' && !n.props.disabled : false));
@@ -164,7 +175,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const nodes = () => tree.flatMap(descendants).filter(n => typeof n === 'object');
   flush();
   return {
-    nodes, flush, document, observers, intervals, listeners, animationFrames,
+    nodes, flush, document, observers, intervals, listeners, animationFrames, observations,
     flushAnimationFrame() {
       const work = [...animationFrames.values()]; animationFrames.clear();
       for (const fn of work) fn(0);
