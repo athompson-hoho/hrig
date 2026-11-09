@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
@@ -17,6 +17,12 @@ import {
 } from "./task-filters";
 import { reasonOf } from "./task-reason";
 import { ageBadge, isStuck } from "./task-age";
+import {
+  boardColumns,
+  cellAtIndex,
+  cellIndex,
+  moveFocus,
+} from "./task-board-nav";
 export default function TaskBoard({
   connection,
   rigName,
@@ -111,6 +117,7 @@ export default function TaskBoard({
     }
   };
   const visible = applyFilters(items || [], filters);
+  const columns = boardColumns(visible);
   const tags = tagOptions(items || []);
   const stale = staleFilters(
     filters,
@@ -126,6 +133,19 @@ export default function TaskBoard({
   const clearFilters = () => {
     setFilters(emptyFilters());
     onFilters?.(emptyFilters());
+  };
+  const cardsOf = (board: HTMLElement) =>
+    Array.from(board.querySelectorAll<HTMLElement>(".task-card"));
+  // Up and Down move focus between the cards of a column. Only a key typed on a card is looked at, and only a handled key is consumed.
+  const onBoardKey = (event: KeyboardEvent<HTMLElement>) => {
+    const cards = cardsOf(event.currentTarget);
+    const here = cards.indexOf(event.target as HTMLElement);
+    if (here < 0) return;
+    const to = moveFocus(columns, cellAtIndex(columns, here), event);
+    if (!to) return;
+    event.preventDefault();
+    const next = cards[cellIndex(columns, to)];
+    if (next && next !== event.target) next.focus();
   };
   const reasonNote = (item: any) => {
     const reason = reasonOf(item);
@@ -264,43 +284,27 @@ export default function TaskBoard({
               </button>
             </p>
           )}
-        <div className="task-board">
-          {["pending", "in-progress", "blocked", "other"].map((state) => (
-            <section className="task-column" key={state}>
+        <div className="task-board" onKeyDown={onBoardKey}>
+          {columns.map((column) => (
+            <section className="task-column" key={column.state}>
               <h4>
-                {state === "other" ? "Other states" : state}
-                <span>
-                  {
-                    visible.filter((i) =>
-                      state === "other"
-                        ? !["pending", "in-progress", "blocked"].includes(
-                            i.status,
-                          )
-                        : i.status === state,
-                    ).length
-                  }
-                </span>
+                {column.label}
+                <span>{column.items.length}</span>
               </h4>
-              {visible
-                .filter((i) =>
-                  state === "other"
-                    ? !["pending", "in-progress", "blocked"].includes(i.status)
-                    : i.status === state,
-                )
-                .map((item) => (
-                  <button
-                    className="task-card"
-                    key={item.id}
-                    onClick={() => inspect(item)}
-                    data-stuck={isStuck(item, now) ? "true" : undefined}
-                  >
-                    <strong>{item.title}</strong>
-                    <span>{item.destination}</span>
-                    {reasonNote(item)}
-                    <small className="badge">{item.status}</small>
-                    {ageNote(item)}
-                  </button>
-                ))}
+              {column.items.map((item) => (
+                <button
+                  className="task-card"
+                  key={item.id}
+                  onClick={() => inspect(item)}
+                  data-stuck={isStuck(item, now) ? "true" : undefined}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.destination}</span>
+                  {reasonNote(item)}
+                  <small className="badge">{item.status}</small>
+                  {ageNote(item)}
+                </button>
+              ))}
             </section>
           ))}
         </div>
