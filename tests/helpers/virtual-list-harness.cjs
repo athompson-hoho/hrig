@@ -14,7 +14,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const timeouts = new Map();
   let clock = 0;
   let timerSerial = 0;
-  const observations = { stateUpdates: 0 };
+  const observations = { stateUpdates: 0, scrolls: [] };
   const document = { activeElement: null };
   let current, dirty = true, tree, props = initialProps, serial = 0;
   const element = (type, props, key) => ({ type, key, props: props || {} });
@@ -141,6 +141,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
         querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
         getAttribute(name) { return this.props[name] == null ? null : String(this.props[name]); },
         scrollTo(value) { this.scrollTop = value.top; },
+        scrollIntoView(options) { observations.scrolls.push({ node: this, options }); },
       };
       dom.set(location, node);
     }
