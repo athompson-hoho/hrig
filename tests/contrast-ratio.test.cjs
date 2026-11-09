@@ -1,0 +1,377 @@
+const { test } = require("node:test");
+const assert = require("node:assert/strict");
+const { buildSync } = require("esbuild");
+const Module = require("node:module");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
+
+function load(file) {
+  const built = buildSync({
+    entryPoints: [file],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+  });
+  const mod = new Module(file, module);
+  mod._compile(built.outputFiles[0].text, file);
+  return mod.exports;
+}
+
+const contrast = load("src/contrast-ratio.ts");
+const theme = load("src/themes.ts");
+const { sourceColors } = load("src/theme-colors.ts");
+const {
+  parseHex,
+  relativeLuminance,
+  contrastRatio,
+  requiredRatio,
+  meets,
+  checkPairs,
+} = contrast;
+
+const root = path.join(__dirname, "..");
+function read(file) {
+  return fs.readFileSync(path.join(root, file), "utf8");
+}
+function round2(n) {
+  return Math.round(n * 100) / 100;
+}
+const HC = "high-contrast";
+const BLACK = "#000000";
+const ACCENTS = ["theme", "mint", "blue", "violet", "amber"];
+
+test("contrast-ratio rules: parseHex, relativeLuminance, contrastRatio, meets and checkPairs follow WCAG 2.x on known values, exact boundaries, alpha and bad input", () => {
+  assert.deepEqual(parseHex("#fff"), { r: 255, g: 255, b: 255 });
+  assert.deepEqual(parseHex("#000"), { r: 0, g: 0, b: 0 });
+  assert.deepEqual(parseHex("#abc"), { r: 170, g: 187, b: 204 });
+  assert.deepEqual(parseHex("#ABCD"), { r: 170, g: 187, b: 204 });
+  assert.deepEqual(parseHex("#1A2b3C"), { r: 26, g: 43, b: 60 });
+  assert.deepEqual(parseHex("#11223344"), { r: 17, g: 34, b: 51 });
+  // Without a background the alpha channel is ignored.
+  assert.deepEqual(parseHex("#ffffff00"), { r: 255, g: 255, b: 255 });
+  // With a background a translucent color is laid over it and rounded to whole channels.
+  assert.deepEqual(parseHex("#ffffff80", BLACK), { r: 128, g: 128, b: 128 });
+  assert.deepEqual(parseHex("#ff000040", "#0000ff"), { r: 64, g: 0, b: 191 });
+  assert.deepEqual(parseHex("#fff8", BLACK), { r: 136, g: 136, b: 136 });
+  assert.deepEqual(parseHex("#64646440", "#c8c8c8"), {
+    r: 175,
+    g: 175,
+    b: 175,
+  });
+  assert.deepEqual(parseHex("#ffffff00", "#336699"), { r: 51, g: 102, b: 153 });
+  assert.deepEqual(parseHex("#ffffff", "#336699"), { r: 255, g: 255, b: 255 });
+  assert.deepEqual(parseHex("#ffffff80", "#00000000"), {
+    r: 128,
+    g: 128,
+    b: 128,
+  });
+  for (const bad of [
+    "",
+    "fff",
+    "#",
+    "#ff",
+    "#fffff",
+    "#fffffff",
+    "#fffffffff",
+    "#ggg",
+    "#12345g",
+    " #fff",
+    "#fff ",
+    "red",
+    "rgb(1,2,3)",
+    null,
+    undefined,
+    12,
+    {},
+  ])
+    assert.equal(parseHex(bad), null, "invalid: " + String(bad));
+  assert.equal(parseHex("#fff", "nope"), null);
+  assert.equal(parseHex("#ffffff80", "#12"), null);
+
+  assert.equal(relativeLuminance({ r: 0, g: 0, b: 0 }), 0);
+  assert.ok(
+    Math.abs(relativeLuminance({ r: 255, g: 255, b: 255 }) - 1) < 1e-12,
+  );
+  assert.ok(
+    Math.abs(relativeLuminance({ r: 255, g: 0, b: 0 }) - 0.2126) < 1e-12,
+  );
+  assert.ok(
+    Math.abs(relativeLuminance({ r: 0, g: 255, b: 0 }) - 0.7152) < 1e-12,
+  );
+  assert.ok(
+    Math.abs(relativeLuminance({ r: 0, g: 0, b: 255 }) - 0.0722) < 1e-12,
+  );
+  assert.equal(
+    Math.round(relativeLuminance({ r: 128, g: 128, b: 128 }) * 10000) / 10000,
+    0.2159,
+  );
+  // The linear segment of the sRGB curve (a channel up to 10 of 255) and the first channel on the curved part (11).
+  assert.ok(
+    Math.abs(relativeLuminance({ r: 10, g: 10, b: 10 }) - 10 / 255 / 12.92) <
+      1e-12,
+  );
+  assert.ok(
+    Math.abs(
+      relativeLuminance({ r: 11, g: 11, b: 11 }) -
+        ((11 / 255 + 0.055) / 1.055) ** 2.4,
+    ) < 1e-12,
+  );
+
+  assert.equal(contrastRatio("#000000", "#ffffff"), 21);
+  assert.equal(contrastRatio("#ffffff", "#000000"), 21);
+  assert.equal(contrastRatio("#123456", "#123456"), 1);
+  assert.equal(contrastRatio("#fff", "#fff"), 1);
+  // Published WCAG values, compared to two decimals.
+  const published = [
+    ["#777777", "#ffffff", 4.48],
+    ["#767676", "#ffffff", 4.54],
+    ["#ff0000", "#ffffff", 4],
+    ["#0000ff", "#ffffff", 8.59],
+    ["#00ff00", "#000000", 15.3],
+    ["#808080", "#ffffff", 3.95],
+    ["#595959", "#ffffff", 7],
+    ["#949494", "#ffffff", 3.03],
+  ];
+  for (const [a, b, expected] of published)
+    assert.equal(round2(contrastRatio(a, b)), expected, a + " on " + b);
+  // The ratio itself is never rounded: #777 is 4.478..., not 4.48, and stays under 4.5.
+  const gray = contrastRatio("#777", "#fff");
+  assert.ok(Math.abs(gray - 4.478089453577214) < 1e-9);
+  assert.notEqual(gray, 4.48);
+  assert.equal(gray, contrastRatio("#777777", "#ffffff"));
+  assert.equal(meets(gray, "text"), false);
+  assert.equal(meets(contrastRatio("#767676", "#ffffff"), "text"), true);
+
+  const grid = [
+    "#000000",
+    "#ffffff",
+    "#777777",
+    "#ff0000",
+    "#00ff00",
+    "#0000ff",
+    "#123456",
+    "#abcdef",
+    "#9cacbf",
+    "#a0e3c2",
+    "#101115",
+    "#c6d1e0",
+  ];
+  for (const a of grid)
+    for (const b of grid) {
+      const ab = contrastRatio(a, b);
+      assert.ok(ab >= 1 && ab <= 21, a + " " + b);
+      assert.equal(ab, contrastRatio(b, a), "symmetric " + a + " " + b);
+    }
+  // Alpha: a translucent foreground is laid over the (opaque) background first; the background's own alpha is ignored.
+  assert.equal(
+    contrastRatio("#ffffff80", BLACK),
+    contrastRatio("#808080", BLACK),
+  );
+  assert.equal(contrastRatio("#ffffff00", BLACK), 1);
+  assert.equal(contrastRatio("#ffffff", "#00000000"), 21);
+  for (const bad of ["", "fff", "#ggg", "#fffff", null, undefined, 12]) {
+    assert.ok(Number.isNaN(contrastRatio(bad, "#ffffff")), "fg " + bad);
+    assert.ok(Number.isNaN(contrastRatio("#ffffff", bad)), "bg " + bad);
+  }
+
+  assert.deepEqual(
+    ["text", "large", "non-text"].map(requiredRatio),
+    [4.5, 3, 3],
+  );
+  assert.ok(Number.isNaN(requiredRatio("huge")));
+  assert.equal(meets(4.5, "text"), true);
+  assert.equal(meets(4.499, "text"), false);
+  assert.equal(meets(4.4999999, "text"), false);
+  assert.equal(meets(3, "large"), true);
+  assert.equal(meets(2.999, "large"), false);
+  assert.equal(meets(3, "non-text"), true);
+  assert.equal(meets(2.999, "non-text"), false);
+  assert.equal(meets(21, "text"), true);
+  assert.equal(meets(1, "text"), false);
+  for (const bad of [Number.NaN, Infinity, -1, "5", null, undefined])
+    assert.equal(meets(bad, "text"), false, "ratio " + String(bad));
+  assert.equal(meets(21, "huge"), false);
+
+  const pairs = Object.freeze([
+    Object.freeze({
+      name: "white on black",
+      fg: "#ffffff",
+      bg: BLACK,
+      kind: "text",
+    }),
+    Object.freeze({
+      name: "gray text",
+      fg: "#777777",
+      bg: "#ffffff",
+      kind: "text",
+    }),
+    Object.freeze({
+      name: "gray border",
+      fg: "#949494",
+      bg: "#ffffff",
+      kind: "non-text",
+    }),
+    Object.freeze({ name: "bad", fg: "red", bg: "#fff", kind: "text" }),
+  ]);
+  const results = checkPairs(pairs);
+  assert.deepEqual(
+    results.map((r) => r.name),
+    ["white on black", "gray text", "gray border", "bad"],
+  );
+  assert.deepEqual(
+    results.map((r) => r.pass),
+    [true, false, true, false],
+  );
+  assert.deepEqual(
+    results.map((r) => r.required),
+    [4.5, 4.5, 3, 4.5],
+  );
+  assert.deepEqual(
+    results.map((r) => r.kind),
+    ["text", "text", "non-text", "text"],
+  );
+  assert.deepEqual(
+    results.map((r) => [r.fg, r.bg]),
+    pairs.map((p) => [p.fg, p.bg]),
+  );
+  assert.equal(results[0].ratio, 21);
+  assert.equal(round2(results[1].ratio), 4.48);
+  assert.ok(Number.isNaN(results[3].ratio));
+  assert.deepEqual(checkPairs([]), []);
+
+  assert.deepEqual(Object.keys(contrast).sort(), [
+    "checkPairs",
+    "contrastRatio",
+    "meets",
+    "parseHex",
+    "relativeLuminance",
+    "requiredRatio",
+  ]);
+});
+
+test("contrast-ratio tracer: the High Contrast theme's own colors, read from the real catalog, themeColor and stylesheet, meet WCAG 2.x through the pure module", () => {
+  const hc = theme.themes[HC];
+  assert.equal(hc.name, "High Contrast");
+  assert.deepEqual(
+    [hc.background, hc.panel, hc.line, hc.text, hc.muted, hc.dark],
+    [BLACK, BLACK, "#9cacbf", "#ffffff", "#c6d1e0", true],
+  );
+  for (const key of ["accent", "ansi", "syntax", "family", "selection"])
+    assert.equal(hc[key], undefined, "no " + key);
+
+  // The theme's colors as the app applies them: themeColor over the two real surface tokens and the body color.
+  const bodyText = theme.themeColor("#c9cdd7", HC);
+  const panelToken = theme.themeColor("#14161b", HC);
+  const surfaceToken = theme.themeColor("#181a20", HC);
+
+  // The ring the stylesheet draws on every focused control in this theme.
+  const css = read("src/styles.css");
+  const ring =
+    /:root\[data-theme="high-contrast"\] :focus-visible \{\n  outline: 2px solid (#[0-9a-f]{6});\n  outline-offset: 2px;\n\}/.exec(
+      css,
+    );
+  assert.ok(ring, "the High Contrast ring rule is in the stylesheet");
+  assert.equal(ring[1], "#ffffff");
+
+  const text = (name, fg, bg) => ({ name, fg, bg, kind: "text" });
+  const graphic = (name, fg, bg) => ({ name, fg, bg, kind: "non-text" });
+  const pairs = [
+    text("text on background", hc.text, hc.background),
+    text("text on panel", hc.text, hc.panel),
+    text("muted on background", hc.muted, hc.background),
+    text("muted on panel", hc.muted, hc.panel),
+    text("body text on background", bodyText, hc.background),
+    text("text on panel token", hc.text, panelToken),
+    text("muted on panel token", hc.muted, panelToken),
+    text("text on surface token", hc.text, surfaceToken),
+    text("muted on surface token", hc.muted, surfaceToken),
+    ...Object.entries(theme.accents).map(([name, fg]) =>
+      text("accent " + name, fg, hc.background),
+    ),
+    ...Object.keys(theme.accents).map((name) =>
+      text(
+        "derived accent " + name,
+        theme.themeColor("#a0e3c2", HC, name),
+        hc.background,
+      ),
+    ),
+    graphic("line on background", hc.line, hc.background),
+    graphic("line on panel", hc.line, hc.panel),
+    graphic("ring on background", ring[1], hc.background),
+  ];
+
+  const results = checkPairs(pairs);
+  assert.deepEqual(
+    results.filter((r) => !r.pass).map((r) => r.name),
+    [],
+    "every base pair of the theme meets its WCAG threshold",
+  );
+  // Measured on the real theme (rounded to two decimals only here, for display).
+  assert.deepEqual(
+    Object.fromEntries(results.map((r) => [r.name, round2(r.ratio)])),
+    {
+      "text on background": 21,
+      "text on panel": 21,
+      "muted on background": 13.6,
+      "muted on panel": 13.6,
+      "body text on background": 19.4,
+      "text on panel token": 19.81,
+      "muted on panel token": 12.83,
+      "text on surface token": 19.18,
+      "muted on surface token": 12.42,
+      "accent mint": 14.26,
+      "accent blue": 9.94,
+      "accent violet": 9.37,
+      "accent amber": 12.24,
+      "derived accent mint": 15.46,
+      "derived accent blue": 11.71,
+      "derived accent violet": 11.19,
+      "derived accent amber": 13.7,
+      "line on background": 9.07,
+      "line on panel": 9.07,
+      "ring on background": 21,
+    },
+  );
+  // The white ring against the border color is below 3:1 (2.32). It is not a required pair: the ring is drawn 2px away from the control, so the gap, not the border, sits next to it.
+  assert.equal(round2(contrastRatio(ring[1], hc.line)), 2.32);
+  assert.ok(
+    css.includes(
+      ':root[data-theme="high-contrast"] :focus-visible {\n  outline: 2px solid #ffffff;\n  outline-offset: 2px;\n}',
+    ),
+  );
+});
+
+// sha256 (first 16 hex digits) of themeColor over every source color and every accent choice, measured before this phase changed anything.
+const OTHER_THEMES = {
+  "hrig-dark": "b8bf3e120170810d",
+  graphite: "dd567eacf062ca0c",
+  midnight: "e9980be794d45066",
+  light: "8d98fe567a6ecdd0",
+  "catppuccin-mocha": "16a0eec03f1a8e26",
+  "catppuccin-macchiato": "20999b75261234c6",
+  "catppuccin-frappe": "014259517d58ba61",
+  "catppuccin-latte": "5398fb35f34e861a",
+  nord: "e64af0796088cd55",
+  dracula: "fd680171a24236f3",
+  "tokyo-night": "1d6278b9351bbb11",
+  "gruvbox-dark": "b8d5e283561fbc9a",
+};
+
+test("contrast-ratio pins: themeColor gives every theme except High Contrast exactly the colors it gave before this phase", () => {
+  assert.equal(sourceColors.length, 472);
+  for (const id of Object.keys(OTHER_THEMES)) {
+    assert.ok(theme.themes[id], id + " is a theme");
+    const hash = crypto.createHash("sha256");
+    for (const accent of ACCENTS)
+      for (const source of sourceColors)
+        hash.update(theme.themeColor(source, id, accent) + "\n");
+    assert.equal(hash.digest("hex").slice(0, 16), OTHER_THEMES[id], id);
+  }
+  assert.equal(
+    theme.themeColor("#14161b", "hrig-dark", "mint"),
+    "#14161b",
+    "the default theme keeps the original palette",
+  );
+});
