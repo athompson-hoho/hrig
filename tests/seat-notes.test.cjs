@@ -1060,3 +1060,48 @@ test("seat-notes style: three rules sit directly after the session row hover rul
     1,
   );
 });
+
+test("seat-notes docs: README and PRIVACY.md say the note is private, kept only in the workspace file on this computer as plain text, never sent anywhere and kept until cleared, and every older docs pin is intact", () => {
+  const readme = read("README.md");
+  for (const part of [
+    "3. Existing rigs and seats appear in the sidebar.",
+    "Each session row also has a Notes button, shown when you point at the row or focus it and always on a seat that has a note, for a private note of up to 2000 characters about that seat.",
+    "A note is kept only in HRig's workspace file on this computer, as plain text (keep secrets out of it);",
+    "it is never sent to the seat, a terminal, the task queue or another machine, and it stays until you clear it, even if the seat is gone.",
+    "panel layouts, seat metadata and any private seat notes you write (plain text, so keep secrets out of them), not passwords or terminal transcripts.",
+  ])
+    assert.equal(count(readme, part), 1, part);
+  assert.equal(
+    count(readme, "TASKS.md"),
+    1,
+    "README keeps its single link to TASKS.md",
+  );
+
+  const privacy = read("PRIVACY.md");
+  assert.ok(
+    privacy.includes(
+      "workspace layouts, per-file review checks, drafts/recovery copies, private seat notes, integration configuration,",
+    ),
+  );
+  assert.equal(count(privacy, "private seat notes"), 1);
+  assert.equal(count(privacy, "review checks"), 1);
+  assert.equal(
+    count(
+      privacy,
+      "Private seat notes are plain text in the workspace file, are not encrypted and are never sent to a seat, a host or the settings export; clear a note from its dialog to remove it.",
+    ),
+    1,
+  );
+  assert.ok(!privacy.startsWith(char(0xfeff)), "no byte order mark");
+  assert.ok(
+    privacy.endsWith("\n") && !privacy.endsWith("\n\n"),
+    "one final line feed",
+  );
+  assert.ok(!privacy.includes("\r"), "no carriage return");
+  const lines = privacy.split("\n");
+  assert.equal(
+    lines[lines.indexOf("## Snippet export and import") + 4],
+    undefined,
+    "still the last section",
+  );
+});
