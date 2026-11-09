@@ -76,6 +76,7 @@ export interface WorkspaceState {
   hostTints?: import("./host-tint").HostTints;
   taskFilters?: import("./task-filters").SavedTaskFilters;
   reviewChecks?: import("./review-checks").ReviewChecks;
+  seatNotes?: import("./seat-notes").SeatNotes;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;
   windowBounds?: { x: number; y: number; width: number; height: number };

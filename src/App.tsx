@@ -157,6 +157,7 @@ import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import { useHumanItemNotices } from "./useHumanItemNotices";
+import { useSeatNeedsInputSound } from "./useSeatNeedsInputSound";
 import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
 import ShortcutSheet from "./ShortcutSheet";
 import {
@@ -219,6 +220,7 @@ import {
 import TaskBoard from "./TaskBoard";
 import { ReviewWorkspace, ProblemsPanel } from "./ReviewWorkspace";
 import { normalizeReviewChecks } from "./review-checks";
+import { noteKey, normalizeSeatNotes, setNote } from "./seat-notes";
 import {
   ActivityPanel,
   MessagePanel,
@@ -630,6 +632,7 @@ export default function App() {
             (base.desktopNotifications
               ? { "notifications.desktop": true }
               : {}),
+          seatNotes: normalizeSeatNotes(base.seatNotes),
         });
         setLoaded(true);
         log("Workspace ready. Connect a machine or open a project.");
@@ -704,6 +707,13 @@ export default function App() {
     connection,
     intervalSeconds: preferences["workspace.refreshInterval"],
     refresh,
+    log,
+  });
+  useSeatNeedsInputSound({
+    enabled: loaded && preferences["notifications.seatNeedsInputSound"],
+    connection,
+    seats: inventory?.seats ?? null,
+    inventoryError,
     log,
   });
   useEffect(() => {
@@ -2727,6 +2737,20 @@ export default function App() {
                 onFile={(path) => openFile(path)}
                 onDiff={(path) => openFile(path, true)}
                 fileRevision={fileRevision}
+                notes={state.seatNotes}
+                onNote={(seat, text) => {
+                  const now = Date.now();
+                  setState((s) => {
+                    const current = normalizeSeatNotes(s.seatNotes);
+                    const next = setNote(
+                      current,
+                      noteKey(connection.id, seat.id),
+                      text,
+                      now,
+                    );
+                    return next === current ? s : { ...s, seatNotes: next };
+                  });
+                }}
               />
               <div className="sidebar-resizer" onPointerDown={resizeSidebar} />
             </div>

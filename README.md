@@ -80,7 +80,7 @@ Download the matching build from the [latest HRig release](https://github.com/at
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
-3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group. Two optional settings show each seat's runtime and model as small badges and hide stopped seats from the list; both are off by default.
+3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group. Two optional settings show each seat's runtime and model as small badges and hide stopped seats from the list; both are off by default. Each session row also has a Notes button, shown when you point at the row or focus it and always on a seat that has a note, for a private note of up to 2000 characters about that seat. A note is kept only in HRig's workspace file on this computer, as plain text (keep secrets out of it); it is never sent to the seat, a terminal, the task queue or another machine, and it stays until you clear it. HRig keeps at most 200 notes and drops the oldest first, and a note belongs to one seat on one connection, so recreating a rig or renaming a seat leaves its old note behind.
 4. Use **Arrange** for Team, Focus, and Review presets, or save your own named layout.
 
 The **Explorer** opens editable project files. **Source control** shows changed files with side-by-side diffs against HEAD. **New panel** adds shells, task queues, messages, and an activity view.
@@ -225,7 +225,7 @@ The WSL tests create and clean up uniquely named `/tmp/hrig-test-*` directories 
 - **OpenRig boundary:** discovery, queue, messaging, specs and lifecycle commands are wrapped by constrained backend actions. Mutations verify advertised CLI flags and lifecycle actions require an explicit rig-name confirmation. Existing seats attach through `tmux attach-session -t '=SESSION'`.
 - **Ownership:** OpenRig owns rigs, agents, coordination, and session persistence. HRig owns presentation and terminal attachments. HRig never calls `rig up` when restoring a panel.
 
-Workspace metadata is stored in `%APPDATA%/hrig/workspace.json`, or the directory specified by `HRIG_DATA_DIR`. It contains connection definitions, project paths, panel layouts, and seat metadata, not passwords or terminal transcripts. Unsaved edit buffers stay in memory and are protected by close prompts.
+Workspace metadata is stored in `%APPDATA%/hrig/workspace.json`, or the directory specified by `HRIG_DATA_DIR`. It contains connection definitions, project paths, panel layouts, seat metadata and any private seat notes you write (plain text, so keep secrets out of them), not passwords or terminal transcripts. Unsaved edit buffers stay in memory and are protected by close prompts.
 
 ## Current scope
 
