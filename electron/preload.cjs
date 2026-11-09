@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("hrig", {
   openPreview: invoke("preview:open"),
   closePreview: invoke("preview:close"),
   notifyAttention: invoke("attention:notify"),
+  notifySeatAttention: invoke("seat:notify-attention"),
   onResume: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("connection:resume", listener);

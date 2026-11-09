@@ -372,9 +372,9 @@ export const schema: Setting[] = [
   {
     key: "notifications.desktop",
     category: "Notifications",
-    label: "Desktop attention notifications",
+    label: "Desktop needs-input notifications",
     description:
-      "Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply.",
+      "Seat name only, for newly needs-input seats in verified inventory on the current connection. Enabling starts silently. Desktop support and OS notification settings may prevent display.",
   },
   {
     key: "notifications.terminalBell",

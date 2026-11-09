@@ -74,7 +74,9 @@ function nativeHarness(options = {}) {
       return {
         contextBridge: { exposeInMainWorld(name, api) { assert.equal(name, 'hrig'); preload = api; } },
         ipcRenderer: {
-          invoke: (channel, ...args) => dispatch({ sender }, channel, args),
+          // Electron IPC serializes into the receiving realm. Keep raw() below
+          // unmodified for strict descriptor/prototype/extra-key refusal checks.
+          invoke: (channel, ...args) => dispatch({ sender }, channel, structuredClone(args)),
           send: (...args) => forbidden('send', args),
           sendSync: (...args) => forbidden('sendSync', args),
           on: (...args) => forbidden('on', args),
