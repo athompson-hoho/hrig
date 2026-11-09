@@ -14,6 +14,7 @@ import {
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
 import TaskDetailBody from "./TaskDetailBody";
+import TaskFileReferences from "./TaskFileReferences";
 import { ownerHint, reviewNote, type TaskDraft } from "./task-draft";
 import {
   MAX_FILTER_TEXT,
@@ -57,6 +58,8 @@ export default function TaskBoard({
   onFilters,
   draft,
   onDraftTaken,
+  root,
+  onFile,
 }: {
   connection: Connection;
   rigName?: string;
@@ -66,6 +69,8 @@ export default function TaskBoard({
   onFilters?: (filters: TaskFilters) => void;
   draft?: TaskDraft | null;
   onDraftTaken?: () => void;
+  root?: string;
+  onFile?: (path: string, line?: number) => void;
 }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState("");
@@ -494,6 +499,14 @@ export default function TaskBoard({
             </TaskDetailBody>
           ) : (
             <Loading />
+          )}
+          {!create && detail && onFile && root && (
+            <TaskFileReferences
+              detail={detail}
+              connection={connection}
+              root={root}
+              onFile={onFile}
+            />
           )}
           <label className="field-label">
             OWNER

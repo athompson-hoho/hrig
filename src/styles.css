@@ -4519,6 +4519,21 @@ button:hover {
   color: var(--color-889db6);
 }
 /* end of Task details */
+/* Task details: the files a task mentions, in the look of the other small buttons */
+.task-file-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.task-file-refs .small-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
 /* Output counter (opt-in diagnostics): keeps the .terminal-size look but stays on, at the top left of the stage, clear of the size readout (top center), the reconnect notice (top right) and Jump to latest (bottom right); it floats, so it never resizes the PTY, and it takes no clicks. */
 .terminal-size.terminal-output-counter {
   left: 12px;

@@ -1968,6 +1968,8 @@ export default function App() {
             onSeat={openSeat}
             draft={taskDraft && taskDraft.tabId === node.getId() ? taskDraft.draft : null}
             onDraftTaken={() => setTaskDraft(null)}
+            root={config.root}
+            onFile={(path, line) => openFile(path, false, line, config)}
             savedFilters={resolveTaskFilters(
               state.taskFilters,
               config.connection.id,
