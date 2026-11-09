@@ -229,13 +229,38 @@ elif op=='searchText':
  import time
  out=[];scanned=0;reason='';query=a.get('query','');o=a.get('options')
  if not query: raise Exception('Enter search text')
- low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs')
+ low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs');cap=(o or {}).get('maxFiles') or 20000
  if o is not None and (o.get('regex') or o.get('wholeWord')):
   src=query if o.get('regex') else re.escape(query)
   if o.get('wholeWord'): src=r'(?<!\\w)(?:'+src+r')(?!\\w)'
   try: pattern=re.compile(src,re.IGNORECASE)
   except re.error as e: raise Exception('Invalid regular expression: '+str(e)[:160])
+ inc=(o or {}).get('include') or [];exc=(o or {}).get('exclude') or []
  def spent(): return budget is not None and (time.monotonic()-started)*1000>=budget
+ def nm(pat,name):
+  p=n=0;star=-1;mark=0
+  while n<len(name):
+   if p<len(pat) and pat[p]=='*': star=p;p+=1;mark=n
+   elif p<len(pat) and (pat[p]=='?' or pat[p]==name[n]): p+=1;n+=1
+   elif star>=0: p=star+1;mark+=1;n=mark
+   else: return False
+  while p<len(pat) and pat[p]=='*': p+=1
+  return p==len(pat)
+ def pm(segs,parts):
+  p=n=0;star=-1;mark=0
+  while n<len(parts):
+   if p<len(segs) and segs[p]=='**': star=p;p+=1;mark=n
+   elif p<len(segs) and nm(segs[p],parts[n]): p+=1;n+=1
+   elif star>=0: p=star+1;mark+=1;n=mark
+   else: return False
+  while p<len(segs) and segs[p]=='**': p+=1
+  return p==len(segs)
+ def gh(g,parts):
+  if not g['a']: return any(nm(g['s'][0],x) for x in parts)
+  return any(pm(g['s'],parts[:k]) for k in range(1,len(parts)+1))
+ def allowed(rel):
+  parts=rel.split('/')
+  return (not inc or any(gh(g,parts) for g in inc)) and not any(gh(g,parts) for g in exc)
  def hit(text): return bool(pattern.search(text[:1000])) if pattern else low in text.lower()
  for folder,dirs,files in os.walk(root,followlinks=False):
   dirs[:]=[d for d in dirs if d not in ['.git','node_modules','dist','.venv','.next','release'] and not os.path.islink(os.path.join(folder,d))]
@@ -243,16 +268,17 @@ elif op=='searchText':
    scanned+=1;p=os.path.join(folder,name)
    if spent(): reason='time';break
    if os.path.islink(p): continue
+   rel=os.path.relpath(p,root).replace(os.sep,'/')
    try:
-    content=read(p)['content']
+    content=read(p)['content'] if allowed(rel) else ''
     for line,text in enumerate(content.splitlines(),1):
      if spent(): reason='time';break
-     if hit(text): out.append({'path':os.path.relpath(p,root).replace(os.sep,'/'),'line':line,'text':text[:250]})
+     if hit(text): out.append({'path':rel,'line':line,'text':text[:250]})
      if len(out)>=200: break
    except (OSError,UnicodeError,Exception): pass
-   if reason or len(out)>=200 or scanned>=20000: break
-  if reason or len(out)>=200 or scanned>=20000: break
- reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=20000 else '')
+   if reason or len(out)>=200 or scanned>=cap: break
+  if reason or len(out)>=200 or scanned>=cap: break
+ reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=cap else '')
  print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned}))
 `;
 function revision(data) {
@@ -328,6 +354,7 @@ async function edit(connection, a, hooks = {}) {
       hooks.now || Date.now,
       search.budgetMs,
     );
+    const maxFiles = hooks.maxFiles || contentSearch.LIMITS.MAX_FILES;
     let count = 0;
     let timedOut = false;
     const scan = async (folder, depth = 0) => {
@@ -355,8 +382,9 @@ async function edit(connection, a, hooks = {}) {
         if (e.isDirectory()) await scan(full, depth + 1);
         else {
           count++;
+          const rel = path.relative(target, full).replaceAll("\\", "/");
           try {
-            if ((await fs.stat(full)).size <= 2000000) {
+            if (search.allows(rel) && (await fs.stat(full)).size <= 2000000) {
               const data = await fs.readFile(full);
               if (!data.includes(0))
                 for (const [i, line] of data
@@ -369,7 +397,7 @@ async function edit(connection, a, hooks = {}) {
                   }
                   if (search.test(line))
                     results.push({
-                      path: path.relative(target, full).replaceAll("\\", "/"),
+                      path: rel,
                       line: i + 1,
                       text: line.slice(0, 250),
                     });
@@ -378,7 +406,7 @@ async function edit(connection, a, hooks = {}) {
             }
           } catch {}
         }
-        if (timedOut || count >= 20000 || results.length >= 200) return;
+        if (timedOut || count >= maxFiles || results.length >= 200) return;
       }
     };
     await scan(target);
@@ -387,7 +415,7 @@ async function edit(connection, a, hooks = {}) {
       ? "time"
       : results.length >= 200
         ? "matches"
-        : count >= 20000
+        : count >= maxFiles
           ? "files"
           : "";
     return { matches: results, truncated: reason !== "", reason, scanned: count };

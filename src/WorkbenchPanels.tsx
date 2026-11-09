@@ -221,6 +221,7 @@ export function ProjectTools({
   const [matches, setMatches] = useState<any[]>([]);
   const [options, setOptions] = useState<SearchOptions>(defaultSearchOptions);
   const [stopped, setStopped] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
@@ -288,6 +289,15 @@ export function ProjectTools({
             Word
           </button>
           <button
+            className={`small-button ${options.include?.trim() || options.exclude?.trim() ? "highlight" : ""}`}
+            aria-label="File include and exclude filters"
+            aria-expanded={showFilters}
+            title="Include and exclude files"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            Files
+          </button>
+          <button
             className="primary-button"
             disabled={busy || !query}
             onClick={() => action(buildSearchRequest(query, options))}
@@ -296,6 +306,37 @@ export function ProjectTools({
           </button>
         </div>
       </label>
+      {showFilters && (
+        <>
+          <label className="field-label">
+            INCLUDE FILES
+            <input
+              aria-label="Include files"
+              value={options.include ?? ""}
+              onChange={(e) =>
+                setOptions({ ...options, include: e.target.value })
+              }
+              placeholder="*.ts, src/**"
+            />
+          </label>
+          <label className="field-label">
+            EXCLUDE FILES
+            <input
+              aria-label="Exclude files"
+              value={options.exclude ?? ""}
+              onChange={(e) =>
+                setOptions({ ...options, exclude: e.target.value })
+              }
+              placeholder="*.min.js, **/test/**"
+            />
+          </label>
+          <p className="field-note">
+            Comma-separated globs relative to the project folder: * and ? match
+            inside a name, ** crosses folders, a glob without a slash matches a
+            name at any depth. No braces, classes or .. segments.
+          </p>
+        </>
+      )}
       <p className="field-note">{searchNote(options)}</p>
       {stopped && (
         <p className="field-note" role="status">

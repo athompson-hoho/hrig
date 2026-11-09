@@ -877,3 +877,451 @@ test("content-search wiring", () => {
     ),
   );
 });
+
+const pythonOk = spawnSync("python3", ["--version"]).status === 0;
+function runPython(request) {
+  const wrapped =
+    "import base64;exec(base64.b64decode(" +
+    JSON.stringify(Buffer.from(features.EDIT_PY).toString("base64")) +
+    "))";
+  const run = spawnSync("python3", ["-c", wrapped], {
+    input: JSON.stringify(request),
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return run.status === 0 ? JSON.parse(run.stdout) : { failed: run.stderr };
+}
+const paths = (result) =>
+  [...new Set(result.matches.map((m) => m.path))].sort();
+
+const GLOB_TREE = () => ({
+  "top.ts": "needle\n",
+  "src/a.ts": "needle\n",
+  "src/b.test.ts": "needle\n",
+  "src/deep/c.ts": "needle\n",
+  "src/deep/c.md": "needle\n",
+  "lib/d.ts": "needle\n",
+  "lib/min/x.min.js": "needle\n",
+  "docs/readme.md": "needle\n",
+  "Test/e.ts": "needle\n",
+  "node_modules/q/z.ts": "needle\n",
+  ".git/x.ts": "needle\n",
+});
+
+test("content-search globs", () => {
+  assert.deepEqual([cs.LIMITS.MAX_GLOBS, cs.LIMITS.MAX_GLOB], [20, 200]);
+  assert.deepEqual(cs.splitGlobs(" a, b ,,c ,"), ["a", "b", "c"]);
+  assert.deepEqual(cs.splitGlobs(""), []);
+  const forms = [
+    ["*.ts", false, ["*.ts"]],
+    ["src/**", true, ["src", "**"]],
+    ["./src", true, ["src"]],
+    ["src/", false, ["src"]],
+    ["a//b/./c", true, ["a", "b", "c"]],
+    ["a**b", false, ["a*b"]],
+    ["***", false, ["*"]],
+    ["**", false, ["*"]],
+    ["**/**/x", true, ["**", "x"]],
+    ["a/**/**", true, ["a", "**"]],
+  ];
+  for (const [raw, anchored, segments] of forms)
+    assert.deepEqual(cs.normalizeGlob(raw), { anchored, segments }, raw);
+  const refused = [
+    ["..", /\.\./],
+    ["../x", /\.\./],
+    ["a/../b", /\.\./],
+    ["/abs", /absolute/],
+    ["C:/x", /absolute/],
+    ["c:x", /absolute/],
+    ["~", /absolute/],
+    ["~/x", /absolute/],
+    ["a\\b", /forward slashes/],
+    ["{a,b}", /Braces/],
+    ["a[1]", /Braces/],
+    ["!x", /exclude field/],
+    ["a" + String.fromCharCode(1), /control characters/],
+    ["a" + String.fromCharCode(0), /control characters/],
+    ["a" + String.fromCharCode(127), /control characters/],
+    ["a" + String.fromCharCode(10) + "b", /control characters/],
+    ["x".repeat(201), /at most 200/],
+    ["./", /Empty glob/],
+    ["/", /absolute/],
+  ];
+  for (const [raw, message] of refused) {
+    assert.match(
+      String(cs.normalizeGlob(raw).error),
+      message,
+      JSON.stringify(raw),
+    );
+    assert.match(String(cs.compileGlobs(raw, "").error), /^Include: /);
+    assert.match(String(cs.compileGlobs("", raw).error), /^Exclude: /);
+  }
+  assert.equal(cs.compileGlobs("x".repeat(200), "").error, undefined);
+  assert.equal(
+    cs.compileGlobs(Array(20).fill("a").join(","), "").error,
+    undefined,
+  );
+  assert.match(
+    cs.compileGlobs(Array(21).fill("a").join(","), "").error,
+    /at most 20 globs/,
+  );
+  assert.match(cs.compileGlobs("a, ../b", "").error, /\.\./);
+  // Arrays work like the comma separated text; every item is checked.
+  assert.equal(cs.compileGlobs(["*.ts", "src/**"], []).allow("src/a.ts"), true);
+  assert.equal(
+    cs.compileGlobs([], ["*.ts", "src/**"]).allow("src/a.ts"),
+    false,
+  );
+  assert.match(cs.compileGlobs(["ok", "../x"], []).error, /\.\./);
+  assert.match(cs.compileGlobs([1], []).error, /Empty glob/);
+  assert.match(
+    cs.compileGlobs(Array(21).fill("a"), []).error,
+    /at most 20 globs/,
+  );
+  assert.match(
+    cs.compileGlobs("a".repeat(4300), "").error,
+    /invalid glob list/,
+  );
+  assert.match(
+    cs.normalizeSearchOptions({ include: 1 }).error,
+    /Invalid search options/,
+  );
+  assert.deepEqual(
+    cs.normalizeSearchOptions({ include: "*.ts", exclude: "" }),
+    {
+      options: { regex: false, wholeWord: false, include: "*.ts", exclude: "" },
+    },
+  );
+  const cases = [
+    ["", "", "a/b.ts", true],
+    ["*.ts", "", "a/b.ts", true],
+    ["*.ts", "", "a/b.md", false],
+    ["*.TS", "", "a/b.ts", false],
+    ["src", "", "src/x/y.md", true],
+    ["src", "", "lib/src/y", true],
+    ["src/**", "", "src/a", true],
+    ["src/**", "", "lib/src/a", false],
+    ["src/*.ts", "", "src/a.ts", true],
+    ["src/*.ts", "", "src/d/a.ts", false],
+    ["src/**/*.ts", "", "src/d/e/a.ts", true],
+    ["src/**/*.ts", "", "src/a.ts", true],
+    ["**/*.ts", "", "a.ts", true],
+    ["./a/*", "", "a/b", true],
+    ["./a/*", "", "x/a/b", false],
+    ["?.ts", "", "a.ts", true],
+    ["?.ts", "", "ab.ts", false],
+    ["?.txt", "", String.fromCodePoint(0x1f600) + ".txt", true],
+    ["", "test", "src/test/a.ts", false],
+    ["", "test", "src/tests/a.ts", true],
+    ["*.ts", "*.test.ts", "a.test.ts", false],
+    ["*.ts", "*.test.ts", "a.ts", true],
+    ["", "**/test/**", "test/a.ts", false],
+    ["a, b", "", "b/x", true],
+    ["a, b", "", "c/x", false],
+  ];
+  for (const [include, exclude, file, expected] of cases)
+    assert.equal(
+      cs.compileGlobs(include, exclude).allow(file),
+      expected,
+      `${include} | ${exclude} | ${file}`,
+    );
+  // The greedy matcher agrees with a brute-force one on random small globs and paths.
+  const refName = (p, n) => {
+    if (!p.length) return !n.length;
+    if (p[0] === "*")
+      return refName(p.slice(1), n) || (n.length > 0 && refName(p, n.slice(1)));
+    return (
+      n.length > 0 &&
+      (p[0] === "?" || p[0] === n[0]) &&
+      refName(p.slice(1), n.slice(1))
+    );
+  };
+  const refPath = (segs, parts) => {
+    if (!segs.length) return !parts.length;
+    if (segs[0] === "**")
+      return (
+        refPath(segs.slice(1), parts) ||
+        (parts.length > 0 && refPath(segs, parts.slice(1)))
+      );
+    return (
+      parts.length > 0 &&
+      refName(segs[0], parts[0]) &&
+      refPath(segs.slice(1), parts.slice(1))
+    );
+  };
+  let seed = 777;
+  const rnd = (n) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % n;
+  };
+  const pick = (list) => list[rnd(list.length)];
+  for (let run = 0; run < 3000; run++) {
+    const raw = Array.from({ length: 1 + rnd(4) }, () =>
+      pick(["a", "b", "*", "?", "**", "a*", "*b", "a?b", "ab"]),
+    ).join(pick(["/", "/", "/x/"]));
+    const parts = Array.from({ length: 1 + rnd(5) }, () =>
+      pick(["a", "b", "ab", "aab", "x", "ba"]),
+    );
+    const glob = cs.normalizeGlob(raw);
+    assert.equal(glob.error, undefined, raw);
+    let expected;
+    if (!glob.anchored)
+      expected = parts.some((p) => refName(glob.segments[0], p));
+    else {
+      expected = false;
+      for (let k = 1; k <= parts.length; k++)
+        if (refPath(glob.segments, parts.slice(0, k))) expected = true;
+    }
+    assert.equal(
+      cs.compileGlobs(raw, "").allow(parts.join("/")),
+      expected,
+      `${raw} on ${parts.join("/")}`,
+    );
+  }
+  // Hostile globs and paths stay cheap: no exponential matching.
+  const started = Date.now();
+  const hostileGlobs = [
+    "*a".repeat(60) + "b",
+    Array(30).fill("**/a").join("/") + "/b",
+    "a*".repeat(60) + "?b",
+    Array(20).fill("*a*").join("/"),
+  ];
+  const long = "a".repeat(250);
+  const deep = Array(25).fill("a").join("/") + "/c";
+  const compiled = cs.compileGlobs(
+    hostileGlobs.join(","),
+    hostileGlobs.join(","),
+  );
+  assert.equal(compiled.error, undefined);
+  for (const target of [long, deep, long + "/" + long, "a/".repeat(20) + long])
+    assert.equal(compiled.allow(target), false);
+  assert.ok(Date.now() - started < 3000, "glob matching is not exponential");
+  // The renderer side: filters are sent only when typed, and the fields sit behind a toggle.
+  const view = load("src/content-search-view.ts");
+  const base = { regex: false, wholeWord: false };
+  assert.deepEqual(view.buildSearchRequest("x", base).options, base);
+  assert.deepEqual(
+    view.buildSearchRequest("x", { ...base, include: "  ", exclude: "" })
+      .options,
+    base,
+  );
+  assert.deepEqual(
+    view.buildSearchRequest("x", { ...base, include: "*.ts", exclude: "a, b" })
+      .options,
+    { ...base, include: "*.ts", exclude: "a, b" },
+  );
+  assert.match(
+    view.searchNote({ ...base, include: "*.ts" }),
+    /include and exclude globs are searched\.$/,
+  );
+  assert.ok(
+    !/globs/.test(view.searchNote({ ...base, include: " ", exclude: "" })),
+  );
+  const panels = read("src/WorkbenchPanels.tsx");
+  for (const token of [
+    'aria-label="Include files"',
+    'aria-label="Exclude files"',
+    'aria-label="File include and exclude filters"',
+    "aria-expanded={showFilters}",
+    "{showFilters && (",
+  ])
+    assert.ok(panels.includes(token), token);
+  assert.ok(!/new RegExp|dangerouslySetInnerHTML|innerHTML/.test(panels));
+});
+
+test("content-search glob walk", async () => {
+  const root = await project(GLOB_TREE());
+  const ask = (include, exclude, options = {}) =>
+    search(root, "needle", {
+      regex: false,
+      wholeWord: false,
+      include,
+      exclude,
+      ...options,
+    });
+  try {
+    const all = await ask("", "");
+    assert.deepEqual(paths(all), [
+      "Test/e.ts",
+      "docs/readme.md",
+      "lib/d.ts",
+      "lib/min/x.min.js",
+      "src/a.ts",
+      "src/b.test.ts",
+      "src/deep/c.md",
+      "src/deep/c.ts",
+      "top.ts",
+    ]);
+    assert.deepEqual(
+      await search(root, "needle"),
+      (await search(root, "needle", { regex: false, wholeWord: false }))
+        .matches,
+    );
+    assert.deepEqual(paths(await ask("*.ts", "*.test.ts")), [
+      "Test/e.ts",
+      "lib/d.ts",
+      "src/a.ts",
+      "src/deep/c.ts",
+      "top.ts",
+    ]);
+    assert.deepEqual(paths(await ask("src/**", "**/deep/**")), [
+      "src/a.ts",
+      "src/b.test.ts",
+    ]);
+    assert.deepEqual(paths(await ask("lib, docs", "*.min.js")), [
+      "docs/readme.md",
+      "lib/d.ts",
+    ]);
+    assert.deepEqual(paths(await ask("./top.ts", "")), ["top.ts"]);
+    assert.deepEqual(paths(await ask("", "*")), []);
+    // Globs filter the walk; they never add what the walk skips.
+    for (const include of [
+      "node_modules",
+      "**",
+      ".git",
+      "node_modules/**",
+      "*.ts",
+    ]) {
+      const got = paths(await ask(include, ""));
+      assert.ok(
+        !got.some(
+          (p) => p.startsWith("node_modules/") || p.startsWith(".git/"),
+        ),
+        include,
+      );
+    }
+    // Filtered files still count toward the file cap, so a filter cannot widen the scan.
+    assert.equal((await ask("", "*")).scanned, all.scanned);
+    assert.equal((await ask("*.md", "")).scanned, all.scanned);
+    // Bad globs are refused with the field name before any file is read.
+    for (const [include, exclude, message] of [
+      ["../x", "", /Include: .*\.\./],
+      ["", "/etc/*", /Exclude: .*absolute/],
+      ["{a,b}", "", /Braces/],
+      ["a\\b", "", /forward slashes/],
+    ])
+      await assert.rejects(() => ask(include, exclude), message);
+    // A symbolic link is never followed or listed, with or without a glob.
+    try {
+      await fs.symlink(path.join(root, "top.ts"), path.join(root, "link.ts"));
+      assert.ok(!paths(await ask("", "")).includes("link.ts"));
+      assert.ok(!paths(await ask("*.ts", "")).includes("link.ts"));
+    } catch (e) {
+      if (e.code !== "EPERM" && e.code !== "EEXIST") throw e;
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+  // The file cap (lowered for the test): files the globs filter out still count.
+  const crowd = await project(
+    Object.fromEntries(
+      Array.from({ length: 60 }, (_, k) => [`d${k % 3}/f${k}.txt`, "x\n"]),
+    ),
+  );
+  try {
+    const capped = await search(
+      crowd,
+      "needle",
+      { regex: false, wholeWord: false },
+      { maxFiles: 50 },
+    );
+    assert.deepEqual(
+      [capped.matches.length, capped.truncated, capped.reason, capped.scanned],
+      [0, true, "files", 50],
+    );
+    const filtered = await search(
+      crowd,
+      "needle",
+      { regex: false, wholeWord: false, exclude: "*.txt" },
+      { maxFiles: 50 },
+    );
+    assert.deepEqual([filtered.reason, filtered.scanned], ["files", 50]);
+    const whole = await search(crowd, "needle", {
+      regex: false,
+      wholeWord: false,
+    });
+    assert.deepEqual([whole.reason, whole.scanned], ["", 60]);
+    if (pythonOk) {
+      const py = runPython({
+        op: "searchText",
+        root: crowd,
+        path: "",
+        query: "needle",
+        options: {
+          regex: false,
+          wholeWord: false,
+          budgetMs: 60000,
+          maxFiles: 50,
+        },
+      });
+      assert.deepEqual(
+        [py.matches.length, py.truncated, py.reason, py.scanned],
+        [0, true, "files", 50],
+      );
+    }
+  } finally {
+    await fs.rm(crowd, { recursive: true, force: true });
+  }
+});
+
+test("content-search glob python", { skip: !pythonOk }, async () => {
+  const root = await project(GLOB_TREE());
+  try {
+    const combos = [
+      ["", ""],
+      ["*.ts", "*.test.ts"],
+      ["src/**", "**/deep/**"],
+      ["lib, docs", "*.min.js"],
+      ["./top.ts", ""],
+      ["", "*"],
+      ["src/*.ts", ""],
+      ["src/**/*.ts", "b*"],
+      ["?op.ts, Test", ""],
+      ["node_modules, .git, **", ""],
+    ];
+    for (const [include, exclude] of combos) {
+      const node = await search(root, "needle", {
+        regex: false,
+        wholeWord: false,
+        include,
+        exclude,
+      });
+      const compiled = cs.compileGlobs(include, exclude);
+      const py = runPython({
+        op: "searchText",
+        root,
+        path: "",
+        query: "needle",
+        options: {
+          regex: false,
+          wholeWord: false,
+          include: compiled.include,
+          exclude: compiled.exclude,
+          budgetMs: 10000,
+        },
+      });
+      assert.equal(py.failed, undefined, py.failed);
+      assert.deepEqual(paths(py), paths(node), `${include} | ${exclude}`);
+    }
+    // Remote requests are validated in Node before anything is sent anywhere.
+    const remote = { id: "remote", kind: "ssh", host: "example.test" };
+    const send = (query, options) =>
+      features.edit(remote, {
+        op: "searchText",
+        root: "/p",
+        path: "",
+        query,
+        options,
+      });
+    await assert.rejects(() => send("a", { include: "../x" }), /\.\./);
+    await assert.rejects(() => send("a", { exclude: "/etc/*" }), /absolute/);
+    await assert.rejects(() => send("(a+)+$", { regex: true }), /upper limit/);
+    await assert.rejects(() => send("\\p{L}", { regex: true }), /WSL and SSH/);
+    await assert.rejects(
+      () => send("a", { regex: "yes" }),
+      /Invalid search options/,
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});

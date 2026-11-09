@@ -1,4 +1,9 @@
-export type SearchOptions = { regex: boolean; wholeWord: boolean };
+export type SearchOptions = {
+  regex: boolean;
+  wholeWord: boolean;
+  include?: string;
+  exclude?: string;
+};
 export type SearchMatch = { path: string; line: number; text: string };
 export type SearchOutcome = {
   matches: SearchMatch[];
@@ -17,7 +22,12 @@ export function buildSearchRequest(query: string, options: SearchOptions) {
   return {
     op: "searchText",
     query,
-    options: { regex: options.regex, wholeWord: options.wholeWord },
+    options: {
+      regex: options.regex,
+      wholeWord: options.wholeWord,
+      ...(options.include?.trim() ? { include: options.include } : {}),
+      ...(options.exclude?.trim() ? { exclude: options.exclude } : {}),
+    },
   };
 }
 
@@ -55,7 +65,11 @@ export function readSearchOutcome(result: unknown): SearchOutcome {
 export function searchNote(options: SearchOptions): string {
   const kind = options.regex ? "Regular expression" : "Literal";
   const word = options.wholeWord ? ", whole word" : "";
-  return `${kind}, case-insensitive${word} search. Up to 200 matches across 20,000 files; dependencies and binaries are excluded.`;
+  const files =
+    options.include?.trim() || options.exclude?.trim()
+      ? " Only files that pass the include and exclude globs are searched."
+      : "";
+  return `${kind}, case-insensitive${word} search. Up to 200 matches across 20,000 files; dependencies and binaries are excluded.${files}`;
 }
 
 /** The status line shown when a search stopped early; empty when it ran to the end. */

@@ -17,9 +17,12 @@ const LIMITS = Object.freeze({
   MAX_UNBOUNDED: 3,
   MAX_DOUBLINGS: 10,
   MAX_REPEAT: 1000,
+  MAX_GLOBS: 20,
+  MAX_GLOB: 200,
 });
 
 const OPTION_FLAGS = ["regex", "wholeWord"];
+const OPTION_GLOBS = ["include", "exclude"];
 
 /** Escapes every regular expression syntax character so a literal can be embedded in a pattern. */
 function escapeRegExp(text) {
@@ -256,13 +259,180 @@ function normalizeSearchOptions(raw) {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw))
     return { error: "Invalid search options." };
   for (const key of Object.keys(raw))
-    if (!OPTION_FLAGS.includes(key))
+    if (!OPTION_FLAGS.includes(key) && !OPTION_GLOBS.includes(key))
       return { error: "Invalid search options." };
   for (const key of OPTION_FLAGS)
     if (raw[key] !== undefined && typeof raw[key] !== "boolean")
       return { error: "Invalid search options." };
+  for (const key of OPTION_GLOBS)
+    if (raw[key] !== undefined && typeof raw[key] !== "string")
+      return { error: "Invalid search options." };
+  const options = {
+    regex: raw.regex === true,
+    wholeWord: raw.wholeWord === true,
+  };
+  for (const key of OPTION_GLOBS)
+    if (raw[key] !== undefined) options[key] = raw[key];
+  return { options };
+}
+
+function codePoints(text) {
+  return Array.from(text);
+}
+
+// One name: * matches any run of characters, ? exactly one; no backtracking blow-up.
+function nameMatches(pattern, name) {
+  const pat = codePoints(pattern);
+  const text = codePoints(name);
+  let p = 0;
+  let n = 0;
+  let star = -1;
+  let mark = 0;
+  while (n < text.length) {
+    if (p < pat.length && pat[p] === "*") {
+      star = p++;
+      mark = n;
+    } else if (p < pat.length && (pat[p] === "?" || pat[p] === text[n])) {
+      p++;
+      n++;
+    } else if (star >= 0) {
+      p = star + 1;
+      n = ++mark;
+    } else return false;
+  }
+  while (p < pat.length && pat[p] === "*") p++;
+  return p === pat.length;
+}
+
+// A whole path: a segment that is exactly ** matches any number of folders.
+function pathMatches(segments, parts) {
+  let p = 0;
+  let n = 0;
+  let star = -1;
+  let mark = 0;
+  while (n < parts.length) {
+    if (p < segments.length && segments[p] === "**") {
+      star = p++;
+      mark = n;
+    } else if (p < segments.length && nameMatches(segments[p], parts[n])) {
+      p++;
+      n++;
+    } else if (star >= 0) {
+      p = star + 1;
+      n = ++mark;
+    } else return false;
+  }
+  while (p < segments.length && segments[p] === "**") p++;
+  return p === segments.length;
+}
+
+/** Splits the comma separated text of an include or exclude field into trimmed, non-empty globs. */
+function splitGlobs(text) {
+  return String(text)
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Normalizes one glob into {anchored, segments} or {error}. Globs are
+ * project-relative with forward slashes; * and ? work inside one name and a
+ * whole segment ** crosses folders. A glob with no slash matches a file or
+ * folder name at any depth, one with a slash (or a leading ./) starts at the
+ * project folder. Absolute paths, .., backslashes, control characters,
+ * braces, classes and a leading ! are refused.
+ */
+function normalizeGlob(raw) {
+  if (typeof raw !== "string" || !raw) return { error: "Empty glob." };
+  if (raw.length > LIMITS.MAX_GLOB)
+    return { error: `A glob can be at most ${LIMITS.MAX_GLOB} characters.` };
+  for (let k = 0; k < raw.length; k++) {
+    const c = raw.charCodeAt(k);
+    if (c < 32 || c === 127 || c === 8232 || c === 8233)
+      return { error: "A glob cannot contain control characters." };
+  }
+  if (raw.includes("\\"))
+    return { error: "Use forward slashes in globs, never backslashes." };
+  if (/[{}[\]]/.test(raw))
+    return {
+      error:
+        "Braces and character classes are not supported in globs; list each glob separately.",
+    };
+  if (raw[0] === "!")
+    return { error: "Use the exclude field instead of a leading !." };
+  if (raw[0] === "/" || /^[A-Za-z]:/.test(raw) || /^~(\/|$)/.test(raw))
+    return { error: "Globs are relative to the project folder, not absolute." };
+  const dotSlash = raw.startsWith("./");
+  const segments = [];
+  for (const part of raw.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..")
+      return {
+        error: "Globs cannot contain .. (they stay inside the project).",
+      };
+    const segment = part === "**" ? part : part.replace(/\*+/g, "*");
+    if (segment === "**" && segments[segments.length - 1] === "**") continue;
+    segments.push(segment);
+  }
+  if (!segments.length) return { error: "Empty glob." };
+  const anchored = segments.length > 1 || dotSlash;
+  if (!anchored && segments[0] === "**") segments[0] = "*";
+  return { anchored, segments };
+}
+
+function globHits(glob, parts) {
+  if (!glob.anchored)
+    return parts.some((name) => nameMatches(glob.segments[0], name));
+  for (let k = 1; k <= parts.length; k++)
+    if (pathMatches(glob.segments, parts.slice(0, k))) return true;
+  return false;
+}
+
+function normalizeGlobList(input, label) {
+  let raws;
+  if (Array.isArray(input))
+    raws = input.map((item) => (typeof item === "string" ? item.trim() : item));
+  else if (
+    typeof input === "string" &&
+    input.length <= LIMITS.MAX_GLOBS * (LIMITS.MAX_GLOB + 1)
+  )
+    raws = splitGlobs(input);
+  else return { error: `${label}: invalid glob list.` };
+  if (raws.length > LIMITS.MAX_GLOBS)
+    return { error: `${label}: at most ${LIMITS.MAX_GLOBS} globs.` };
+  const list = [];
+  for (const raw of raws) {
+    const glob = normalizeGlob(raw);
+    if (glob.error) return { error: `${label}: ${glob.error}` };
+    list.push(glob);
+  }
+  return { list };
+}
+
+/**
+ * Compiles the include and exclude globs (arrays of globs, or comma separated
+ * texts) into {allow(relativePath), include, exclude} or {error}. A file is searched when it matches an include glob (or
+ * there is none) and no exclude glob; a glob also matches through the folders
+ * above the file. Globs only filter the walk: they never add a path to it.
+ * include and exclude are the normalized lists a remote script receives.
+ */
+function compileGlobs(includeText = "", excludeText = "") {
+  const include = normalizeGlobList(includeText, "Include");
+  if (include.error) return { error: include.error };
+  const exclude = normalizeGlobList(excludeText, "Exclude");
+  if (exclude.error) return { error: exclude.error };
+  const hit = (list, parts) => list.some((glob) => globHits(glob, parts));
   return {
-    options: { regex: raw.regex === true, wholeWord: raw.wholeWord === true },
+    allow(relative) {
+      const parts = String(relative).split("/");
+      return (
+        (!include.list.length || hit(include.list, parts)) &&
+        !hit(exclude.list, parts)
+      );
+    },
+    include: include.list.map((g) => ({ a: g.anchored, s: g.segments })),
+    exclude: exclude.list.map((g) => ({ a: g.anchored, s: g.segments })),
+    active: include.list.length + exclude.list.length > 0,
   };
 }
 
@@ -274,7 +444,7 @@ function createBudget(now, ms) {
 
 /**
  * Validates a searchText request and returns what the walk needs: test(line),
- * risky, budgetMs and options (what a remote script receives, null for a
+ * allows(relativePath), risky, budgetMs and options (what a remote script receives, null for a
  * request without options, which keeps the original behavior and result).
  * Throws an Error with a message fit for the user.
  */
@@ -284,23 +454,36 @@ function prepare(request, remote = false, hooks = {}) {
       legacy: true,
       options: null,
       test: compileQuery({ query: request.query }).test,
+      allows: () => true,
       risky: false,
       budgetMs: Infinity,
     };
   }
   const normalized = normalizeSearchOptions(request.options);
   if (normalized.error) throw new Error(normalized.error);
+  const { regex, wholeWord, include, exclude } = normalized.options;
   const compiled = compileQuery({
     query: request.query,
-    ...normalized.options,
+    regex,
+    wholeWord,
     portable: remote,
   });
   if (compiled.error) throw new Error(compiled.error);
+  const globs = compileGlobs(include, exclude);
+  if (globs.error) throw new Error(globs.error);
   const budgetMs = hooks.budgetMs ?? LIMITS.BUDGET_MS;
   return {
     legacy: false,
-    options: { ...normalized.options, budgetMs },
+    options: {
+      regex,
+      wholeWord,
+      include: globs.include,
+      exclude: globs.exclude,
+      budgetMs,
+      ...(hooks.maxFiles ? { maxFiles: hooks.maxFiles } : {}),
+    },
     test: compiled.test,
+    allows: globs.allow,
     risky: compiled.risky,
     budgetMs,
   };
@@ -312,6 +495,9 @@ module.exports = {
   inspectPattern,
   compileQuery,
   normalizeSearchOptions,
+  splitGlobs,
+  normalizeGlob,
+  compileGlobs,
   createBudget,
   prepare,
 };
