@@ -300,6 +300,16 @@ const seatPrompt = require("./seat-prompt.cjs").createSeatPrompt({
   inventory: (connection) => backend.inventory(connection),
   runRig: (connection, args) => features.runRig(connection, args, 20000),
 });
+const seatMessage = require("./seat-message.cjs").createSeatMessage({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 30000),
+});
+handle("seat:message", (_event, connection, request) => {
+  core.validateConnection(connection);
+  if (connection.kind === "local" && process.platform === "win32")
+    throw new Error("Select a WSL or SSH connection.");
+  return seatMessage.operation(connection, request);
+});
 handle("seat:prompt", (_event, connection, id) => {
   core.validateConnection(connection);
   return seatPrompt.read(connection, id);

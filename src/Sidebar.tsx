@@ -56,6 +56,7 @@ export default function Sidebar({
   onSeat,
   onSeatBeside,
   onSeatPrompt,
+  onSeatMessage,
   onRelaunch,
   onDrag,
   onFile,
@@ -84,6 +85,7 @@ export default function Sidebar({
   onSeat: (seat: Seat) => void;
   onSeatBeside?: (seat: Seat) => void;
   onSeatPrompt?: (seat: Seat) => void;
+  onSeatMessage?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -189,6 +191,9 @@ export default function Sidebar({
       {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
       {onSeatPrompt && s.status === "attention" && (
         <IconButton title={`View pending prompt for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatPrompt(s)}><span aria-hidden="true">?</span></IconButton>
+      )}
+      {onSeatMessage && (
+        <IconButton title={`Message ${s.name} (reviewed before sending)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatMessage(s)}><span aria-hidden="true">✉</span></IconButton>
       )}
       <IconButton
         title={`Relaunch session ${s.name}`}

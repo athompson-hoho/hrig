@@ -62,13 +62,13 @@ export default function SeatPrompt({
         </>
       )}
       <div className="modal-actions">
-        <button onClick={() => setRevision((n) => n + 1)} disabled={loading}>
+        <button className="secondary-button" onClick={() => setRevision((n) => n + 1)} disabled={loading}>
           Refresh snapshot
         </button>
-        <button onClick={copy} disabled={!snapshot || !snapshot.text}>
+        <button className="secondary-button" onClick={copy} disabled={!snapshot || !snapshot.text}>
           Copy text
         </button>
-        <button onClick={onClose}>Close</button>
+        <button className="primary-button" onClick={onClose}>Close</button>
       </div>
     </Modal>
   );

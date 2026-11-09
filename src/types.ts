@@ -180,6 +180,10 @@ export interface HrigAPI {
       allowMissing?: boolean;
     },
   ): Promise<any>;
+  seatMessage(
+    connection: Connection,
+    request: { op: "prepare"; id: string; message: string } | { op: "send"; id: string; token: string },
+  ): Promise<any>;
   seatPrompt(
     connection: Connection,
     id: string,
