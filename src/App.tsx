@@ -218,6 +218,7 @@ import {
 } from "./WorkbenchPanels";
 import TaskBoard from "./TaskBoard";
 import { ReviewWorkspace, ProblemsPanel } from "./ReviewWorkspace";
+import { normalizeReviewChecks } from "./review-checks";
 import {
   ActivityPanel,
   MessagePanel,
@@ -622,6 +623,7 @@ export default function App() {
           // A hand-edited or damaged saved width is clamped, or replaced by the default.
           sidebarWidth: normalizeSidebarWidth(base.sidebarWidth),
           projectHistory: normalizeHistory(base.projectHistory),
+          reviewChecks: normalizeReviewChecks(base.reviewChecks),
           connections,
           preferences:
             base.preferences ??
@@ -1807,6 +1809,14 @@ export default function App() {
             seats={freshSeats(config.connection).filter(
               (s) => !state.activeRig || s.rigId === state.activeRig,
             )}
+            checks={state.reviewChecks}
+            onChecks={(update) =>
+              setState((s) => {
+                const current = normalizeReviewChecks(s.reviewChecks);
+                const next = update(current);
+                return next === current ? s : { ...s, reviewChecks: next };
+              })
+            }
             onSeat={(seat) => {
               openSeat(seat);
               applyPreset("Review");

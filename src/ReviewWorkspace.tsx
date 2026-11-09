@@ -4,10 +4,21 @@ import type { Connection, Seat, GitEntry } from "./types";
 import { ErrorBox, Loading } from "./components";
 import { problems } from "./editor-buffers";
 import { draftKey, draftOperation, useDraft } from "./drafts";
+import {
+  recheckPaths,
+  reviewKey,
+  reviewState,
+  toggleReviewed,
+  usablePath,
+  type ReviewChecks,
+} from "./review-checks";
+const NO_CHECKS: ReviewChecks = {};
 export function ReviewWorkspace({
   connection,
   root,
   seats,
+  checks,
+  onChecks,
   onDiff,
   onSeat,
   onProject,
@@ -15,6 +26,8 @@ export function ReviewWorkspace({
   connection: Connection;
   root: string;
   seats: Seat[];
+  checks: ReviewChecks | undefined;
+  onChecks: (update: (current: ReviewChecks) => ReviewChecks) => void;
   onDiff: (path: string) => void;
   onSeat: (seat: Seat) => void;
   onProject: () => void;
@@ -84,6 +97,66 @@ export function ReviewWorkspace({
       active = false;
     };
   }, [connection.id, root, revision]);
+  // A review check is a local tick kept with the file's content revision, so an edited file loses it.
+  const rkey = reviewKey(connection.id, root);
+  const saved = checks ?? NO_CHECKS;
+  // The revision each ticked file has now (null when it could not be read); a path that is not listed has not been read.
+  const [seen, setSeen] = useState<Map<string, string | null>>(new Map());
+  const [unreadable, setUnreadable] = useState<Set<string>>(new Set());
+  // The change list the re-read of the ticked files has finished for.
+  const [rechecked, setRechecked] = useState<GitEntry[] | null>(null);
+  useEffect(() => {
+    if (!changes || !isRepository) return;
+    let active = true;
+    setSeen(new Map());
+    setUnreadable(new Set());
+    // At most 50 ticked files, one read at a time; the rest are reported as not rechecked.
+    const { read } = recheckPaths(changes, saved, rkey);
+    (async () => {
+      for (const p of read) {
+        let current: string | null = null;
+        try {
+          const file = await window.hrig.edit(connection, {
+            op: "read",
+            root,
+            path: p,
+          });
+          if (typeof file.revision === "string" && file.revision)
+            current = file.revision;
+        } catch {
+          current = null;
+        }
+        if (!active) return;
+        setSeen((old) => new Map(old).set(p, current));
+      }
+      if (active) setRechecked(changes);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [changes]);
+  const stateOf = (c: GitEntry) =>
+    reviewState(saved, rkey, c.path, seen.get(c.path));
+  const tick = async (c: GitEntry) => {
+    if (stateOf(c) === "reviewed") {
+      onChecks((now) => toggleReviewed(now, rkey, c.path, null));
+      return;
+    }
+    try {
+      const file = await window.hrig.edit(connection, {
+        op: "read",
+        root,
+        path: c.path,
+      });
+      const current = file.revision;
+      if (typeof current !== "string" || !current)
+        throw new Error("The file has no revision.");
+      onChecks((now) => toggleReviewed(now, rkey, c.path, current));
+      setSeen((old) => new Map(old).set(c.path, current));
+    } catch {
+      setUnreadable((old) => new Set(old).add(c.path));
+    }
+  };
   const seat = seats.find((s) => s.id === (target || seats[0]?.id));
   return (
     <div className="tool-panel">
@@ -145,33 +218,66 @@ export function ReviewWorkspace({
         ) : changes === null && !error ? (
           <Loading />
         ) : error && changes === null ? null : changes?.length ? (
-          changes.map((c) => (
-            <button
-              key={c.path}
-              onClick={async () => {
-                try {
-                  const file = await window.hrig.edit(connection, {
-                    op: "read",
-                    root,
-                    path: c.path,
-                  });
-                  setDraft((d) => ({
-                    ...d,
-                    path: c.path,
-                    anchorPath: c.path,
-                    anchorRevision: file.revision,
-                  }));
-                  onDiff(c.path);
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
-            >
-              <FileCode2 size={14} />
-              <span>{c.path}</span>
-              <small>{c.status}</small>
-            </button>
-          ))
+          changes.map((c) => {
+            const state = stateOf(c);
+            const why =
+              c.status === "D"
+                ? "A deleted file cannot be marked reviewed."
+                : !usablePath(c.path)
+                  ? "This file path cannot be remembered, so the file cannot be marked reviewed."
+                  : unreadable.has(c.path)
+                    ? "This file could not be read, so it cannot be marked reviewed."
+                    : "";
+            const hint =
+              state === "stale"
+                ? "changed since reviewed"
+                : state === "failed"
+                  ? "could not verify"
+                  : state === "unknown" && rechecked === changes
+                    ? "not rechecked"
+                    : "";
+            return (
+              <div className="review-file-row" key={c.path}>
+                <input
+                  type="checkbox"
+                  aria-label={
+                    usablePath(c.path)
+                      ? "Mark " + c.path + " reviewed"
+                      : "Mark file reviewed"
+                  }
+                  checked={state === "reviewed"}
+                  disabled={!!why}
+                  title={why || undefined}
+                  onChange={() => void tick(c)}
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      const file = await window.hrig.edit(connection, {
+                        op: "read",
+                        root,
+                        path: c.path,
+                      });
+                      setDraft((d) => ({
+                        ...d,
+                        path: c.path,
+                        anchorPath: c.path,
+                        anchorRevision: file.revision,
+                      }));
+                      onDiff(c.path);
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  <FileCode2 size={14} />
+                  <span>{c.path}</span>
+                  <small>{c.status}</small>
+                </button>
+                {hint && <small className="review-hint">{hint}</small>}
+              </div>
+            );
+          })
         ) : (
           <p className="field-note">The working tree is clean.</p>
         )}

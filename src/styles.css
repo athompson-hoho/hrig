@@ -879,19 +879,38 @@
   max-height: 300px;
   overflow: auto;
 }
-.review-changes > button {
+.review-file-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 7px;
+  border-bottom: 1px solid var(--color-303d4b);
+}
+.review-file-row > input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--color-9cdbb7);
+}
+.review-file-row > button {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  width: 100%;
+  flex: 1;
   padding: 11px 7px;
   text-align: left;
-  border-bottom: 1px solid var(--color-303d4b);
   color: var(--color-9bb2cb);
 }
-.review-changes > button > span {
+.review-file-row > button > span {
   flex: 1;
+}
+.review-file-row > small {
+  flex: none;
+  padding-right: 7px;
+  font-size: 10px;
 }
 .review-changes small {
   color: var(--color-d5bd86);
