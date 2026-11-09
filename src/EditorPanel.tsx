@@ -18,6 +18,11 @@ import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
+import {
+  editorChangeOwner,
+  canPublishEditorChange,
+  canAcknowledgeEditorChange,
+} from "./editor-external-change";
 self.MonacoEnvironment = {
   getWorker(_id, label) {
     if (label === "json") return new JsonWorker();
@@ -118,13 +123,43 @@ export default function EditorPanel({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [external, setExternal] = useState<{
+  const [externalState, setExternalState] = useState<{
     content: string;
     revision: string;
+    lifetime: object;
+    buffer: object | undefined;
   } | null>(null);
   const [compare, setCompare] = useState(false);
   const [reloadConfirm, setReloadConfirm] = useState(false);
   const [notice, setNotice] = useState("");
+  const [acknowledged, setAcknowledged] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
+  const owner = editorChangeOwner(id, config, diff);
+  const lifetime = useRef({ owner, active: true, edit: 0, request: 0, busy: false });
+  if (lifetime.current.owner !== owner) {
+    lifetime.current.active = false;
+    lifetime.current = { owner, active: true, edit: 0, request: 0, busy: false };
+  }
+  const generation = lifetime.current;
+  const ownsBuffer = () => {
+    const registered = bufferConfigs.get(id);
+    return generation.active && lifetime.current === generation &&
+      editorChangeOwner(id, config, diff) === owner &&
+      !!registered && editorChangeOwner(id, registered, diff) === owner;
+  };
+  const capture = () => {
+    const buffer = buffers.get(id);
+    return { owner, lifetime: generation, buffer, request: generation.request,
+      edit: generation.edit, content: buffer?.content, saved: buffer?.saved, revision: buffer?.revision };
+  };
+  const current = (captured: ReturnType<typeof capture>, preserveEdits = true) =>
+    ownsBuffer() && canPublishEditorChange(captured, capture(), preserveEdits);
+  const external = externalState?.lifetime === generation &&
+    externalState.buffer === buffers.get(id) && ownsBuffer() ? externalState : null;
+  const represented = useRef(external);
+  represented.current = external;
+  const setExternal = (disk: { content: string; revision: string } | null) =>
+    setExternalState(disk && { ...disk, lifetime: generation, buffer: buffers.get(id) });
   const recoveryKey = draftKey(
     "editor",
     config.connection,
@@ -144,6 +179,7 @@ export default function EditorPanel({
     }
   });
   const persist = () => {
+    if (!ownsBuffer()) return;
     try {
       persistBuffer(id);
     } catch (e) {
@@ -173,7 +209,10 @@ export default function EditorPanel({
   }, [config.line]);
   const save = async () => {
     const buffer = buffers.get(id);
-    if (!buffer) return;
+    if (!buffer || !ownsBuffer() || generation.busy) return;
+    generation.busy = true;
+    generation.request++;
+    const captured = capture();
     setSaving(true);
     setError("");
     const content = buffer.content;
@@ -185,23 +224,44 @@ export default function EditorPanel({
         content,
         revision: buffer.revision,
       });
+      if (!current(captured, false)) return;
       buffer.saved = content;
       buffer.revision = result.revision;
+      setAcknowledged(null);
+      setExternal(null);
+      setCompare(false);
       persist();
       const changed = buffer.content !== content;
       setDirty(changed);
       onDirty(id, changed);
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      if (current(captured, false)) {
+        const message = (e as Error).message;
+        setError(message.includes("CONFLICT:")
+          ? message + "\nFile changed on disk. Your edits are preserved. Compare with disk or reload before trying to save again."
+          : message);
+      }
     } finally {
-      setSaving(false);
+      if (ownsBuffer() && buffers.get(id) === buffer && generation.request === captured.request) {
+        generation.busy = false;
+        setSaving(false);
+      }
     }
   };
   saveRef.current = save;
   useEffect(() => {
+    generation.active = true;
+    const registered = bufferConfigs.get(id);
+    if (!diff && ((registered && editorChangeOwner(id, registered) !== owner) ||
+      (buffers.has(id) && !registered))) {
+      setValue(undefined);
+      setError("This panel belongs to a different file buffer. Reopen the original file to recover your edits.");
+      return () => { generation.active = false; };
+    }
     if (!diff) bufferConfigs.set(id, config);
     let active = true;
+    const opening = capture();
     const read = window.hrig.edit(config.connection, {
       op: "read",
       root: config.root,
@@ -219,7 +279,9 @@ export default function EditorPanel({
       : Promise.all([read])
     )
       .then(([current, base]) => {
-        if (!active) return;
+        if (!active || !generation.active || lifetime.current !== generation ||
+          editorChangeOwner(id, config, diff) !== owner ||
+          !canPublishEditorChange(opening, capture())) return;
         if (diff) setOriginal(base.content);
         else if (!buffers.has(id))
           buffers.set(id, {
@@ -234,10 +296,12 @@ export default function EditorPanel({
         if (!diff) onDirty(id, isDirty);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (active && generation.active && lifetime.current === generation &&
+          canPublishEditorChange(opening, capture())) setError(e.message);
       });
     return () => {
       active = false;
+      generation.active = false;
       if (editorFocusers.get(id) === focusRef.current)
         editorFocusers.delete(id);
       // Detach first: the React Monaco wrapper disposes models before its widget.
@@ -245,9 +309,10 @@ export default function EditorPanel({
       diffRef.current?.setModel(null);
       diffRef.current = null;
     };
-  }, [id]);
+  }, [generation]);
   useEffect(() => {
     const sync = () => {
+      if (!ownsBuffer()) return;
       const b = buffers.get(id);
       if (b) {
         setValue(b.content);
@@ -258,13 +323,14 @@ export default function EditorPanel({
     };
     window.addEventListener("hrig:buffers-saved", sync);
     return () => window.removeEventListener("hrig:buffers-saved", sync);
-  }, [id]);
+  }, [generation]);
   useEffect(() => {
     if (diff) return;
     let active = true;
     let checking = false;
     const check = async () => {
-      if (checking) return;
+      if (checking || !ownsBuffer() || generation.busy) return;
+      const captured = capture();
       checking = true;
       try {
         const current = await window.hrig.edit(config.connection, {
@@ -273,7 +339,8 @@ export default function EditorPanel({
           path: config.path,
         });
         const buffer = buffers.get(id);
-        if (!active || !buffer || buffer.revision === current.revision) return;
+        if (!active || !buffer || !ownsBuffer() ||
+          !canPublishEditorChange(captured, capture()) || buffer.revision === current.revision) return;
         if (
           buffer.content === buffer.saved &&
           preferences["editor.autoReload"]
@@ -282,10 +349,13 @@ export default function EditorPanel({
           buffer.saved = current.content;
           buffer.revision = current.revision;
           setValue(current.content);
+          setAcknowledged(null);
+          setExternal(null);
           setNotice("Reloaded changes from disk");
         } else setExternal(current);
       } catch (e) {
-        if (active) setNotice("Disk check: " + (e as Error).message);
+        if (active && ownsBuffer() && canPublishEditorChange(captured, capture()))
+          setNotice("Could not check disk changes. Your edits are preserved. HRig will check again on focus or at the next disk check.");
       } finally {
         checking = false;
       }
@@ -300,7 +370,63 @@ export default function EditorPanel({
       clearInterval(timer);
       window.removeEventListener("focus", check);
     };
-  }, [id, diff, preferences["editor.autoReload"]]);
+  }, [generation, diff, preferences["editor.autoReload"]]);
+  const cancelReload = () => {
+    if (!ownsBuffer()) return;
+    if (generation.busy && reloading) {
+      generation.request++;
+      generation.busy = false;
+      setReloading(false);
+    }
+    setReloadConfirm(false);
+  };
+  const reload = async () => {
+    const buffer = buffers.get(id);
+    if (!buffer || !ownsBuffer() || generation.busy) return;
+    generation.busy = true;
+    generation.request++;
+    const captured = capture();
+    setReloading(true);
+    setError("");
+    try {
+      const disk = await window.hrig.edit(config.connection, {
+        op: "read", root: config.root, path: config.path,
+      });
+      if (!current(captured, false)) return;
+      if (!current(captured)) {
+        setNotice("Reload canceled because you edited this file while it was loading. Your edits are preserved. Choose Reload from disk to try again.");
+        setReloadConfirm(false);
+        return;
+      }
+      buffer.content = disk.content;
+      buffer.saved = disk.content;
+      buffer.revision = disk.revision;
+      persist();
+      diffRef.current?.setModel(null);
+      setCompare(false);
+      setExternal(null);
+      setAcknowledged(null);
+      setValue(disk.content);
+      setDirty(false);
+      onDirty(id, false);
+      setReloadConfirm(false);
+      setNotice("Reloaded changes from disk");
+    } catch (e) {
+      if (current(captured)) {
+        setError("Could not reload from disk. Your edits are preserved. Choose Reload from disk to try again.\n" + (e as Error).message);
+        setReloadConfirm(false);
+      }
+    } finally {
+      if (ownsBuffer() && buffers.get(id) === buffer && generation.request === captured.request) {
+        generation.busy = false;
+        setReloading(false);
+      }
+    }
+  };
+  // A retained buffer belongs to its registered file, never to a same-id retarget.
+  const registered = bufferConfigs.get(id);
+  if (!diff && buffers.has(id) && (!registered || editorChangeOwner(id, registered) !== owner))
+    return <div className="editor-panel"><ErrorBox error="This panel belongs to a different file buffer. Reopen the original file to recover your edits." /></div>;
   return (
     <div className="editor-panel">
       <div className="editor-toolbar">
@@ -314,7 +440,7 @@ export default function EditorPanel({
           <button
             className={`small-button ${dirty ? "highlight" : ""}`}
             onClick={save}
-            disabled={saving || value === undefined || !!recovery}
+            disabled={saving || reloading || value === undefined || !!recovery}
           >
             <Save size={12} />
             {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
@@ -330,7 +456,8 @@ export default function EditorPanel({
             className="small-button"
             onClick={() => {
               const b = buffers.get(id);
-              if (!b) return;
+              if (!b || !ownsBuffer()) return;
+              generation.edit++;
               const disk = { ...b };
               Object.assign(b, recovery);
               setValue(b.content);
@@ -360,14 +487,16 @@ export default function EditorPanel({
         </div>
       )}
       {external && (
-        <div className="external-change">
+        <div className="external-change" role="status">
           <span>
-            This file changed outside HRig. Your edits are preserved; saving is
-            protected.
+            {acknowledged === external.revision
+              ? "Keeping your text. Save remains blocked while the disk version conflicts. Compare or reload to review the disk changes."
+              : "This file changed outside HRig. Your edits are preserved; saving is protected."}
           </span>
           <button
             className="small-button"
             onClick={() => {
+              if (!ownsBuffer() || represented.current !== external) return;
               setError("");
               diffRef.current?.setModel(null);
               setCompare((v) => !v);
@@ -377,13 +506,26 @@ export default function EditorPanel({
           </button>
           <button
             className="small-button"
-            onClick={() => setReloadConfirm(true)}
+            disabled={saving || reloading}
+            onClick={() => {
+              if (ownsBuffer() && represented.current === external && !generation.busy)
+                setReloadConfirm(true);
+            }}
           >
-            Reload from disk
+            {reloading ? "Reloading…" : "Reload from disk"}
           </button>
+          {acknowledged !== external.revision && <button
+            className="small-button"
+            disabled={saving || reloading}
+            onClick={() => {
+              if (ownsBuffer() && represented.current === external &&
+                canAcknowledgeEditorChange(external.revision, represented.current?.revision, generation.busy))
+                setAcknowledged(external.revision);
+            }}
+          >Keep mine</button>}
         </div>
       )}
-      {!external && notice && <div className="editor-notice">{notice}</div>}
+      {notice && <div className="editor-notice" role="status">{notice}</div>}
       {error && value !== undefined && <ErrorBox error={error} />}
       {error && value === undefined ? (
         <ErrorBox error={error} />
@@ -421,7 +563,8 @@ export default function EditorPanel({
           theme="hrig-settings"
           onChange={(text) => {
             const b = buffers.get(id);
-            if (!b) return;
+            if (!b || !ownsBuffer()) return;
+            generation.edit++;
             b.content = text || "";
             if (!recovery) persist();
             setValue(b.content);
@@ -471,43 +614,21 @@ export default function EditorPanel({
         <Modal
           title="Discard local edits and reload?"
           subtitle="The version currently on disk will replace your unsaved text."
-          onClose={() => setReloadConfirm(false)}
+          onClose={cancelReload}
         >
           <div className="modal-actions">
             <button
               className="secondary-button"
-              onClick={() => setReloadConfirm(false)}
+              onClick={cancelReload}
             >
               Keep editing
             </button>
             <button
               className="primary-button"
-              onClick={async () => {
-                try {
-                  const disk = await window.hrig.edit(config.connection, {
-                    op: "read",
-                    root: config.root,
-                    path: config.path,
-                  });
-                  const b = buffers.get(id)!;
-                  b.content = disk.content;
-                  b.saved = disk.content;
-                  b.revision = disk.revision;
-                  persist();
-                  diffRef.current?.setModel(null);
-                  setCompare(false);
-                  setExternal(null);
-                  setValue(disk.content);
-                  setDirty(false);
-                  onDirty(id, false);
-                  setReloadConfirm(false);
-                  setError("");
-                } catch (e) {
-                  setError((e as Error).message);
-                }
-              }}
+              disabled={saving || reloading}
+              onClick={reload}
             >
-              Discard edits and reload
+              {reloading ? "Reloading…" : "Discard edits and reload"}
             </button>
           </div>
         </Modal>
