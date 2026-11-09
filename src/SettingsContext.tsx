@@ -6,10 +6,12 @@ import {
   type SettingKey,
   type SettingsScope,
 } from "./settings";
+import type { RecentChange } from "./settings-recent";
 export const SettingsContext = createContext<{
   effective: Preferences;
   user: Overrides;
   project: Overrides;
+  recent: RecentChange[];
   update: (scope: SettingsScope, key: SettingKey, value: unknown) => void;
   replace: (scope: SettingsScope, value: Overrides) => void;
   reset: (scope: SettingsScope, key?: SettingKey) => void;
@@ -17,6 +19,7 @@ export const SettingsContext = createContext<{
   effective: defaults,
   user: {},
   project: {},
+  recent: [],
   update: () => {},
   replace: () => {},
   reset: () => {},

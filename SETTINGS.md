@@ -17,7 +17,7 @@ The design follows [VS Code's user/workspace settings](https://code.visualstudio
 | Terminal preferences | Live font, line spacing, cursor, scrollback, independent color theme; local PowerShell or Command Prompt for new shells. |
 | Workspace and rig defaults | Inventory refresh frequency, connection defaults, rig designer runtime and team size. |
 | Notifications | Desktop attention notification preference, migrated from the older attention panel option. |
-| Transfer and discoverability | Validated preferences-only JSON import/export, per-row and scoped resets, shortcut reference and About. |
+| Transfer and discoverability | Validated preferences-only JSON import/export, per-row and scoped resets, a Recently changed filter, shortcut reference and About. |
 
 ## Scope and persistence
 
@@ -30,6 +30,8 @@ Changing terminal appearance updates the existing xterm view, without replacing 
 The Settings JSON view exports preferences only, including any configured default-root preference; it excludes saved connections, credentials, current project bindings, layouts and terminal output. Imports replace only the selected scope after full key/type/range validation. Unknown keys, invalid values, oversized files and malformed JSON are rejected before any preference is applied.
 
 Project override indicator: a setting the open project overrides can hide behind the value you see, because the value shown in the User scope is not the value in effect for that project. In the User scope a row shows a note when the open project overrides that setting: Overridden in this project: followed by the project value (a choice shows its label and a switch shows On or Off), or Also set in this project (same value) when the project sets the very value your user setting has, which it keeps if you later change your user setting. A line under the scope note counts them, for example This project overrides 5 settings; 3 differ from your user values., and its tooltip lists the keys (the first ten). The Project scope, which already marks its own rows with Project override and has Remove project override, is unchanged, and the count also shows there; its rows are the overrides, and Modified only lists the ones in the current category. The indicator reads the open project's own saved overrides and follows them as they change, so it is always about the project you have open. Nothing is saved, changed or sent by the indicator: it is display only, and saving, resetting and the scopes work as before.
+
+Recently changed: the Recently changed box beside Modified only lists the settings you changed since HRig started, newest first, across every category; the order of this list replaces the category order, and a search or Modified only narrows it as usual. A change is setting, resetting or applying JSON; a setting changed more than once is listed once, at its latest change, and setting a row to the value it already had is not a change. The list is kept in memory only: it is not saved, not exported in the Settings JSON, and empty again after a restart, because HRig stores no change times. The User and Project scopes have their own lists, and the Project list belongs to the project you have open. The box is greyed out with a tooltip while nothing has changed in the scope you are looking at. It only filters the page: nothing is saved, changed or sent by it, and choosing a category or Settings JSON leaves it.
 
 ## Settings catalog
 

@@ -26,6 +26,7 @@ import {
 } from "./settings";
 import { themes } from "./themes";
 import { overrideNote, summarizeOverrides } from "./settings-overrides";
+import { recentRows } from "./settings-recent";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
 import UpdateSettings from './UpdateSettings';
@@ -169,6 +170,7 @@ export default function SettingsPage({ project }: { project: string }) {
     [query, setQuery] = useState(""),
     [scope, setScope] = useState<SettingsScope>("user"),
     [modifiedOnly, setModifiedOnly] = useState(false),
+    [recentOnly, setRecentOnly] = useState(false),
     [confirmReset, setConfirmReset] = useState(false),
     [json, setJson] = useState(""),
     [error, setError] = useState(""),
@@ -177,15 +179,20 @@ export default function SettingsPage({ project }: { project: string }) {
     own = scope === "user" ? context.user : context.project;
   const summary = summarizeOverrides(context.user, context.project);
   const text = query.trim().toLowerCase();
-  const matches = schema.filter(
+  const recent = recentRows(schema, context.recent, scope);
+  const found = schema.filter(
     (row) =>
       (text
         ? `${row.key} ${row.label} ${row.description} ${row.category} ${row.options?.map((o) => o.label + " " + o.value).join(" ") || ""}`
             .toLowerCase()
             .includes(text)
-        : row.category === category) &&
+        : recentOnly || row.category === category) &&
       (!modifiedOnly || Object.hasOwn(own, row.key)),
   );
+  const matches = recentOnly
+    ? recent.filter((row) => found.includes(row))
+    : found;
+  const listing = !!query || recentOnly;
   const value =
     own["appearance.theme"] ??
     (scope === "project" ? context.user["appearance.theme"] : undefined) ??
@@ -208,6 +215,7 @@ export default function SettingsPage({ project }: { project: string }) {
   const openJson = () => {
     setCategory("JSON");
     setQuery("");
+    setRecentOnly(false);
     setError("");
     setJson(JSON.stringify({ version: 1, settings: own }, null, 2));
   };
@@ -248,6 +256,24 @@ export default function SettingsPage({ project }: { project: string }) {
             onChange={(e) => setModifiedOnly(e.target.checked)}
           />{" "}
           Modified only
+        </label>
+        <label
+          className="checkbox-label"
+          title={
+            recent.length || recentOnly
+              ? "Show the settings changed since HRig started, newest first"
+              : "Nothing has changed in the " +
+                scope +
+                " scope since HRig started"
+          }
+        >
+          <input
+            type="checkbox"
+            checked={recentOnly}
+            disabled={!recent.length && !recentOnly}
+            onChange={(e) => setRecentOnly(e.target.checked)}
+          />{" "}
+          Recently changed
         </label>
       </div>
       <div className="settings-scopes" role="group" aria-label="Settings scope">
@@ -291,11 +317,12 @@ export default function SettingsPage({ project }: { project: string }) {
               key={name}
               aria-label={name}
               title={name}
-              className={category === name && !query ? "selected" : ""}
-              aria-current={category === name && !query ? "page" : undefined}
+              className={category === name && !listing ? "selected" : ""}
+              aria-current={category === name && !listing ? "page" : undefined}
               onClick={() => {
                 setCategory(name);
                 setQuery("");
+                setRecentOnly(false);
                 setError("");
               }}
             >
@@ -325,13 +352,19 @@ export default function SettingsPage({ project }: { project: string }) {
               {notice}
             </p>
           )}
-          {category==='Updates' && !query ? <UpdateSettings /> : category === "Mobile devices" && !query ? <MobileDevices /> : query || schema.some((r) => r.category === category) ? (
+          {category==='Updates' && !listing ? <UpdateSettings /> : category === "Mobile devices" && !listing ? <MobileDevices /> : listing || schema.some((r) => r.category === category) ? (
             <>
               <div className="settings-section-title">
-                <h3>{query ? "Search results" : category}</h3>
+                <h3>
+                  {query
+                    ? "Search results"
+                    : recentOnly
+                      ? "Recently changed"
+                      : category}
+                </h3>
                 <span>{matches.length} settings</span>
               </div>
-              {!query && category === "Appearance" && !modifiedOnly && (
+              {!listing && category === "Appearance" && !modifiedOnly && (
                 <>
                   {["Built-in", "Community"].map((group) => (
                     <section className="theme-collection" key={group}>
@@ -418,7 +451,10 @@ export default function SettingsPage({ project }: { project: string }) {
                 <div className="settings-empty">
                   <Search size={23} />
                   <h3>No matching settings</h3>
-                  <p>Try a different keyword or turn off Modified only.</p>
+                  <p>
+                    Try a different keyword or turn off Modified only or
+                    Recently changed.
+                  </p>
                 </div>
               )}
             </>

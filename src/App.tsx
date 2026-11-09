@@ -82,6 +82,12 @@ import {
 import Sidebar from "./Sidebar";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
+import {
+  changedKeys,
+  noteChanges,
+  recentFor,
+  type RecentChange,
+} from "./settings-recent";
 import { HostTintContext } from "./HostTint";
 import HostTintDialog from "./HostTintDialog";
 import { normalizeHostTints } from "./host-tint";
@@ -415,28 +421,49 @@ export default function App() {
             },
           },
     );
+  // The settings changed since HRig started, newest first: kept in memory only, never saved or exported.
+  const [recentChanges, setRecentChanges] = useState<RecentChange[]>([]);
+  const ownSettings = (scope: SettingsScope) =>
+    scope === "user" ? userPreferences : projectPreferences;
+  const noteRecent = (scope: SettingsScope, after: unknown) => {
+    const keys = changedKeys(ownSettings(scope), after);
+    if (keys.length)
+      setRecentChanges((list) =>
+        noteChanges(list, keys, scope, scope === "project" ? projectId : ""),
+      );
+  };
   const settingsContext = {
     effective: preferences,
     user: userPreferences,
     project: projectPreferences,
+    recent: recentFor(recentChanges, projectId),
     update: (
       scope: SettingsScope,
       key: keyof typeof preferences,
       value: unknown,
-    ) =>
+    ) => {
+      noteRecent(scope, { ...ownSettings(scope), [key]: value });
       changePreferences(scope, (current) => ({
         ...current,
         ...validateOverrides({ [key]: value }),
-      })),
-    replace: (scope: SettingsScope, value: Overrides) =>
-      changePreferences(scope, () => validateOverrides(value)),
-    reset: (scope: SettingsScope, key?: keyof typeof preferences) =>
+      }));
+    },
+    replace: (scope: SettingsScope, value: Overrides) => {
+      noteRecent(scope, value);
+      changePreferences(scope, () => validateOverrides(value));
+    },
+    reset: (scope: SettingsScope, key?: keyof typeof preferences) => {
+      noteRecent(
+        scope,
+        key ? { ...ownSettings(scope), [key]: undefined } : {},
+      );
       changePreferences(scope, (current) => {
         const next = { ...current };
         if (key) delete next[key];
         else return {};
         return next;
-      }),
+      });
+    },
   };
   const saveShortcutOverrides = (text: string) => {
     const scope = Object.hasOwn(projectPreferences, "shortcuts.overrides") ? "project" : "user";
