@@ -60,7 +60,16 @@ export function analyzeSettingsImport(text: string, current: Overrides = {}): Im
       Object.assign(valid, validateOverrides({ [key]: value }));
     } catch (e) {
       const msg = (e as Error).message;
-      skipped.push({ key: key.slice(0, 60), reason: msg.startsWith("Unknown setting") ? "not a setting in this HRig (it may come from a newer or older version)" : msg });
+      const unknown = msg.startsWith("Unknown setting");
+      const keeps = !unknown && Object.hasOwn(current, key);
+      // A known setting with a bad imported value keeps the user's current value.
+      if (keeps) valid[key] = (current as Record<string, unknown>)[key];
+      skipped.push({
+        key: key.slice(0, 60),
+        reason: unknown
+          ? "not a setting in this HRig (it may come from a newer or older version)"
+          : msg + (keeps ? " (your current value is kept)" : ""),
+      });
     }
   }
   const cur = current as Record<string, unknown>;

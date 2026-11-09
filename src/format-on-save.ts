@@ -3,6 +3,8 @@ export const FORMATTABLE = new Set([
   "json", "jsonc", "css", "scss", "less", "html", "typescript", "javascript",
 ]);
 export const MAX_FORMAT_CHARS = 500000;
+/** Longest Save waits for the formatter before saving the file as written. */
+export const FORMAT_TIMEOUT_MS = 4000;
 
 /**
  * Whether Save should first run the editor's built-in formatter. Opt-in,
