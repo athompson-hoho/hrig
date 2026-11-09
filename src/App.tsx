@@ -2017,7 +2017,7 @@ export default function App() {
   return (
     <SettingsContext.Provider value={settingsContext}>
       <div className="app" inert={updateRestarting || undefined}>
-        {transcriptView && <SeatTranscript key={transcriptView.connection.id + transcriptView.seat.id} connection={transcriptView.connection} seat={transcriptView.seat} onClose={() => setTranscriptView(null)} />}
+        {transcriptView && <SeatTranscript key={transcriptView.connection.id + transcriptView.seat.id} connection={transcriptView.connection} seat={transcriptView.seat} others={freshSeats(transcriptView.connection)} onClose={() => setTranscriptView(null)} />}
         {quickMessage && <SeatMessage key={quickMessage.connection.id + quickMessage.seat.id} connection={quickMessage.connection} seat={quickMessage.seat} onClose={() => setQuickMessage(null)} onSent={(m) => { setQuickMessage(null); notify(m); }} />}
         {promptView && <SeatPrompt key={promptView.connection.id + promptView.seat.id} connection={promptView.connection} seat={promptView.seat} onClose={() => setPromptView(null)} />}
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {

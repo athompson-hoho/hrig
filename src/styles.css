@@ -4618,3 +4618,7 @@ button:hover {
 .settings-import-report ul { margin: 4px 0 4px 18px; padding: 0; }
 .panel-error { padding: 16px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
 .panel-error .panel-error-text { white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; font-size: 11px; }
+.seat-compare-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.seat-compare-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.seat-compare-pane h4 { margin: 4px 0; font-size: 12px; }
+@media (max-width: 800px) { .seat-compare-grid.two { grid-template-columns: minmax(0, 1fr); } }

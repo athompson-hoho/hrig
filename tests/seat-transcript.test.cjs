@@ -53,7 +53,7 @@ test('wiring is read-only: IPC + preload exist; module/dialog have no send path'
   assert.doesNotMatch(fs.readFileSync('electron/seat-transcript.cjs', 'utf8'), /send-keys|"send"|sendMessage|runAction/);
   const ui = fs.readFileSync('src/SeatTranscript.tsx', 'utf8');
   assert.doesNotMatch(ui, /rigAction|rigControl|sendMessage|seatMessage|<input|<textarea/);
-  assert.match(ui, /seatTranscript\(connection, seat\.id\)/);
+  assert.match(ui, /seatTranscript\(connection, seatId\)/);
 });
 
 test('actual Sidebar offers the transcript control on every row with a session, disabled when stale', () => {
