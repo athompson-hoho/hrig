@@ -389,7 +389,7 @@ test("task-age board: the real task board shows an age badge on every card with 
       ["Task q-stuck", "Task q-held"],
     );
 
-    // The badge is the existing badge class with two plain attributes; the card gains one data attribute and nothing else.
+    // The badge is the existing badge class with two plain attributes; the card gains one data attribute and the roving tabIndex of task-board-nav.
     assert.deepEqual(ages["Task q-stuck"].keys, [
       "children",
       "className",
@@ -401,6 +401,7 @@ test("task-age board: the real task board shows an age badge on every card with 
       "className",
       "data-stuck",
       "onClick",
+      "tabIndex",
     ]);
 
     // The card keeps today's children in today's order and gains the age badge last.
@@ -1209,7 +1210,7 @@ test("task-age wiring: the module is pure and reads no clock, the board reads th
   assert.equal(
     count(
       board,
-      '<button className="task-card" key={item.id} onClick={() => inspect(item)} data-stuck={isStuck(item, now) ? "true" : undefined} > <strong>{item.title}</strong> <span>{item.destination}</span> {reasonNote(item)} <small className="badge">{item.status}</small> {ageNote(item)} </button>',
+      '<button className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-stuck={isStuck(item, now) ? "true" : undefined} > <strong>{item.title}</strong> <span>{item.destination}</span> {reasonNote(item)} <small className="badge">{item.status}</small> {ageNote(item)} </button>',
     ),
     1,
     "the card: today's children, the reason line after the owner, the age badge last",

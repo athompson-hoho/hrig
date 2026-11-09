@@ -1,4 +1,9 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+} from "react";
 import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
@@ -22,6 +27,9 @@ import {
   cellAtIndex,
   cellIndex,
   moveFocus,
+  stopAt,
+  tabCell,
+  type Stop,
 } from "./task-board-nav";
 export default function TaskBoard({
   connection,
@@ -50,6 +58,9 @@ export default function TaskBoard({
   const [body, setBody] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
+  // The card that last had focus (the board's one tab stop) and, while a refresh lands, the board that had focus.
+  const [stop, setStop] = useState<Stop | null>(null);
+  const [held, setHeld] = useState<Element | null>(null);
   useEffect(() => {
     let active = true;
     const load = () =>
@@ -57,6 +68,11 @@ export default function TaskBoard({
         .queue(connection, rigName)
         .then((r) => {
           if (active) {
+            setHeld(
+              typeof document === "undefined"
+                ? null
+                : document.activeElement?.closest(".task-board") || null,
+            );
             setItems(r);
             setError("");
           }
@@ -71,6 +87,13 @@ export default function TaskBoard({
       clearInterval(timer);
     };
   }, [connection.id, rigName, refresh]);
+  // A refresh that moves the focused card to another column replaces its element. Put focus back on the board's tab stop
+  // only when the board had focus and lost it; focus that is anywhere else is never moved.
+  useEffect(() => {
+    if (!held || typeof document === "undefined") return;
+    if (held.contains(document.activeElement)) return;
+    held.querySelector<HTMLElement>('.task-card[tabindex="0"]')?.focus();
+  }, [items]);
   const addresses = seats.map((s) => ({
     seat: s,
     address: s.name + "@" + s.rigName,
@@ -118,6 +141,7 @@ export default function TaskBoard({
   };
   const visible = applyFilters(items || [], filters);
   const columns = boardColumns(visible);
+  const tab = tabCell(columns, stop);
   const tags = tagOptions(items || []);
   const stale = staleFilters(
     filters,
@@ -134,9 +158,12 @@ export default function TaskBoard({
     setFilters(emptyFilters());
     onFilters?.(emptyFilters());
   };
+  // Only the card that last had focus is a tab stop, so Tab crosses the board in one step.
+  const tabFor = (col: number, row: number) =>
+    tab && tab.col === col && tab.row === row ? 0 : -1;
   const cardsOf = (board: HTMLElement) =>
     Array.from(board.querySelectorAll<HTMLElement>(".task-card"));
-  // Up and Down move focus between the cards of a column. Only a key typed on a card is looked at, and only a handled key is consumed.
+  // Arrows, Home and End move focus between cards. Only a key typed on a card is looked at, and only a handled key is consumed.
   const onBoardKey = (event: KeyboardEvent<HTMLElement>) => {
     const cards = cardsOf(event.currentTarget);
     const here = cards.indexOf(event.target as HTMLElement);
@@ -146,6 +173,13 @@ export default function TaskBoard({
     event.preventDefault();
     const next = cards[cellIndex(columns, to)];
     if (next && next !== event.target) next.focus();
+  };
+  const onBoardFocus = (event: FocusEvent<HTMLElement>) => {
+    const at = cardsOf(event.currentTarget).indexOf(
+      event.target as HTMLElement,
+    );
+    const next = stopAt(columns, cellAtIndex(columns, at));
+    if (next) setStop(next);
   };
   const reasonNote = (item: any) => {
     const reason = reasonOf(item);
@@ -284,18 +318,34 @@ export default function TaskBoard({
               </button>
             </p>
           )}
-        <div className="task-board" onKeyDown={onBoardKey}>
-          {columns.map((column) => (
-            <section className="task-column" key={column.state}>
+        <div
+          className="task-board"
+          role="group"
+          aria-label="Tasks by state. Use the arrow keys, Home and End to move between tasks."
+          onKeyDown={onBoardKey}
+          onFocus={onBoardFocus}
+        >
+          {columns.map((column, col) => (
+            <section
+              className="task-column"
+              key={column.state}
+              aria-label={
+                column.label +
+                ", " +
+                column.items.length +
+                (column.items.length === 1 ? " task" : " tasks")
+              }
+            >
               <h4>
                 {column.label}
                 <span>{column.items.length}</span>
               </h4>
-              {column.items.map((item) => (
+              {column.items.map((item, row) => (
                 <button
                   className="task-card"
                   key={item.id}
                   onClick={() => inspect(item)}
+                  tabIndex={tabFor(col, row)}
                   data-stuck={isStuck(item, now) ? "true" : undefined}
                 >
                   <strong>{item.title}</strong>
