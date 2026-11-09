@@ -88,6 +88,15 @@ import { normalizeHostTints } from "./host-tint";
 import { resolveTaskFilters, saveTaskFilters } from "./task-filters";
 import { isVisible, parseHidden, statusDividers } from "./status-bar-items";
 import {
+  markOffer,
+  offerFor,
+  offerValid,
+  toastDelay,
+  UNDO_LABEL,
+  type UndoKind,
+  type UndoNotice,
+} from "./undo-toast";
+import {
   safeOverrides,
   validateOverrides,
   resolveSettings,
@@ -302,6 +311,8 @@ export default function App() {
   const [fileRevision, setFileRevision] = useState(0);
   const [events, setEvents] = useState<ActivityEntry[]>([]);
   const [toast, setToast] = useState("");
+  const [toastUndo, setToastUndo] = useState<UndoNotice | null>(null);
+  const [toastHover, setToastHover] = useState(false);
   const [droppedTerminals, setDroppedTerminals] = useState<ReadonlySet<string>>(() => new Set());
   const [saveName, setSaveName] = useState("");
   const [search, setSearch] = useState("");
@@ -524,18 +535,31 @@ export default function App() {
       ),
     [],
   );
+  const undoOffered = toastUndo !== null && toastUndo.text === toast;
   const notify = useCallback(
     (text: string) => {
       setToast(text);
+      setToastUndo(null);
       log(text, "success");
     },
     [log],
   );
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 4500);
+    const delay = toastDelay(!!toast, undoOffered, toastHover);
+    if (delay === null) return;
+    const timer = setTimeout(() => setToast(""), delay);
     return () => clearTimeout(timer);
-  }, [toast]);
+  }, [toast, toastUndo, undoOffered && toastHover]);
+  // An Undo offer ends with its notice, and when the history or the panels changed since it was made.
+  useEffect(() => {
+    if (!toast) setToastHover(false);
+    if (!toastUndo) return;
+    if (
+      !undoOffered ||
+      !offerValid(toastUndo.mark, history.current, modelRef.current.toJson())
+    )
+      setToastUndo(null);
+  }, [toast, toastUndo, revision]);
   useEffect(() => onTerminalDropped((id, dropped) => setDroppedTerminals(prev => markDropped(prev, id, dropped))), []);
   useEffect(() => {
     if (!window.hrig) {
@@ -787,6 +811,32 @@ export default function App() {
     const next = Model.fromJson(json, model);
     setModel(next);
     modelChanged(next);
+  };
+  // The notice for a layout change. It offers Undo only when the layout really changed, and the offer is one step of the same history that Undo arrangement uses.
+  const announceLayout = (kind: UndoKind, label: string, next: Model) => {
+    const past = history.current.past;
+    const after = next.toJson();
+    const offer = offerFor({
+      kind,
+      label,
+      pastLength: past.length,
+      before: past.at(-1),
+      after,
+    });
+    notify(offer.text);
+    if (offer.canUndo)
+      setToastUndo({
+        text: offer.text,
+        mark: markOffer(history.current, after),
+      });
+  };
+  // The Undo button: one step back through travel, and only while the offer still stands. The notice closes either way.
+  const undoFromToast = () => {
+    const offer = toastUndo;
+    setToast("");
+    setToastUndo(null);
+    if (offer && offerValid(offer.mark, history.current, model.toJson()))
+      travel("undo");
   };
   const refreshAll = () => {
     setRefresh((n) => n + 1);
@@ -1300,7 +1350,7 @@ export default function App() {
     setModel(next);
     modelChanged(next);
     setMenu(null);
-    notify(`${preset} arrangement applied`);
+    announceLayout("preset", preset, next);
   };
   const openAll = () => {
     remember();
@@ -2922,9 +2972,19 @@ export default function App() {
         )}
         <UpdateNotice />
         {toast && (
-          <div className="toast" role="status">
+          <div
+            className="toast"
+            role="status"
+            onMouseEnter={() => setToastHover(true)}
+            onMouseLeave={() => setToastHover(false)}
+          >
             <Check size={15} />
             {toast}
+            {undoOffered && (
+              <button className="small-button" onClick={undoFromToast}>
+                {UNDO_LABEL}
+              </button>
+            )}
             <button onClick={() => setToast("")}>
               <X size={13} />
             </button>
