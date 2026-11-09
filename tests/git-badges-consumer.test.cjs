@@ -205,12 +205,13 @@ test('actual Git owner replacement hides success before child effects and retain
   }
 });
 
-test('actual Files validates all projected records before zero and preserves exact nested and covering scope', async () => {
+test('actual Files discloses refused projected records before zero and preserves exact nested and covering scope', async () => {
   const cases = [
-    [response([{ path: 'outside/../bad', status: 'M' }], 'nested/'), 'unavailable'],
-    [response([{ path: 'outside', status: 'UNKNOWN' }], 'nested/'), 'unavailable'],
-    [response([{ path: 'x', status: 'toString' }]), 'unavailable'],
-    [response([{ path: 'x', status: 'M' }, { path: 'x', status: 'A' }]), 'unavailable'],
+    // L-01/L-03 replaces whole-snapshot rejection with disclosed partial knowledge.
+    [response([{ path: 'outside/../bad', status: 'M' }], 'nested/'), '1 paths not shown'],
+    [response([{ path: 'outside', status: 'UNKNOWN' }], 'nested/'), '1 paths not shown'],
+    [response([{ path: 'x', status: 'toString' }]), '1 paths not shown'],
+    [response([{ path: 'x', status: 'M' }, { path: 'x', status: 'A' }]), '2 paths not shown'],
     [response([{ path: 'nested-other/x', status: 'M' }], 'nested/'), 'No reported Git changes in this project.'],
     [response([{ path: 'parent/', status: '??' }], 'parent/nested/'), 'Git reported 1 status records'],
     [response([{ path: ' nested /src/needle.ts', status: 'AD' }, { path: ' nested /src/needle.ts', status: 'AD' }], ' nested /'), 'Git reported 1 status records'],
@@ -292,14 +293,19 @@ test('partial Git Files preserves a valid badge when an unsafe outside-project p
   assert.equal(v.gitRequests.length, 1); assertSafe(v);
 });
 
-// This independently supplied partial-response metadata isolates each real UI
-// consumer from the parser RED, so absence of count rendering is observable too.
+// RED supplied the future count independently to isolate both consumer failures.
+// GREEN now drives that same contract from the real shared parser response.
 for (const section of ['files', 'changes']) {
   test(`partial Git ${section} discloses an empty shown result without claiming clean`, async t => {
     const ordinary = await localGit({ raw: '', prefix: '' }).core.gitStatus(
       { id: 'synthetic', kind: 'local' }, '/synthetic-alias');
     assert.equal(ordinary.isRepository, true);
     assert.deepEqual(JSON.parse(JSON.stringify(ordinary.entries)), []);
+    const partial = await localGit({ raw: 'ZZ unsupported.ts\0', prefix: '' }).core.gitStatus(
+      { id: 'synthetic', kind: 'local' }, '/synthetic-alias');
+    assert.equal(partial.omittedPaths, 1, 'the actual shared backend produces counted partial knowledge');
+    const mixed = await localGit({ raw: ' M src/needle.ts\0ZZ unsupported.ts\0', prefix: '' }).core.gitStatus(
+      { id: 'synthetic', kind: 'local' }, '/synthetic-alias');
     const calls = [], actions = [], forbidden = [];
     const props = {
       section, connection: { ...base }, root: '/project', inventory: null, inventoryError: '', busy: false,
@@ -309,7 +315,7 @@ for (const section of ['files', 'changes']) {
         .map(name => [name, (...args) => actions.push([name, ...args])])),
     };
     const api = new Proxy({ platform: 'linux',
-      git(owner, root) { calls.push({ owner, root }); return Promise.resolve({ ...ordinary, omittedPaths: 1 }); },
+      git(owner, root) { calls.push({ owner, root }); return Promise.resolve(partial); },
       file(_owner, request) { assert.equal(request.op, 'list'); return Promise.resolve([]); },
     }, { get: (target, key) => key in target ? target[key] : (...args) => { forbidden.push([key, ...args]); return Promise.resolve(); } });
     const v = mountComponent('src/Sidebar.tsx', 'default', props, { actualComponents: true, api,
@@ -322,5 +328,18 @@ for (const section of ['files', 'changes']) {
     assert.ok(text(v).includes('1 paths not shown'), 'the omitted count must be visible in this actual consumer');
     assert.ok(!/Working tree clean|No reported Git changes in this project/.test(text(v)),
       'an empty partial response cannot establish cleanliness');
+    api.git = (owner, root) => { calls.push({ owner, root }); return Promise.resolve(mixed); };
+    v.update({ fileRevision: 1 }); await v.settle();
+    assert.ok(text(v).includes('1 paths not shown'), 'recognized rows retain the same partial notice');
+    if (section === 'changes') {
+      assert.ok(v.nodes().some(n => n.type === 'button' && n.props.className === 'change-row' &&
+        v.text(n).includes('src/needle.ts')), 'actual shared parser retained row reaches the Changes list');
+    } else assert.ok(text(v).includes('Git reported 1 status records'), 'actual Files reports the retained record');
+    api.git = (owner, root) => { calls.push({ owner, root }); return Promise.resolve(ordinary); };
+    v.update({ fileRevision: 2 }); await v.settle();
+    assert.ok(!text(v).includes('paths not shown'), 'fresh successful complete zero clears the old omission count');
+    assert.ok(text(v).includes(section === 'changes' ? 'Working tree clean' : 'No reported Git changes in this project'),
+      'only the fresh zero-omission response retains the existing scoped clean copy');
+    assert.deepEqual(actions, []); assert.deepEqual(forbidden, []);
   });
 }

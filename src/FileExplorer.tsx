@@ -40,6 +40,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
   const gitCurrent = () => alive.current && currentOwner() && gitLifetime.current.token === gitToken;
   const snapshot = git?.token === gitToken && currentOwner() ? git.snapshot : null;
   const gitRecords = snapshot?.state === "ready" ? snapshot.records : [];
+  const gitOmittedPaths = snapshot?.state === "ready" ? snapshot.omittedPaths || 0 : 0;
   useEffect(() => {
     let active = true;
     Promise.resolve().then(() => active && gitCurrent() ? window.hrig.git(connection, root) : null)
@@ -168,13 +169,14 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
   };
   return <div className="file-explorer sidebar-scroll">
     <div className={`explorer-git explorer-notice${snapshot?.state === "unavailable" ? " explorer-git-error" : ""}`} role="status" aria-live="polite" aria-atomic="true" aria-busy={!snapshot}>
-      {!snapshot ? "Checking Git status…" : snapshot.state === "not-repository" ? "This project is not in a Git repository." : snapshot.state === "unavailable" ? "Git status is unavailable for this project. Retry Git status." : gitRecords.length ? `Git reported ${gitRecords.length} status records for this project.` : "No reported Git changes in this project."}
+      {!snapshot ? "Checking Git status…" : snapshot.state === "not-repository" ? "This project is not in a Git repository." : snapshot.state === "unavailable" ? "Git status is unavailable for this project. Retry Git status." : gitRecords.length ? `Git reported ${gitRecords.length} status records for this project.` : gitOmittedPaths ? "No shown Git status records for this project." : "No reported Git changes in this project."}
       {snapshot?.state !== "ready" && (snapshot || gitAttempt > 0) && <button type="button" disabled={!snapshot} onClick={() => {
         if (!gitCurrent()) return;
         gitLifetime.current = { ...gitLifetime.current, token: {} };
         setGitAttempt(n => n + 1);
       }}>Retry Git status</button>}
       {snapshot?.state === "ready" && <>
+        {!!gitOmittedPaths && <div>{gitOmittedPaths} paths not shown.</div>}
         <div>Reported Git status only. Unlisted paths are not confirmed clean; directory contents may not be individually reported.</div>
         {!!gitRecords.length && <>
           <div role="group" aria-label={`Reported descendant statuses: ${gitCounts(gitRecords).map(c => `${c.letter} ${c.count}`).join("; ")}. ${gitRecords.map(gitRecordText).join(" ")}`}>{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>

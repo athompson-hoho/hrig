@@ -94,6 +94,7 @@ export default function Sidebar({
   const { effective, project, update } = useSettings();
   const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
   const [changes, setChanges] = useState<GitEntry[]>([]);
+  const [gitOmittedPaths, setGitOmittedPaths] = useState(0);
   const [gitError, setGitError] = useState("");
   const [isRepository, setIsRepository] = useState(true);
   const [gitLoading, setGitLoading] = useState(false);
@@ -104,11 +105,15 @@ export default function Sidebar({
     setGitLoading(true);
     setGitError("");
     setChanges([]);
+    setGitOmittedPaths(0);
     window.hrig
       .git(connection, root)
       .then((data) => {
         if (active) {
+          if (data.omittedPaths !== undefined && (!Number.isSafeInteger(data.omittedPaths) || data.omittedPaths < 0))
+            throw new Error("Git status is unavailable for this project.");
           setChanges(data.entries);
+          setGitOmittedPaths(data.omittedPaths || 0);
           setIsRepository(data.isRepository);
           setGitError("");
         }
@@ -287,6 +292,8 @@ export default function Sidebar({
             <span className="count">{changes.length}</span>
           </div>
           <div className="sidebar-scroll">
+            {!gitLoading && !gitError && isRepository && gitOmittedPaths > 0 &&
+              <div className="sidebar-empty" role="status">{gitOmittedPaths} paths not shown.</div>}
             {gitLoading ? (
               <div className="sidebar-empty">Checking repository…</div>
             ) : gitError ? (
@@ -320,8 +327,8 @@ export default function Sidebar({
             ) : (
               <div className="sidebar-empty">
                 <GitBranch size={25} />
-                <strong>Working tree clean</strong>
-                <p>Changes will appear here.</p>
+                <strong>{gitOmittedPaths ? "No shown Git changes" : "Working tree clean"}</strong>
+                <p>{gitOmittedPaths ? "Some reported paths could not be shown." : "Changes will appear here."}</p>
               </div>
             )}
           </div>

@@ -1,11 +1,12 @@
 export type GitLetter = "M" | "A" | "D" | "?";
 export type GitRecord = { path: string; status: string; letter: GitLetter; description: string; directory: boolean; covering: boolean };
-export type GitSnapshot = { state: "ready"; records: GitRecord[] } | { state: "unavailable" | "not-repository" };
+export type GitSnapshot = { state: "ready"; records: GitRecord[]; omittedPaths?: number } | { state: "unavailable" | "not-repository" };
 const conflicts: Record<string, string> = { DD: "both deleted", AU: "added by us", UD: "deleted by them", UA: "added by them", DU: "deleted by us", AA: "both added", UU: "both modified" };
 const meanings: Record<string, string> = { M: "Modified", A: "Added", D: "Deleted", R: "Renamed; destination only", C: "Copied; destination only", T: "Type changed" };
 const safe = (path: string) => !!path && !/[\\:\x00-\x1f\x7f]/.test(path) && path.split("/").every(p => !!p && p !== "." && p !== "..");
 
-// Validate the whole response before excluding records outside the selected project.
+// Header/provenance failures invalidate the snapshot; individual refused records
+// remain counted partial knowledge, including records outside this project.
 export function projectGitStatus(value: unknown): GitSnapshot {
   const bad: GitSnapshot = { state: "unavailable" };
   if (!value || typeof value !== "object") return bad;
@@ -14,25 +15,39 @@ export function projectGitStatus(value: unknown): GitSnapshot {
   if (data.isRepository !== true || typeof data.root !== "string" || !data.root || typeof data.projectPrefix !== "string" || !Array.isArray(data.entries)) return bad;
   const prefix = data.projectPrefix;
   if (prefix && (!prefix.endsWith("/") || !safe(prefix.slice(0, -1)))) return bad;
-  const records: GitRecord[] = [], seen = new Map<string, string>();
+  if (data.omittedPaths !== undefined && (!Number.isSafeInteger(data.omittedPaths) || (data.omittedPaths as number) < 0)) return bad;
+  let omittedPaths = (data.omittedPaths as number | undefined) ?? 0;
+  const records = new Map<string, GitRecord>();
+  const seen = new Map<string, { status: string; count: number; conflict: boolean }>();
   for (const entry of data.entries) {
-    if (!entry || typeof entry.path !== "string" || typeof entry.status !== "string") return bad;
+    if (!entry || typeof entry.path !== "string" || typeof entry.status !== "string") { omittedPaths++; continue; }
     const { path, status } = entry;
     const directory = path.endsWith("/");
-    if (!safe(directory ? path.slice(0, -1) : path) || (directory && status !== "??")) return bad;
+    if (!safe(directory ? path.slice(0, -1) : path) || (directory && status !== "??")) { omittedPaths++; continue; }
     const conflict = Object.hasOwn(conflicts, status) ? conflicts[status] : undefined;
-    if (!(status === "??" || conflict || /^[MADRCT]{1,2}$/.test(status))) return bad;
-    if (seen.has(path)) { if (seen.get(path) !== status) return bad; continue; }
-    seen.set(path, status);
+    if (!(status === "??" || conflict || /^[MADRCT]{1,2}$/.test(status))) { omittedPaths++; continue; }
+    const prior = seen.get(path);
+    if (prior) {
+      if (prior.conflict) omittedPaths++;
+      else if (prior.status !== status) {
+        omittedPaths += prior.count + 1;
+        prior.conflict = true;
+        records.delete(path);
+      }
+      prior.count++;
+      continue;
+    }
+    seen.set(path, { status, count: 1, conflict: false });
     const covering = directory && !!prefix && prefix.startsWith(path);
     if (!path.startsWith(prefix) && !covering) continue;
     const projected = covering ? path : path.slice(prefix.length);
-    if (!projected && !covering) return bad;
+    if (!projected && !covering) { omittedPaths++; continue; }
     const letter: GitLetter = conflict ? "M" : status === "??" ? "?" : status.includes("D") ? "D" : status.includes("A") ? "A" : "M";
     const description = conflict ? `Conflict: ${conflict}` : status === "??" ? directory ? "Untracked directory; contents not individually reported" : "Untracked" : [...status].map(c => meanings[c]).join("; ");
-    records.push({ path: projected, status, letter, description, directory, covering });
+    records.set(path, { path: projected, status, letter, description, directory, covering });
   }
-  return { state: "ready", records };
+  if (!Number.isSafeInteger(omittedPaths)) return bad;
+  return { state: "ready", records: [...records.values()], ...(omittedPaths ? { omittedPaths } : {}) };
 }
 
 export function gitCounts(records: readonly GitRecord[]): { letter: GitLetter; count: number }[] {

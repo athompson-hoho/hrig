@@ -47,6 +47,7 @@ export interface GitStatus {
   isRepository: boolean;
   root: string;
   projectPrefix?: string;
+  omittedPaths?: number;
   entries: GitEntry[];
 }
 export interface SavedLayout {

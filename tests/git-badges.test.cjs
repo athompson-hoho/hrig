@@ -92,22 +92,24 @@ test('pure aggregate and covering records remain explicit without invented child
   assert.equal(gitRecordText(result.records[2]), 'gone — Deleted (Git code: D). Reported path; no file-open action.');
 });
 
-test('pure validation rejects malformed records even outside the project before a false zero', () => {
+test('pure validation counts refused individual records even outside the project before a false zero', () => {
   const invalid = [null, {}, { path: 'outside/file', status: null },
     ...['', ' ', ' M', 'M ', 'ZZ', 'U', 'MU', '???', 'MMM', '!!', 'm'].map(status => ({ path: 'outside/file', status })),
     ...['', '/', '/absolute', '../escape', './file', 'a/../file', 'a//file', 'a\\file', 'C:/file', 'a\0file', 'a\nfile', 'a\x7ffile'].map(path => ({ path, status: 'M' })),
     { path: 'outside/dir/', status: 'M' }, { path: 'project/', status: 'M' }];
-  for (const entry of invalid) assert.deepEqual(plain(projectGitStatus(snapshot([entry], 'project/'))), { state: 'unavailable' }, JSON.stringify(entry));
+  // Explicit L-01/L-03 changes only individual-record rejection, not header validation.
+  for (const entry of invalid) assert.deepEqual(plain(projectGitStatus(snapshot([entry], 'project/'))),
+    { state: 'ready', records: [], omittedPaths: 1 }, JSON.stringify(entry));
 });
 
-test('pure duplicate records count once and conflicts invalidate even out of scope', () => {
+test('pure duplicate records count once and conflicting inputs are omitted even out of scope', () => {
   const duplicate = snapshot([{ path: 'same', status: 'AD' }, { path: 'same', status: 'AD' }]);
   const result = projectGitStatus(duplicate);
   assert.equal(result.records.length, 1);
   assert.deepEqual(plain(gitCounts(result.records)), [{ letter: 'D', count: 1 }]);
   for (const projectPrefix of ['', 'project/']) assert.deepEqual(plain(projectGitStatus(snapshot([
     { path: 'outside/file', status: 'A' }, { path: 'outside/file', status: 'M' },
-  ], projectPrefix))), { state: 'unavailable' });
+  ], projectPrefix))), { state: 'ready', records: [], omittedPaths: 2 });
 });
 
 test('pure root and ancestor sets use M A D ? order and one winning count per record', () => {
@@ -136,4 +138,27 @@ test('partial Git projection preserves the exact review probe and counts only th
   assert.equal(result.state, 'ready', 'one unsafe outside-project record must not disable the usable snapshot');
   assert.deepEqual(plain(result.records), plain(ordinary.records));
   assert.equal(result.omittedPaths, 1, 'the refused path remains disclosed even outside the project');
+});
+
+test('pure partial snapshots sum parser and projection omissions and refuse invalid overall metadata', () => {
+  const input = freeze({ ...snapshot([
+    { path: 'proj/good', status: 'M' },
+    { path: 'outside/x:y', status: '??' },
+    { path: 'outside/valid', status: 'M' },
+    { path: 'proj/unknown', status: 'ZZ' },
+  ], 'proj/'), omittedPaths: 2 });
+  const result = projectGitStatus(input);
+  assert.equal(result.state, 'ready');
+  assert.equal(result.omittedPaths, 4, 'valid out-of-project records are not omissions; parser refusals counted once');
+  assert.deepEqual(plain(result.records.map(r => [r.path, r.letter])), [['good', 'M']]);
+  for (const omittedPaths of [-1, 1.5, NaN, Infinity, '1', null, Number.MAX_SAFE_INTEGER + 1])
+    assert.deepEqual(plain(projectGitStatus({ ...snapshot(), omittedPaths })), { state: 'unavailable' });
+  assert.deepEqual(plain(projectGitStatus({ ...snapshot(), omittedPaths: 0 })), { state: 'ready', records: [] });
+  const conflicting = projectGitStatus(snapshot([
+    { path: 'good', status: 'M' }, { path: 'ambiguous', status: 'A' },
+    { path: 'ambiguous', status: 'A' }, { path: 'ambiguous', status: 'D' },
+    { path: 'ambiguous', status: 'M' },
+  ]));
+  assert.deepEqual(plain(conflicting.records.map(r => r.path)), ['good']);
+  assert.equal(conflicting.omittedPaths, 4, 'every ambiguous input is disclosed instead of choosing an arbitrary winner');
 });

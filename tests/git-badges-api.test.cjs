@@ -58,9 +58,10 @@ test('actual Git status supplies proven projectPrefix after an ordinary successf
   assert.equal(result.projectPrefix, 'nested project/', 'successful repository status must carry the Git-supplied projectPrefix');
 });
 
-test('actual parser rejects malformed framing while preserving destinations and spaces', () => {
+test('actual parser refuses malformed overall framing while preserving destinations and spaces', () => {
   const { core } = localGit();
-  for (const raw of [null, {}, ' M a', ' M a\0\0', 'ZZ a\0', '   a\0', 'M! a\0', ' Mxa\0', ' M \0', 'R  new\0', 'R  new\0\0'])
+  // L-03 now counts individual row refusals; only the overall stream stays fatal.
+  for (const raw of [null, {}, ' M a'])
     assert.throws(() => core.parseGitStatus(raw), /Malformed/);
   assert.deepEqual(JSON.parse(JSON.stringify(core.parseGitStatus('R  new name\0old name\0?? dir/\0AD gone\0'))),
     [{ path: 'new name', status: 'R' }, { path: 'dir/', status: '??' }, { path: 'gone', status: 'AD' }]);
@@ -146,12 +147,14 @@ test('actual SSH and WSL transport send the real generated Python and exact iner
       assert.equal(id, 'node:child_process');
       return { execFile(file, args, options, callback) {
         calls.push({ file, args, options });
-        callback(null, JSON.stringify({ raw: ' M x\0', root: '/canonical/project', projectPrefix: '', isRepository: true }), '');
+        callback(null, JSON.stringify({ raw: ' M x\0ZZ unsupported\0', root: '/canonical/project', projectPrefix: '', isRepository: true }), '');
         return { stdin: { on() {}, end(input) { calls.at(-1).input = input; } } };
       } };
     } });
     const result = await module.exports.gitStatus(connection, '/alias');
     assert.equal(result.projectPrefix, '');
+    assert.deepEqual(JSON.parse(JSON.stringify(result.entries)), [{ path: 'x', status: 'M' }]);
+    assert.equal(result.omittedPaths, 1, 'both actual SSH and WSL responses use the shared counted parser');
     assert.equal(calls.length, 1);
     const call = calls[0];
     assert.equal(call.file, connection.kind === 'wsl' ? 'wsl.exe' : 'ssh');
@@ -205,3 +208,32 @@ test('partial Git status counts an all-unsupported stream instead of treating it
 });
 
 module.exports = { localGit };
+
+test('actual counted parser skips logical bad rows without shifting valid destinations', async () => {
+  const cases = [
+    [' M valid\0ZZ unknown\0 A added\0', [['valid', 'M'], ['added', 'A']], 1],
+    [' M valid\0\0?? extra\0', [['valid', 'M'], ['extra', '??']], 1],
+    [' M valid\0M! bad\0 Mxa\0 M \0', [['valid', 'M']], 3],
+    [' M valid\0R  missing-source\0', [['valid', 'M']], 1],
+    [' M valid\0R  missing-source\0\0 A added\0', [['valid', 'M'], ['added', 'A']], 1],
+    ['R  new name\0old name\0?? dir/\0', [['new name', 'R'], ['dir/', '??']], 0],
+    ['   unsupported\0', [], 1],
+    ['', [], 0],
+  ];
+  for (const [raw, expected, omitted] of cases) {
+    const { core } = localGit({ raw, prefix: '' });
+    const result = await core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias');
+    assert.deepEqual(JSON.parse(JSON.stringify(result.entries)), expected.map(([path, status]) => ({ path, status })));
+    assert.equal(result.omittedPaths || 0, omitted);
+    assert.deepEqual(JSON.parse(JSON.stringify(core.parseGitStatus(raw))), JSON.parse(JSON.stringify(result.entries)),
+      'existing exported array parser remains compatible with the counted shared service');
+  }
+});
+
+test('actual shared status refuses malformed prefix provenance for every consumer', async () => {
+  for (const prefix of ['../\n', '/absolute/\n', 'a//\n', 'missing-slash\n']) {
+    const h = localGit({ prefix });
+    await assert.rejects(h.core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias'),
+      /Malformed Git status/, 'overall prefix failure must not become a partial/clean Changes response');
+  }
+});

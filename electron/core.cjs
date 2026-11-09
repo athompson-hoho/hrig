@@ -496,30 +496,44 @@ async function fileOperation(connection, request) {
     }
   }
 }
-function parseGitStatus(raw) {
+function countedGitStatus(raw) {
   if (typeof raw !== "string" || (raw && !raw.endsWith("\0"))) throw new Error("Malformed Git status.");
-  if (!raw) return [];
+  if (!raw) return { entries: [], omittedPaths: 0 };
   const fields = raw.split("\0");
   fields.pop();
-  const result = [];
+  const entries = [];
+  let omittedPaths = 0;
   for (let i = 0; i < fields.length; i++) {
     const entry = fields[i];
     const status = entry.slice(0, 2);
     const file = entry.slice(3);
     if (!/^(?:[ MADRCT]{2}|DD|AU|UD|UA|DU|AA|UU|\?\?)$/.test(status) || status === "  " || entry[2] !== " " || !file)
-      throw new Error("Malformed Git status.");
-    result.push({ path: file, status: status.trim() });
-    if (/[RC]/.test(status) && !fields[++i]) throw new Error("Malformed Git status.");
+      { omittedPaths++; continue; }
+    if (/[RC]/.test(status) && !fields[++i]) { omittedPaths++; continue; }
+    entries.push({ path: file, status: status.trim() });
   }
-  return result;
+  return { entries, omittedPaths };
+}
+function parseGitStatus(raw) {
+  return countedGitStatus(raw).entries;
 }
 async function gitStatus(connection, root) {
   const result = await fileOperation(connection, { op: "git", root, path: "" });
+  if (!result || typeof result.isRepository !== "boolean" || typeof result.root !== "string" || !result.root)
+    throw new Error("Malformed Git status.");
+  if (result.isRepository) {
+    const prefix = result.projectPrefix;
+    if (typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") ||
+      /[\\:\x00-\x1f\x7f]/.test(prefix) || prefix.slice(0, -1).split("/").some(part => !part || part === "." || part === ".."))))
+      throw new Error("Malformed Git status.");
+  }
+  const { entries, omittedPaths } = countedGitStatus(result.raw);
   return {
     isRepository: result.isRepository !== false,
     root: result.root || root,
     ...(result.isRepository !== false ? { projectPrefix: result.projectPrefix } : {}),
-    entries: parseGitStatus(result.raw),
+    entries,
+    ...(omittedPaths ? { omittedPaths } : {}),
   };
 }
 async function detectConnections() {
