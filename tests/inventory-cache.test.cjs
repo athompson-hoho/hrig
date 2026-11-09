@@ -91,3 +91,22 @@ test('wiring: opt-in setting, IPC/preload, seeded cache stays unverified, off cl
   assert.match(settings, /"rig\.cacheInventory": false/);
   assert.match(fs.readFileSync('SETTINGS.md', 'utf8'), /`rig\.cacheInventory` \| `false`/);
 });
+
+test('freshly re-saved connections are evicted last, and the file is owner-only', () => {
+  const f = fixture();
+  try {
+    for (let i = 0; i < 10; i++) f.api.operation({ op: 'save', key: 'k' + i, inventory: inv('2026-01-01T23:00:00.000Z') });
+    f.tick(MIN_WRITE_MS + 1);
+    f.api.operation({ op: 'save', key: 'k0', inventory: inv('2026-01-02T00:00:20.000Z') }); // refresh the oldest key
+    f.api.operation({ op: 'save', key: 'k10', inventory: inv('2026-01-02T00:00:20.000Z') }); // 11th connection
+    const keys = f.api.load().map(e => e.key);
+    assert.ok(keys.includes('k0'), 'refreshed key survives'); assert.ok(!keys.includes('k1'), 'stalest key is evicted');
+    if (process.platform !== 'win32') assert.equal(fs.statSync(f.file).mode & 0o777, 0o600);
+  } finally { f.clean(); }
+});
+
+test('privacy docs and wiring describe the stored copy and user-level scope', () => {
+  assert.match(fs.readFileSync('PRIVACY.md', 'utf8'), /Remembered session list[\s\S]*inventory-cache\.json[\s\S]*seven days[\s\S]*deletes the file/);
+  assert.match(fs.readFileSync('SETTINGS.md', 'utf8'), /user level only/);
+  assert.match(fs.readFileSync('src/App.tsx', 'utf8'), /state\.preferences\?\.\["rig\.cacheInventory"\] === true/);
+});

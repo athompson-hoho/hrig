@@ -52,8 +52,9 @@ function createInventoryCache({ file, fs, now = Date.now }) {
     }
   };
   const writeAll = (entries) => {
-    fs.mkdirSync(require("node:path").dirname(file), { recursive: true });
-    fs.writeFileSync(file + ".tmp", JSON.stringify({ version: 1, entries }));
+    fs.mkdirSync(require("node:path").dirname(file), { recursive: true, mode: 0o700 });
+    // Owner-only: the file lists session names and pods.
+    fs.writeFileSync(file + ".tmp", JSON.stringify({ version: 1, entries }), { mode: 0o600 });
     fs.renameSync(file + ".tmp", file);
   };
   function load() {
@@ -72,6 +73,7 @@ function createInventoryCache({ file, fs, now = Date.now }) {
     if (!clean) throw Error("Invalid inventory snapshot.");
     if (now() - (lastWrite.get(key) || 0) < MIN_WRITE_MS) return { written: false };
     const entries = readAll();
+    delete entries[key]; // re-insert last so the freshest connection is evicted last
     entries[key] = { savedAt: new Date(now()).toISOString(), inventory: clean };
     const keys = Object.keys(entries);
     for (const old of keys.slice(0, Math.max(0, keys.length - MAX_CONNECTIONS))) delete entries[old];

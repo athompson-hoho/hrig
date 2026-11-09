@@ -51,7 +51,8 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `editor.fontLigatures` | `false` | Combine supported character sequences when using a compatible font. |
 | `editor.renderWhitespace` | `selection` | Show spaces and tabs for the selected text, everywhere, or nowhere. |
 | `editor.bracketPairs` | `true` | Use matching colors for nested bracket pairs. |
-| `editor.diffSideBySide` | `true` | Compare versions in two columns. Turn off for an inline diff. |
+| `editor.largeFileWarnKb` | `1024` | Warn when opening an editable file of at least this many KB (100 to 2000). Files over 2 MB and binary files open as a read-only preview (image, hex dump, or the beginning of a large text file) and are never edited or saved. |
+| `editor.diffSideBySide` | `true` | Compare versions in two columns. Turn off for an inline diff. The diff panel toolbar has an Inline / Side by side button that changes this setting (the project override when the project sets one, otherwise your user setting), so the choice persists across restarts. |
 | `editor.autoReload` | `true` | Refresh an unmodified buffer when its file changes externally. Unsaved edits always remain protected. |
 | `terminal.fontSize` | `13` | Live terminal text size in pixels; existing PTY sessions stay attached. |
 | `terminal.fontFamily` | `"Cascadia Code", "Cascadia Mono", Consolas, monospace` | Installed monospace font family for terminal panels. |
@@ -63,12 +64,13 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `terminal.localShell` | `powershell` | Shell for new Windows terminals. Existing terminals and remote agent sessions are unaffected. |
 | `terminal.autoReconnect` | `true` | Retry failed existing seat attachments with bounded backoff, up to six attempts. Never starts another agent. |
 | `workspace.refreshInterval` | `15` | Seconds between background rig and seat inventory refreshes on the active connection. |
+| `workspace.updateCheckHours` | `6` | How often installed HRig builds check for a new version in the background: `6`, `12`, `24` (daily), `168` (weekly) hours, or `0` for never automatically. Checks never download or install anything on their own; Check for updates still works on demand. A `0` value skips the check shortly after launch once settings load; unpackaged development builds never check. |
 | `connections.defaultKind` | `wsl` | Default type when creating a connection from a local workspace. |
 | `connections.defaultRoot` | `~` | Default project directory for new WSL/SSH connections. Does not change existing connections. |
 | `rig.defaultRuntime` | `codex` | Initial runtime when opening a new rig designer. OpenRig manages authentication and launch policy. |
 | `rig.defaultTeamSize` | `2` | Initial recommendation size for new rig designs. Does not resize existing rigs. |
 | `rig.seatClick` | `open` | What clicking a sidebar session does: `open` (open its terminal, the default) or `select` (highlight the row only; an explicit Open terminal button on the row opens it). Selecting never opens, sends input to, or relaunches a session. Unsupported imported values are rejected. |
-| `rig.cacheInventory` | `false` | Opt in to storing the last verified session list (names, pods, runtimes, statuses; no error text) in a separate file in the app data folder, so the sidebar shows it immediately after a restart. It is shown as the last known snapshot with its original age, and seat actions stay disabled until a live check succeeds. Entries older than 7 days are ignored. Turning it off deletes the file. |
+| `rig.cacheInventory` | `false` | Opt in (user level only; a project override has no effect) to storing the last verified session list (rig names, session names and ids, pods, runtimes, models, status and activity text, work counts and last-activity time; no error text) in a separate owner-only file in the app data folder, so the sidebar shows it immediately after a restart. It is shown as the last known snapshot with its original age, and seat actions stay disabled until a live check succeeds. Entries older than 7 days are ignored. Turning it off deletes the file. |
 | `rig.seatSort` | `name` | Seat sort order: `name` (Name), `activity` (Activity (working first)), or `attention-first` (Attention first). Activity uses current normalized status priority, not timestamps or recency; see [navigation](NAVIGATION.md). Unsupported imported values are rejected. |
 | `notifications.desktop` | `false` | Opt in to seat-name-only notifications for later observed needs-input transitions in verified inventory on the current connection. Enabling starts silently; failures do not notify. Desktop support and OS settings may prevent display. |
 | `notifications.terminalBell` | `false` | Also notify when an unwatched terminal rings the bell (needs `notifications.desktop`). Seat/host name only, no terminal text. |

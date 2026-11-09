@@ -8,6 +8,11 @@ HRig is a desktop workspace for OpenRig. It does not operate a hosted project-st
 
 Settings, selected connection details, workspace layouts, drafts/recovery copies, integration configuration, mobile pairing records and related local state are stored on the desktop computer. Drafts can contain unsaved source code and review/message text. Credential storage uses Electron's operating-system-backed encryption where the relevant integration supports it; CLI tools also maintain their own authentication stores. HRig's Windows uninstaller preserves application data, so uninstalling is not a credential or draft erasure operation. Use the applicable disconnect, device-revocation and saved-draft controls to remove those records.
 
+
+### Remembered session list (optional)
+
+If you turn on "Remember the last session list" (off by default), HRig stores a copy of the last verified OpenRig session list for each connection (up to ten) in an owner-only file named `inventory-cache.json` in HRig's application data folder: rig, pod, session and model names, runtimes, status and activity text, work counts and last-activity times. Error text is not stored. Entries older than seven days are ignored. HRig shows the copy only as a last known snapshot with its original age and keeps session actions disabled until a live check succeeds. Turning the setting off deletes the file. It is not uploaded anywhere, and uninstalling HRig does not remove it.
+
 ## Connections and agents
 
 Opening or restoring a configured WSL/SSH connection can retrieve rig inventory, task state, host diagnostics and project metadata. Open terminals, task views and other configured panels may keep polling or exchanging data while the workspace is open. Messages, file changes and commands initiated through HRig are delivered to the selected host. SSH, OpenRig, the selected agent runtime and any services invoked by a command have their own configuration and privacy behavior.

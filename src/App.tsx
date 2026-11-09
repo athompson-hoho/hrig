@@ -557,12 +557,18 @@ export default function App() {
   }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
     inventoryHealth.current.key, inventoryHealth.current.verified,
     inventoryHealth.current.failures]);
-  cacheInventoryPref.current = preferences["rig.cacheInventory"] === true;
+  // User-level only (a project override cannot change what is stored on disk or restored at start).
+  const cacheInventoryOn = state.preferences?.["rig.cacheInventory"] === true;
+  cacheInventoryPref.current = cacheInventoryOn;
+  useEffect(() => {
+    if (loaded)
+      void window.hrig.updateFrequency(Number(preferences["workspace.updateCheckHours"])).catch(() => {});
+  }, [loaded, preferences["workspace.updateCheckHours"]]);
   useEffect(() => {
     // Turning the option off removes the stored copy (also on every start while off).
-    if (loaded && !preferences["rig.cacheInventory"])
+    if (loaded && !cacheInventoryOn)
       void window.hrig.inventoryCache({ op: "clear" }).catch(() => {});
-  }, [loaded, preferences["rig.cacheInventory"]]);
+  }, [loaded, cacheInventoryOn]);
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(

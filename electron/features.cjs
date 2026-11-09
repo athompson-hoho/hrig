@@ -218,6 +218,36 @@ if op=='read':
   if a.get('allowMissing') is not True: raise
   result={'missing':True}
  print(json.dumps(result))
+elif op=='inspect':
+ size=os.path.getsize(target)
+ if not os.path.isfile(target): raise Exception('Not a regular file.')
+ with open(target,'rb') as f: head=f.read(8192)
+ ext=target.lower().rsplit('.',1)[-1]
+ mime=''
+ if head.startswith(b'\\x89PNG\\r\\n\\x1a\\n'): mime='image/png'
+ elif head.startswith(b'\\xff\\xd8\\xff'): mime='image/jpeg'
+ elif head[:4]==b'GIF8' and head[4:5] in (b'7',b'9') and head[5:6]==b'a': mime='image/gif'
+ elif head[:4]==b'RIFF' and head[8:12]==b'WEBP': mime='image/webp'
+ elif head[:2]==b'BM' and ext=='bmp': mime='image/bmp'
+ elif head[:4]==b'\\x00\\x00\\x01\\x00' and ext=='ico': mime='image/x-icon'
+ def hexrows(b):
+  out=[]
+  for i in range(0,len(b),16):
+   c=b[i:i+16];h=' '.join('%02x'%x for x in c);t=''.join(chr(x) if 32<=x<127 else '.' for x in c)
+   out.append('%08x  %s  %s'%(i,h.ljust(47),t))
+  return '\\n'.join(out)
+ if mime and size<=4000000:
+  with open(target,'rb') as f: data=f.read(4000000)
+  print(json.dumps({'kind':'image','size':size,'mime':mime,'dataUrl':'data:'+mime+';base64,'+base64.b64encode(data).decode()}))
+ elif mime: print(json.dumps({'kind':'binary','size':size,'mime':mime,'hex':hexrows(head[:512]),'note':'Image is too large to preview.'}))
+ elif b'\\0' in head: print(json.dumps({'kind':'binary','size':size,'hex':hexrows(head[:512])}))
+ elif size>2000000:
+  with open(target,'rb') as f: raw=f.read(262144)
+  text=raw.decode('utf-8','replace').rstrip('\\ufffd')
+  cut=text.rfind('\\n')
+  if cut>len(text)/2: text=text[:cut]
+  print(json.dumps({'kind':'large-text','size':size,'text':text,'shownBytes':len(text.encode('utf-8'))}))
+ else: print(json.dumps({'kind':'text','size':size}))
 elif op=='save':
  current=read(target)
  if current['revision']!=a['revision']: raise Exception('CONFLICT: File changed on disk. Reload or compare before saving.')
@@ -255,7 +285,7 @@ function revision(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 async function edit(connection, a) {
-  if (!a || !["read", "save", "create", "rename", "searchText"].includes(a.op))
+  if (!a || !["read", "inspect", "save", "create", "rename", "searchText"].includes(a.op))
     throw new Error("Unsupported editor operation.");
   if (typeof a.root !== "string" || typeof (a.path || "") !== "string")
     throw new Error("Invalid project path.");
@@ -276,6 +306,8 @@ async function edit(connection, a) {
     a.path,
     ["create"].includes(a.op) || (a.op === "read" && a.allowMissing === true),
   );
+  if (a.op === "inspect")
+    return require("./file-inspect.cjs").inspectLocal(fs, target, a.path);
   if (a.op === "read") {
     let data;
     try {

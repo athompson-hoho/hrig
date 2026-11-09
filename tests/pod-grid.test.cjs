@@ -58,9 +58,9 @@ test('actual Sidebar renders one grid control per pod header, disabled when stal
   const view = mountComponent('src/Sidebar.tsx', 'default', props, { actualComponents: true, resolvedChildren: true,
     settings: { effective: { 'rig.seatSort': 'name', 'appearance.density': 'compact' }, project: {}, update: noop }, height: 600, rowHeight: 55 });
   view.update(props);
-  const btns = () => view.nodes().filter(n => /^Open the \d+ matching sessions? of pod /.test(n.props?.title || ''));
+  const btns = () => view.nodes().filter(n => /^Open the \d+ matching unpinned sessions? of pod /.test(n.props?.title || ''));
   assert.equal(btns().length, 2);
-  assert.match(btns()[0].props.title, /Open the 2 matching sessions of pod/);
+  assert.match(btns()[0].props.title, /Open the 2 matching unpinned sessions of pod/);
   btns()[0].props.onClick(); assert.equal(JSON.stringify(opened), '[["a","b"]]');
   props.inventoryError = 'down'; view.update(props);
   assert.ok(btns().every(b => b.props.disabled));

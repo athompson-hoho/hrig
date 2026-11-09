@@ -19,6 +19,7 @@ export const defaults = {
   "editor.renderWhitespace": "selection",
   "editor.bracketPairs": true,
   "editor.diffSideBySide": true,
+  "editor.largeFileWarnKb": 1024,
   "editor.autoReload": true,
   "terminal.fontSize": 13,
   "terminal.fontFamily":
@@ -31,6 +32,7 @@ export const defaults = {
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
   "workspace.refreshInterval": 15,
+  "workspace.updateCheckHours": "6",
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
@@ -250,6 +252,16 @@ export const schema: Setting[] = [
       "Compare versions in two columns. Turn off for an inline diff.",
   },
   {
+    key: "editor.largeFileWarnKb",
+    category: "Editor",
+    label: "Large file warning (KB)",
+    description:
+      "Show a warning when you open an editable file at least this large. Files over 2 MB and binary files open as a read-only preview and are never edited or saved.",
+    min: 100,
+    max: 2000,
+    step: 100,
+  },
+  {
     key: "editor.autoReload",
     category: "Editor",
     label: "Reload clean files from disk",
@@ -347,6 +359,20 @@ export const schema: Setting[] = [
       "Seconds between background rig and seat inventory refreshes on the active connection.",
     min: 5,
     max: 120,
+  },
+  {
+    key: "workspace.updateCheckHours",
+    category: "Workspace",
+    label: "Check for HRig updates",
+    description:
+      "How often HRig checks for a new version in the background. Checks never download or install anything by themselves, and Check for updates still works on demand. Applies to installed builds only.",
+    options: [
+      { value: "6", label: "Every 6 hours (default)" },
+      { value: "12", label: "Every 12 hours" },
+      { value: "24", label: "Daily" },
+      { value: "168", label: "Weekly" },
+      { value: "0", label: "Never automatically" },
+    ],
   },
   {
     key: "connections.defaultKind",

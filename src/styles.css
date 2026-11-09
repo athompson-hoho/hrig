@@ -4573,3 +4573,36 @@ button:hover {
 .pod-group > .pod-grid-open { flex-shrink: 0; margin-right: 8px; color: var(--color-707b8e); }
 .pod-group > .pod-grid-open:hover, .pod-group > .pod-grid-open:focus-visible { color: var(--color-c8cfdd); }
 .seat-row.selected { background: var(--color-272c34); box-shadow: inset 2px 0 0 var(--color-86cdb0); }
+.editor-panel > .markdown-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { margin: 1.1em 0 0.4em; line-height: 1.25; }
+.markdown-preview h1 { font-size: 1.7em; } .markdown-preview h2 { font-size: 1.4em; } .markdown-preview h3 { font-size: 1.2em; }
+.markdown-preview p, .markdown-preview ul, .markdown-preview ol, .markdown-preview blockquote,
+.markdown-preview pre, .markdown-preview table { margin: 0.6em 0; }
+.markdown-preview ul, .markdown-preview ol { padding-left: 1.6em; }
+.markdown-preview blockquote { padding: 0 12px; border-left: 3px solid currentColor; opacity: 0.85; }
+.markdown-preview code { font-family: var(--mono, ui-monospace, monospace); font-size: 0.92em; padding: 0 3px; border-radius: 3px; background: rgba(127, 127, 127, 0.18); }
+.markdown-preview pre { padding: 10px 12px; overflow: auto; border-radius: 6px; background: rgba(127, 127, 127, 0.14); }
+.markdown-preview pre code { padding: 0; background: none; white-space: pre; }
+.markdown-preview table { border-collapse: collapse; }
+.markdown-preview th, .markdown-preview td { padding: 4px 10px; border: 1px solid rgba(127, 127, 127, 0.4); }
+.markdown-preview hr { border: 0; border-top: 1px solid rgba(127, 127, 127, 0.4); }
+.markdown-preview .md-link { text-decoration: underline; }
+.markdown-preview .md-link-target { font-size: 0.85em; opacity: 0.7; text-decoration: none; }
+.markdown-preview .md-image { opacity: 0.8; font-style: italic; }
+.editor-panel > .file-preview { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.file-preview-image { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto;
+  background-image: repeating-conic-gradient(rgba(127,127,127,0.18) 0% 25%, transparent 0% 50%); background-size: 16px 16px; }
+.file-preview-image img { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: auto; }
+.file-preview-text { margin: 0; padding: 12px 16px; flex: 1; overflow: auto; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; white-space: pre; user-select: text; }
+.activity-log-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 10px; }
+.activity-log-controls .subtle { white-space: normal; }

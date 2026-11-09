@@ -4,7 +4,11 @@ import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import JsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 import TsWorker from "monaco-editor/language/typescript/ts.worker.js?worker";
-import { Save, FileCode2 } from "lucide-react";
+import { Save, FileCode2, Eye, Code2 } from "lucide-react";
+import MarkdownPreview from "./MarkdownPreview";
+import { isMarkdownPath } from "./markdown-preview";
+import FilePreview, { type FileInspection } from "./FilePreview";
+import { largeFileNotice, PREVIEWABLE_READ_ERROR } from "./large-file";
 import { ErrorBox, Loading, Modal } from "./components";
 import type { PanelConfig } from "./types";
 import {
@@ -124,7 +128,7 @@ export default function EditorPanel({
   onSaved: () => void;
   onReady?: (id: string) => boolean;
 }) {
-  const { effective: preferences } = useSettings();
+  const { effective: preferences, project: projectPreferences, update: updateSetting } = useSettings();
   const colorTheme = themeId(preferences);
   useEffect(() => {
     monaco.editor.defineTheme(
@@ -168,6 +172,8 @@ export default function EditorPanel({
   const [error, setError] = useEditorState(generation, "");
   const [saving, setSaving] = useEditorState(generation, false);
   const [dirty, setDirty] = useEditorState(generation, false);
+  const [mdPreview, setMdPreview] = useState(false);
+  const [inspected, setInspected] = useState<FileInspection | null>(null);
   const [externalState, setExternalState] = useEditorState<{
     content: string;
     revision: string;
@@ -304,6 +310,7 @@ export default function EditorPanel({
       return () => { generation.active = false; };
     }
     if (!diff) bufferConfigs.set(id, config);
+    setInspected(null);
     let active = true;
     const opening = capture();
     const read = window.hrig.edit(config.connection, {
@@ -348,6 +355,10 @@ export default function EditorPanel({
           generation.buffer = buffers.get(id);
         }
         setValue(diff ? disk.content : buffers.get(id)?.content);
+        if (!diff) {
+          const warning = largeFileNotice(new TextEncoder().encode(disk.content).length, preferences["editor.largeFileWarnKb"]);
+          if (warning) setNotice(warning);
+        }
         const b = buffers.get(id);
         const isDirty = !!b && b.content !== b.saved;
         setDirty(isDirty);
@@ -357,7 +368,20 @@ export default function EditorPanel({
         if (active && generation.active && lifetime.current === generation &&
           editorChangeOwner(id, config, diff) === owner &&
           (diff || ownsBuffer()) &&
-          canPublishEditorChange(opening, capture())) setError(e.message);
+          canPublishEditorChange(opening, capture())) {
+          // A binary or over-2 MB file cannot be edited; offer a read-only preview
+          // (never a buffer, revision or save path) instead of only an error.
+          if (!diff && PREVIEWABLE_READ_ERROR.test(String(e?.message))) {
+            window.hrig.edit(config.connection, { op: "inspect", root: config.root, path: config.path })
+              .then((info) => {
+                if (active && generation.active && lifetime.current === generation) {
+                  if (info && (info.kind === "image" || info.kind === "binary" || info.kind === "large-text")) setInspected(info);
+                  else setError(e.message);
+                }
+              })
+              .catch(() => { if (active && generation.active && lifetime.current === generation) setError(e.message); });
+          } else setError(e.message);
+        }
       });
     return () => {
       active = false;
@@ -508,6 +532,34 @@ export default function EditorPanel({
           <FileCode2 size={13} />
           {config.path}
         </span>
+        {!diff && !compare && isMarkdownPath(config.path) && (
+          <button
+            className="small-button"
+            aria-pressed={mdPreview}
+            title={mdPreview ? "Back to the editable Markdown source" : "Preview rendered Markdown (read-only; your text is unchanged)"}
+            onClick={() => setMdPreview((v) => !v)}
+          >
+            {mdPreview ? <Code2 size={12} /> : <Eye size={12} />}
+            {mdPreview ? "Source" : "Preview"}
+          </button>
+        )}
+        {(diff || compare) && (
+          <button
+            className="small-button"
+            aria-pressed={preferences["editor.diffSideBySide"]}
+            title={preferences["editor.diffSideBySide"]
+              ? "Showing two columns. Switch to an inline diff (remembered across restarts)."
+              : "Showing an inline diff. Switch to two columns (remembered across restarts)."}
+            onClick={() =>
+              updateSetting(
+                Object.hasOwn(projectPreferences, "editor.diffSideBySide") ? "project" : "user",
+                "editor.diffSideBySide",
+                !preferences["editor.diffSideBySide"],
+              )}
+          >
+            {preferences["editor.diffSideBySide"] ? "Inline" : "Side by side"}
+          </button>
+        )}
         {diff ? (
           <span className="subtle">HEAD ↔ working tree</span>
         ) : (
@@ -602,7 +654,9 @@ export default function EditorPanel({
       )}
       {notice && <div className="editor-notice" role="status">{notice}</div>}
       {error && value !== undefined && <ErrorBox error={error} />}
-      {error && value === undefined ? (
+      {inspected && value === undefined ? (
+        <FilePreview info={inspected} path={config.path || ""} />
+      ) : error && value === undefined ? (
         <ErrorBox error={error} />
       ) : value === undefined ? (
         <Loading text="Opening file…" />
@@ -634,7 +688,10 @@ export default function EditorPanel({
           }}
         />
       ) : (
+        <>
+        {mdPreview && isMarkdownPath(config.path) && <MarkdownPreview source={value} />}
         <Editor
+          wrapperProps={mdPreview && isMarkdownPath(config.path) ? { style: { display: "none" } } : undefined}
           path={monaco.Uri.from({
             scheme: "file",
             path: editorModelPath(config),
@@ -692,6 +749,7 @@ export default function EditorPanel({
             scrollBeyondLastLine: false,
           }}
         />
+        </>
       )}
       {reloadConfirm && (
         <Modal

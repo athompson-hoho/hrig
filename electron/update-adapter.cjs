@@ -75,33 +75,62 @@ function registerUpdates({ app, ipcMain, shell, getWindow, trusted }) {
     trusted(event);
     return service.operation(request);
   });
-  scheduleUpdateChecks(app, service);
+  const schedule = scheduleUpdateChecks(app, service);
+  ipcMain.handle("updates:frequency", (event, hours) => {
+    trusted(event);
+    schedule.setHours(hours);
+    return { hours };
+  });
   return service;
 }
+const CHECK_HOURS = [0, 6, 12, 24, 168];
 function scheduleUpdateChecks(
   app,
   service,
   timers = { setTimeout, setInterval, clearTimeout, clearInterval },
 ) {
-  if (!app.isPackaged) return;
-  app.whenReady().then(() => {
-    const check = () => {
-      if (
-        ["checking", "downloading", "downloaded", "installing"].includes(
-          service.status().phase,
-        )
+  const controller = { setHours() {} };
+  if (!app.isPackaged) return controller;
+  let hours = 6,
+    ready = false,
+    startup,
+    periodic;
+  const check = () => {
+    if (
+      ["checking", "downloading", "downloaded", "installing"].includes(
+        service.status().phase,
       )
-        return;
-      void service.operation({ op: "check" }).catch(() => {});
-    };
-    const startup = timers.setTimeout(check, 10000);
-    const periodic = timers.setInterval(check, 6 * 60 * 60 * 1000);
-    startup.unref?.();
-    periodic.unref?.();
-    app.once("before-quit", () => {
+    )
+      return;
+    void service.operation({ op: "check" }).catch(() => {});
+  };
+  const arm = () => {
+    if (periodic !== undefined) timers.clearInterval(periodic);
+    periodic = hours > 0 ? timers.setInterval(check, hours * 60 * 60 * 1000) : undefined;
+    periodic?.unref?.();
+  };
+  // 0 = never check automatically (manual Check for updates still works).
+  controller.setHours = (value) => {
+    if (!CHECK_HOURS.includes(value)) throw new Error("Unsupported update-check frequency.");
+    hours = value;
+    if (hours === 0 && startup !== undefined) {
       timers.clearTimeout(startup);
-      timers.clearInterval(periodic);
+      startup = undefined;
+    }
+    if (ready) arm();
+  };
+  app.whenReady().then(() => {
+    ready = true;
+    if (hours > 0) {
+      startup = timers.setTimeout(check, 10000);
+      startup.unref?.();
+    }
+    arm();
+    app.once("before-quit", () => {
+      if (startup !== undefined) timers.clearTimeout(startup);
+      if (periodic !== undefined) timers.clearInterval(periodic);
     });
   });
+  return controller;
 }
-module.exports = { registerUpdates, scheduleUpdateChecks };
+module.exports = { registerUpdates, scheduleUpdateChecks, CHECK_HOURS };

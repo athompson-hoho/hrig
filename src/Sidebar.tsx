@@ -255,7 +255,7 @@ export default function Sidebar({
         {onPodGrid && (
           <IconButton
             className="pod-grid-open"
-            title={`Open the ${group.seats.length} matching ${group.seats.length === 1 ? "session" : "sessions"} of pod ${group.podLabel} as a grid`}
+            title={`Open the ${group.seats.length} matching unpinned ${group.seats.length === 1 ? "session" : "sessions"} of pod ${group.podLabel} as a grid (pinned sessions are in Favorites)`}
             disabled={!!inventoryError || !podsAvailable}
             onClick={() => onPodGrid(group.seats)}
           >
