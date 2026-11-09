@@ -62,6 +62,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `terminal.lineHeight` | `1.28` | Spacing between terminal lines as a multiplier. |
 | `terminal.cursorStyle` | `bar` | Shape of the terminal cursor. |
 | `terminal.cursorBlink` | `true` | Animate the terminal cursor when the terminal has focus. |
+| `terminal.scrollbackBudget` | `200000` | Total scrollback lines shared by all open terminals (0 = no limit). With the default 10,000 lines per terminal the budget only matters beyond 20 terminals; each terminal keeps at least 1,000 lines, so extreme counts can exceed it. Only the on-screen history is trimmed; sessions keep running. |
 | `terminal.scrollback` | `10000` | Lines retained by each terminal view. Lowering this may discard old visible scrollback; the rig session continues. |
 | `terminal.theme` | `inherit` | Follow the application theme or keep terminals explicitly dark or light. |
 | `terminal.localShell` | `powershell` | Shell for new Windows terminals. Existing terminals and remote agent sessions are unaffected. |

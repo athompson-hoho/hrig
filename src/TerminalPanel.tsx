@@ -25,6 +25,7 @@ import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
 import { motionReduced } from "./reduced-motion";
+import { effectiveScrollback, openTerminalCount, registerTerminal, subscribeTerminals } from "./terminal-budget";
 export default function TerminalPanel({
   config,
   onFile,
@@ -329,6 +330,22 @@ export default function TerminalPanel({
       }
     };
   }, [config.terminalId, config.seat?.session, attempt]);
+  const [terminalsOpen, setTerminalsOpen] = useState(openTerminalCount);
+  useEffect(() => {
+    const id = config.terminalId;
+    const off = subscribeTerminals(() => setTerminalsOpen(openTerminalCount()));
+    const unregister = id ? registerTerminal(id) : () => {};
+    setTerminalsOpen(openTerminalCount());
+    return () => {
+      off();
+      unregister();
+    };
+  }, [config.terminalId]);
+  const scrollbackLines = effectiveScrollback(
+    preferences["terminal.scrollback"],
+    terminalsOpen,
+    preferences["terminal.scrollbackBudget"],
+  );
   useEffect(() => {
     const term = terminalRef.current;
     if (!term) return;
@@ -343,13 +360,13 @@ export default function TerminalPanel({
     term.options.cursorBlink =
       preferences["terminal.cursorBlink"] &&
       !motionReduced(preferences["appearance.reduceMotion"]);
-    term.options.scrollback = preferences["terminal.scrollback"];
+    term.options.scrollback = scrollbackLines;
     term.options.theme = terminalTheme(preferences, colorTheme);
     try {
       fitRef.current?.fit();
       window.hrig.resizeTerminal(config.terminalId!, term.cols, term.rows);
     } catch {}
-  }, [preferences, colorTheme, attempt, config.seat?.session, zoom]);
+  }, [preferences, colorTheme, attempt, config.seat?.session, zoom, scrollbackLines]);
   const activity = terminalSeatActivity(config.seat, seatActivityAvailable);
   return (
     <div className="terminal-panel" ref={panel}>
@@ -454,7 +471,7 @@ export default function TerminalPanel({
         <TerminalScrollback
           terminal={terminalRef}
           generation={attempt * 2 + (ready ? 1 : 0)}
-          scrollback={preferences["terminal.scrollback"]}
+          scrollback={scrollbackLines}
         />
       </div>
       {ended !== null && (

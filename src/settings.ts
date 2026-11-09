@@ -29,6 +29,7 @@ export const defaults = {
   "terminal.cursorStyle": "bar",
   "terminal.cursorBlink": true,
   "terminal.scrollback": 10000,
+  "terminal.scrollbackBudget": 200000,
   "terminal.theme": "inherit",
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
@@ -312,6 +313,16 @@ export const schema: Setting[] = [
     category: "Terminal",
     label: "Blinking cursor",
     description: "Animate the terminal cursor when the terminal has focus.",
+  },
+  {
+    key: "terminal.scrollbackBudget",
+    category: "Terminal",
+    label: "Total scrollback budget (lines)",
+    description:
+      "Limits the scrollback lines all open terminals keep together, to protect memory when many terminals are open. Each terminal keeps at most its own scrollback setting and at least 1,000 lines. Set 0 for no limit. Rig sessions are not affected; only older output in the view is dropped.",
+    min: 0,
+    max: 2000000,
+    step: 10000,
   },
   {
     key: "terminal.scrollback",
