@@ -67,6 +67,23 @@ export function planMaximize(
 }
 
 /**
+ * A new tab is about to be added to `targetId` while `maximizedId` is maximized
+ * in the same layout window. In the maximized group it is already visible, so
+ * keep; in any hidden group it would be invisible until Restore, so restore
+ * first. Anything that is not a usable id (null, undefined, garbage) keeps.
+ */
+export function planOpenInMaximized(view: {
+  maximizedId: string | null | undefined;
+  targetId: string | null | undefined;
+}): "restore" | "keep" {
+  const maximized = idOf(view?.maximizedId);
+  const target = idOf(view?.targetId);
+  return maximized !== null && target !== null && maximized !== target
+    ? "restore"
+    : "keep";
+}
+
+/**
  * A copy of saved layout JSON without the maximized flag that flexlayout writes
  * on a tab set. Maximizing is a view state for the current session, so a
  * restored, saved or role-template layout always opens with every group
