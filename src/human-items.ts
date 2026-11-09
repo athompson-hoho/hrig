@@ -9,6 +9,10 @@ export const ACTIVE_STATES: readonly string[] = [
   "in-progress",
   "blocked",
 ];
+/** humanIntent of a quiet informational update, which the OpenRig daemon keeps off its list of what needs a person; such a row is not an ask and does not notify. */
+export const QUIET_INTENT = "update";
+/** Most ids kept as already seen, and most items looked at in one answer; the oldest ids are dropped first. */
+export const MAX_SEEN = 2000;
 /** Longest address, id or state read from a row, in characters; a longer value counts as missing. */
 export const MAX_FIELD = 200;
 /** Most characters read from a subject before it is cleaned. */
@@ -102,18 +106,23 @@ export function isHumanAddressed(item: unknown): boolean {
   );
 }
 
-/** True when the row is addressed to a person and is still waiting (pending, in-progress or blocked). */
+/** True when the row is addressed to a person, is still waiting (pending, in-progress or blocked) and is not a quiet update. */
 export function isOpenHumanItem(item: unknown): boolean {
   if (!isHumanAddressed(item)) return false;
-  const state = short(item as Record<string, unknown>, ["state", "status"]);
-  return ACTIVE_STATES.includes(state.toLowerCase());
+  const row = item as Record<string, unknown>;
+  return (
+    ACTIVE_STATES.includes(short(row, ["state", "status"]).toLowerCase()) &&
+    short(row, ["humanIntent"]).toLowerCase() !== QUIET_INTENT
+  );
 }
 
 /**
  * The items for the person that were not there at the last answer. With seen
  * null (the first answer on a connection) nothing is new: the ids are only
- * taken in, so starting the app never floods. nextSeen is a new set; the one
- * passed in is not changed.
+ * taken in, so starting the app never floods. At most MAX_SEEN items are
+ * looked at, and this answer's ids are the newest of nextSeen, so a cut never
+ * drops an item that is still waiting. nextSeen is a new set; the one passed
+ * in is not changed.
  */
 export function newHumanItems(
   items: unknown,
@@ -122,6 +131,7 @@ export function newHumanItems(
   const found = new Map<string, Record<string, unknown>>();
   if (Array.isArray(items))
     for (const item of items) {
+      if (found.size >= MAX_SEEN) break;
       if (!isOpenHumanItem(item)) continue;
       const row = item as Record<string, unknown>;
       const id = short(row, ["qitemId", "id"]);
@@ -131,8 +141,14 @@ export function newHumanItems(
   if (seen)
     for (const [id, row] of found)
       if (!seen.has(id)) fresh.push({ id, subject: subjectOf(row) });
-  const nextSeen = new Set<string>(seen ?? []);
+  const nextSeen = new Set<string>();
+  if (seen) for (const id of seen) if (!found.has(id)) nextSeen.add(id);
   for (const id of found.keys()) nextSeen.add(id);
+  let extra = nextSeen.size - MAX_SEEN;
+  for (const id of nextSeen) {
+    if (extra-- <= 0) break;
+    nextSeen.delete(id);
+  }
   return { fresh, nextSeen };
 }
 
@@ -164,7 +180,8 @@ export function nextHumanPoll(
   key: string,
   items: unknown,
 ): { seen: HumanSeen; notice: HumanNotice | null } {
-  const ids = prev && prev.key === key ? prev.ids : null;
+  const ids =
+    prev && prev.key === key && prev.ids instanceof Set ? prev.ids : null;
   if (!Array.isArray(items)) return { seen: { key, ids }, notice: null };
   const { fresh, nextSeen } = newHumanItems(items, ids);
   return {
