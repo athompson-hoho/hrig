@@ -4611,3 +4611,6 @@ button:hover {
 .statusbar .status-connection-button:hover, .statusbar .status-connection-button:focus-visible { filter: brightness(1.15); }
 .statusbar .status-connection-menu { top: auto; bottom: calc(100% + 4px); left: 0; min-width: 255px; max-height: 50vh; overflow: auto; font-size: 11px; }
 .statusbar .status-connection-menu > button { font-size: 11px; }
+.editor-breadcrumbs { display: inline-flex; flex-wrap: nowrap; align-items: center; min-width: 0; overflow: hidden; white-space: nowrap; }
+.editor-breadcrumbs .crumb-sep { opacity: 0.5; white-space: pre; }
+.editor-breadcrumbs .crumb-current { font-weight: 600; }

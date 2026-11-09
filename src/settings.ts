@@ -20,6 +20,7 @@ export const defaults = {
   "editor.bracketPairs": true,
   "editor.diffSideBySide": true,
   "editor.largeFileWarnKb": 1024,
+  "editor.breadcrumbs": false,
   "editor.autoReload": true,
   "terminal.fontSize": 13,
   "terminal.fontFamily":
@@ -250,6 +251,13 @@ export const schema: Setting[] = [
     label: "Side-by-side diffs",
     description:
       "Compare versions in two columns. Turn off for an inline diff.",
+  },
+  {
+    key: "editor.breadcrumbs",
+    category: "Editor",
+    label: "Breadcrumb path bar",
+    description:
+      "Show the open file's path as folder breadcrumbs in the editor toolbar. Display only: breadcrumbs do not navigate.",
   },
   {
     key: "editor.largeFileWarnKb",

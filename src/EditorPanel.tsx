@@ -20,6 +20,7 @@ import {
 } from "./editor-buffers";
 import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
+import { breadcrumbs } from "./breadcrumb";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
 import {
@@ -528,9 +529,20 @@ export default function EditorPanel({
   return (
     <div className="editor-panel">
       <div className="editor-toolbar">
-        <span>
+        <span title={config.path}>
           <FileCode2 size={13} />
-          {config.path}
+          {preferences["editor.breadcrumbs"] && !diff && config.path ? (
+            <nav className="editor-breadcrumbs" aria-label="File path">
+              {breadcrumbs(config.path).hidden > 0 && <span className="subtle">… /</span>}
+              {breadcrumbs(config.path).crumbs.map((c) => (
+                <span key={c.path} className={c.last ? "crumb-current" : "crumb-part"} aria-current={c.last ? "page" : undefined}>
+                  {c.name}{!c.last && <span className="crumb-sep" aria-hidden="true"> / </span>}
+                </span>
+              ))}
+            </nav>
+          ) : (
+            config.path
+          )}
         </span>
         {!diff && !compare && isMarkdownPath(config.path) && (
           <button

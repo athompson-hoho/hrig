@@ -51,6 +51,7 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `editor.fontLigatures` | `false` | Combine supported character sequences when using a compatible font. |
 | `editor.renderWhitespace` | `selection` | Show spaces and tabs for the selected text, everywhere, or nowhere. |
 | `editor.bracketPairs` | `true` | Use matching colors for nested bracket pairs. |
+| `editor.breadcrumbs` | `false` | Show the open file path as folder breadcrumbs (the last 8 folders and the file) in the editor toolbar. Display only; crumbs do not navigate. |
 | `editor.largeFileWarnKb` | `1024` | Warn when opening an editable file of at least this many KB (100 to 2000). Files over 2 MB and binary files open as a read-only preview (image, hex dump, or the beginning of a large text file) and are never edited or saved. |
 | `editor.diffSideBySide` | `true` | Compare versions in two columns. Turn off for an inline diff. The diff panel toolbar has an Inline / Side by side button that changes this setting (the project override when the project sets one, otherwise your user setting), so the choice persists across restarts. |
 | `editor.autoReload` | `true` | Refresh an unmodified buffer when its file changes externally. Unsaved edits always remain protected. |
