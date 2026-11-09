@@ -5,8 +5,10 @@ import { ErrorBox, Loading } from "./components";
 import { problems } from "./editor-buffers";
 import { draftKey, draftOperation, useDraft } from "./drafts";
 import {
+  pruneReviewed,
   recheckPaths,
   reviewKey,
+  reviewProgress,
   reviewState,
   toggleReviewed,
   usablePath,
@@ -105,11 +107,21 @@ export function ReviewWorkspace({
   const [unreadable, setUnreadable] = useState<Set<string>>(new Set());
   // The change list the re-read of the ticked files has finished for.
   const [rechecked, setRechecked] = useState<GitEntry[] | null>(null);
+  const [unreviewedOnly, setUnreviewedOnly] = useState(false);
   useEffect(() => {
     if (!changes || !isRepository) return;
     let active = true;
     setSeen(new Map());
     setUnreadable(new Set());
+    // A tick of a file that is no longer in the list (committed, reverted or deleted) is dropped; an empty list drops nothing, so a failed or odd answer can never wipe a review.
+    if (changes.length)
+      onChecks((now) =>
+        pruneReviewed(
+          now,
+          rkey,
+          changes.map((c) => c.path),
+        ),
+      );
     // At most 50 ticked files, one read at a time; the rest are reported as not rechecked.
     const { read } = recheckPaths(changes, saved, rkey);
     (async () => {
@@ -157,6 +169,10 @@ export function ReviewWorkspace({
       setUnreadable((old) => new Set(old).add(c.path));
     }
   };
+  const listed = (changes ?? []).filter(
+    (c) => !unreviewedOnly || stateOf(c) !== "reviewed",
+  );
+  const progress = reviewProgress(changes ?? [], saved, rkey, seen);
   const seat = seats.find((s) => s.id === (target || seats[0]?.id));
   return (
     <div className="tool-panel">
@@ -202,6 +218,37 @@ export function ReviewWorkspace({
       >
         Open recipient session
       </button>
+      {isRepository && changes && changes.length > 0 && (
+        <div className="review-progress">
+          <p>
+            {progress.reviewed} of {progress.total} reviewed
+            {progress.total < changes.length
+              ? " · " + (changes.length - progress.total) + " cannot be checked"
+              : ""}
+            {unreviewedOnly && !listed.length
+              ? " · nothing left to review"
+              : ""}
+          </p>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={unreviewedOnly}
+              onChange={(e) => setUnreviewedOnly(e.target.checked)}
+            />
+            Show unreviewed only
+          </label>
+          <button
+            className="small-button"
+            disabled={!Object.prototype.hasOwnProperty.call(saved, rkey)}
+            onClick={() => {
+              onChecks((now) => pruneReviewed(now, rkey, []));
+              setSeen(new Map());
+            }}
+          >
+            Clear all checks
+          </button>
+        </div>
+      )}
       <div className="review-changes">
         {!isRepository ? (
           <div className="sidebar-empty">
@@ -218,7 +265,7 @@ export function ReviewWorkspace({
         ) : changes === null && !error ? (
           <Loading />
         ) : error && changes === null ? null : changes?.length ? (
-          changes.map((c) => {
+          listed.map((c) => {
             const state = stateOf(c);
             const why =
               c.status === "D"

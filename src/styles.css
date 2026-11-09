@@ -879,6 +879,18 @@
   max-height: 300px;
   overflow: auto;
 }
+.review-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--color-a1b5c7);
+}
+.review-progress .checkbox-label {
+  margin: 0;
+}
 .review-file-row {
   display: flex;
   align-items: center;

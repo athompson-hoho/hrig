@@ -180,3 +180,39 @@ export function recheckPaths(
     skipped: ticked.slice(MAX_RECHECK),
   };
 }
+
+/** The checks without the paths of this project that are not in the current change list; an empty list clears the project. Returns the same object when nothing is dropped. */
+export function pruneReviewed(
+  checks: ReviewChecks,
+  key: string,
+  currentPaths: readonly string[],
+): ReviewChecks {
+  if (!plain(checks) || !has(checks, key)) return checks;
+  const keep = new Set(currentPaths);
+  const paths = entriesOf(checks[key]);
+  const left = paths.filter(([path]) => keep.has(path));
+  if (left.length === paths.length) return checks;
+  return build(
+    cleaned(checks).map(([name, list]): [string, [string, string][]] =>
+      name === key ? [name, pathsOf(Object.fromEntries(left))] : [name, list],
+    ),
+  );
+}
+
+/** How many checkable files are reviewed at the revision just read, out of how many checkable files there are; `revisions` maps a path to its current revision (null when the read failed) and an unread path counts as not reviewed. */
+export function reviewProgress(
+  entries: readonly { path: string; status?: string }[],
+  checks: unknown,
+  key: string,
+  revisions: ReadonlyMap<string, string | null>,
+): { reviewed: number; total: number } {
+  const seen = new Set<string>();
+  let reviewed = 0;
+  for (const entry of entries) {
+    if (!isCheckable(entry) || seen.has(entry.path)) continue;
+    seen.add(entry.path);
+    if (isReviewed(checks, key, entry.path, revisions.get(entry.path)))
+      reviewed++;
+  }
+  return { reviewed, total: seen.size };
+}

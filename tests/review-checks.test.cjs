@@ -50,6 +50,8 @@ const {
   reviewState,
   toggleReviewed,
   recheckPaths,
+  pruneReviewed,
+  reviewProgress,
 } = pure;
 const { recentKey } = load("src/recent-files.ts");
 
@@ -423,11 +425,22 @@ function loadReview() {
     throw new Error("unexpected import " + name);
   });
   function mount(initialProps, disk, entries) {
-    const calls = { git: 0, reads: [], other: [], active: 0, maxActive: 0 };
+    const calls = {
+      git: 0,
+      reads: [],
+      other: [],
+      active: 0,
+      maxActive: 0,
+      notRepository: false,
+    };
     const bridge = {
       git: async () => {
         calls.git++;
-        return { isRepository: true, root: ROOT, entries: entries.slice() };
+        return {
+          isRepository: !calls.notRepository,
+          root: ROOT,
+          entries: calls.notRepository ? [] : entries.slice(),
+        };
       },
       edit: async (conn, request) => {
         calls.active++;
@@ -836,6 +849,246 @@ test("review-checks verify: a failed or unreadable read never invents a tick, an
         "a refresh reads at most 50 again",
       );
       assert.equal(calls.maxActive, 1);
+    },
+  );
+});
+
+test("review-checks progress: the count is of checkable files reviewed at the revision just read, and pruning drops only the files that left the list", () => {
+  const entries = [
+    { path: "a.ts", status: "M" },
+    { path: "b.ts", status: "M" },
+    { path: "c.ts", status: "??" },
+    { path: "gone.ts", status: "D" },
+    { path: "rlo\u202e.ts", status: "M" },
+    { path: "a.ts", status: "M" },
+  ];
+  const checks = deepFreeze({
+    [K]: { "a.ts": "r1", "b.ts": "r2", "gone.ts": "r3", "c.ts": "r4" },
+    [K2]: { "c.ts": "r5" },
+  });
+  const seen = (pairs) => new Map(pairs);
+  // Deleted files, unusable paths and repeated entries are not counted in the total.
+  assert.deepEqual(
+    reviewProgress(
+      entries,
+      checks,
+      K,
+      seen([
+        ["a.ts", "r1"],
+        ["b.ts", "r2"],
+        ["gone.ts", "r3"],
+      ]),
+    ),
+    { reviewed: 2, total: 3 },
+  );
+  // A stale, failed or unread revision is not reviewed, and a revision for a file nobody ticked counts for nothing.
+  assert.deepEqual(
+    reviewProgress(
+      entries,
+      checks,
+      K,
+      seen([
+        ["a.ts", "r1-edited"],
+        ["b.ts", null],
+        ["c.ts", "r9"],
+      ]),
+    ),
+    { reviewed: 0, total: 3 },
+  );
+  assert.deepEqual(reviewProgress(entries, checks, K, seen([])), {
+    reviewed: 0,
+    total: 3,
+  });
+  assert.deepEqual(
+    reviewProgress(entries, checks, K2, seen([["c.ts", "r5"]])),
+    {
+      reviewed: 1,
+      total: 3,
+    },
+  );
+  assert.deepEqual(reviewProgress([], checks, K, seen([])), {
+    reviewed: 0,
+    total: 0,
+  });
+  assert.deepEqual(reviewProgress(entries, undefined, K, seen([])), {
+    reviewed: 0,
+    total: 3,
+  });
+  assert.deepEqual(reviewProgress(entries, "junk", K, seen([["a.ts", "r1"]])), {
+    reviewed: 0,
+    total: 3,
+  });
+
+  // Pruning: only this project's paths that are not in the list are dropped; the input is never changed.
+  const pruned = pruneReviewed(checks, K, ["a.ts", "c.ts", "new.ts"]);
+  assert.deepEqual(pruned, {
+    [K]: { "a.ts": "r1", "c.ts": "r4" },
+    [K2]: { "c.ts": "r5" },
+  });
+  assert.deepEqual(Object.keys(pruned[K]), ["a.ts", "c.ts"], "order kept");
+  assert.notEqual(pruned, checks);
+  assert.equal(checks[K]["b.ts"], "r2");
+  // Nothing to drop: the very same object comes back, so no state is written.
+  assert.equal(
+    pruneReviewed(checks, K, ["a.ts", "b.ts", "gone.ts", "c.ts", "more"]),
+    checks,
+  );
+  assert.equal(pruneReviewed(checks, "unknown", []), checks);
+  const empty = {};
+  assert.equal(pruneReviewed(empty, K, []), empty);
+  // An empty list clears the project and only that project.
+  assert.deepEqual(pruneReviewed(checks, K, []), { [K2]: { "c.ts": "r5" } });
+  assert.deepEqual(pruneReviewed(checks, K2, []), { [K]: checks[K] });
+  assert.deepEqual(pruneReviewed(deepFreeze({ [K]: { a: "r" } }), K, []), {});
+  // A hostile key never reaches a prototype.
+  assert.equal(pruneReviewed(checks, "__proto__", []), checks);
+  assert.equal(pruneReviewed(checks, "constructor", []), checks);
+  assert.equal(Object.keys(Object.prototype).length, 0);
+});
+
+test("review-checks list: the progress line, the unreviewed-only view and Clear all checks work on the real list, and nothing is stored for files that left it", async () => {
+  const key = reviewKey("local", ROOT);
+  const other = reviewKey("ssh:h", "/srv/b");
+  const four = [
+    { path: "a.ts", status: "M" },
+    { path: "b.ts", status: "M" },
+    { path: "c.ts", status: "??" },
+    { path: "gone.ts", status: "D" },
+  ];
+  await withReview(
+    {
+      entries: four,
+      disk: { "a.ts": "r1", "b.ts": "r2", "c.ts": "r3" },
+      checks: {
+        [key]: { "a.ts": "r1", "b.ts": "r2", "old.ts": "r0" },
+        [other]: { "x.ts": "rx" },
+      },
+    },
+    async ({ handle, calls, app }) => {
+      const progress = () =>
+        handle.text(
+          handle.find(
+            (n) => n.type === "div" && n.props.className === "review-progress",
+          )[0].props.children[0],
+        );
+      // The tick of a file that left the change list is dropped on load; another project is untouched; the one write is the prune.
+      assert.deepEqual(app.checks, {
+        [key]: { "a.ts": "r1", "b.ts": "r2" },
+        [other]: { "x.ts": "rx" },
+      });
+      assert.equal(app.writes, 1);
+      assert.equal(progress(), "2 of 3 reviewed \u00b7 1 cannot be checked");
+      // The wrapper keeps every row's own button inside .review-changes; the toolbar is outside it, so `.review-changes button` still means a file.
+      const list = handle.find(
+        (n) => n.type === "div" && n.props.className === "review-changes",
+      )[0];
+      const inside = [];
+      const collect = (n) => {
+        if (Array.isArray(n)) return n.forEach(collect);
+        if (!n || !n.props) return;
+        if (n.type === "button") inside.push(n);
+        collect(n.props.children);
+      };
+      collect(list.props.children);
+      assert.equal(inside.length, four.length);
+      assert.equal(handle.rows().length, four.length);
+
+      // Ticking changes the count at once.
+      await handle.tick("c.ts");
+      assert.equal(progress(), "3 of 3 reviewed \u00b7 1 cannot be checked");
+      assert.equal(app.checks[key]["c.ts"], "r3");
+
+      // The unreviewed-only view is component state: it hides reviewed files and nothing else, and writes nothing.
+      const writes = app.writes;
+      const filter = () =>
+        handle.find(
+          (n) =>
+            n.type === "input" &&
+            n.props.type === "checkbox" &&
+            n.props.checked !== undefined &&
+            !n.props["aria-label"],
+        )[0];
+      assert.equal(filter().props.checked, false);
+      filter().props.onChange({ target: { checked: true } });
+      assert.deepEqual(
+        handle.rows().map((r) => r.path),
+        ["gone.ts"],
+        "a deleted file is still an unreviewed change",
+      );
+      assert.equal(progress(), "3 of 3 reviewed \u00b7 1 cannot be checked");
+      filter().props.onChange({ target: { checked: false } });
+      assert.equal(handle.rows().length, 4);
+      assert.equal(app.writes, writes, "the view writes nothing");
+      await handle.tick("c.ts");
+      assert.equal(app.writes, writes + 1, "only the untick was written");
+      filter().props.onChange({ target: { checked: true } });
+      assert.deepEqual(
+        handle.rows().map((r) => r.path),
+        ["c.ts", "gone.ts"],
+        "an unticked file shows in the view",
+      );
+      filter().props.onChange({ target: { checked: false } });
+      await handle.tick("c.ts");
+
+      // Clear all checks drops this project's ticks and only these.
+      const clear = () =>
+        handle.find(
+          (n) => n.type === "button" && handle.text(n) === "Clear all checks",
+        )[0];
+      assert.equal(clear().props.disabled, false);
+      clear().props.onClick();
+      assert.deepEqual(app.checks, { [other]: { "x.ts": "rx" } });
+      assert.ok(handle.rows().every((r) => !r.checked && !r.hint));
+      assert.equal(progress(), "0 of 3 reviewed \u00b7 1 cannot be checked");
+      assert.equal(clear().props.disabled, true);
+      assert.deepEqual(calls.other, []);
+      assert.ok(handle.rows().find((r) => r.path === "gone.ts").disabled);
+    },
+  );
+  // Everything reviewed with the view on: the line says so; a clean tree and a folder that is not a repository show no toolbar and write nothing.
+  await withReview(
+    {
+      entries: four.slice(0, 2),
+      disk: { "a.ts": "r1", "b.ts": "r2" },
+      checks: { [key]: { "a.ts": "r1", "b.ts": "r2" } },
+    },
+    async ({ handle, calls, app }) => {
+      const toolbar = () =>
+        handle.find(
+          (n) => n.type === "div" && n.props.className === "review-progress",
+        )[0];
+      assert.equal(handle.text(toolbar().props.children[0]), "2 of 2 reviewed");
+      toolbar().props.children[1].props.children[0].props.onChange({
+        target: { checked: true },
+      });
+      assert.equal(handle.rows().length, 0);
+      assert.equal(
+        handle.text(toolbar().props.children[0]),
+        "2 of 2 reviewed \u00b7 nothing left to review",
+      );
+      assert.equal(app.writes, 0, "nothing to prune, nothing written");
+      calls.notRepository = true;
+      await handle.refresh();
+      assert.equal(
+        handle.find((n) => n.props.className === "review-progress").length,
+        0,
+      );
+      assert.equal(handle.rows().length, 0);
+      assert.equal(app.writes, 0, "a non-repository never prunes");
+      assert.deepEqual(app.checks, { [key]: { "a.ts": "r1", "b.ts": "r2" } });
+    },
+  );
+  await withReview(
+    { entries: [], disk: {}, checks: { [key]: { "a.ts": "r1" } } },
+    async ({ handle, app }) => {
+      assert.equal(
+        handle.find((n) => n.props.className === "review-progress").length,
+        0,
+      );
+      assert.equal(handle.rows().length, 0);
+      // An empty list never prunes: nothing is written and the tick stays.
+      assert.deepEqual(app.checks, { [key]: { "a.ts": "r1" } });
+      assert.equal(app.writes, 0);
     },
   );
 });
