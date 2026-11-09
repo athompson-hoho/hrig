@@ -1013,3 +1013,50 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
       "not in " + file,
     );
 });
+
+test("seat-notes style: three rules sit directly after the session row hover rule, hide the notes button until its row is pointed at or focused, tint a seat that has a note with a color the stylesheet already uses for text, add no new color, and nothing is appended at the end", () => {
+  const css = read("src/styles.css");
+  const anchor =
+    ".session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }\n";
+  const block =
+    ".session-row > .seat-note { opacity: 0; }\n" +
+    ".session-row:hover > .seat-note, .session-row:focus-within > .seat-note, .session-row > .seat-note.has-note { opacity: 1; }\n" +
+    ".session-row > .seat-note.has-note { color: var(--color-a0e3c2); }\n";
+  assert.equal(count(css, anchor + block + ".relaunch-target {"), 1);
+  assert.equal(count(css, ".seat-note"), 5);
+  assert.equal(count(css, "has-note"), 2);
+  // The new rules use no hex color, no other token, no important flag and no theme selector.
+  assert.ok(!/#[0-9a-f]{3,8}|rgb|!important|data-theme|:root/i.test(block));
+  assert.deepEqual(
+    [...block.matchAll(/var\(--[a-z0-9-]+\)/g)].map((m) => m[0]),
+    ["var(--color-a0e3c2)"],
+  );
+  // That token is already drawn as text elsewhere, so High Contrast already measures it as text.
+  assert.ok(count(css, "color: var(--color-a0e3c2)") >= 2);
+  // The old rules are as they were and the old last rule is still last.
+  assert.equal(
+    count(
+      css,
+      ".session-row > .icon-button { flex-shrink: 0; color: var(--color-707b8e); }\n",
+    ),
+    1,
+  );
+  assert.ok(
+    css
+      .trimEnd()
+      .endsWith(
+        ".terminal-size.terminal-output-counter {\n  left: 12px;\n  transform: none;\n  animation: none;\n}",
+      ),
+  );
+  // Only the dialog component uses the two class names.
+  for (const name of fs.readdirSync(path.join(root, "src")))
+    if (/\.tsx$/.test(name) && name !== "SeatNotes.tsx")
+      assert.ok(!/seat-note(?!s)|has-note/.test(read("src/" + name)), name);
+  assert.equal(
+    count(
+      read("src/SeatNotes.tsx"),
+      '"icon-button seat-note" + (saved ? " has-note" : "")',
+    ),
+    1,
+  );
+});

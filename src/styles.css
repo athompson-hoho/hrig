@@ -4358,6 +4358,9 @@ button:hover {
 .session-row .seat-row { flex: 1; min-width: 0; width: auto; margin: 0; }
 .session-row > .icon-button { flex-shrink: 0; color: var(--color-707b8e); }
 .session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
+.session-row > .seat-note { opacity: 0; }
+.session-row:hover > .seat-note, .session-row:focus-within > .seat-note, .session-row > .seat-note.has-note { opacity: 1; }
+.session-row > .seat-note.has-note { color: var(--color-a0e3c2); }
 .relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
 
