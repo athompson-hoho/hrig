@@ -188,7 +188,11 @@ import {
   pushClosed,
   type ClosedPanel,
 } from "./closed-panels";
-import { planMaximize, type MaximizeRequest } from "./panel-maximize";
+import {
+  planMaximize,
+  planOpenInMaximized,
+  type MaximizeRequest,
+} from "./panel-maximize";
 import {
   FOCUS_OFF,
   focusAfterSidebar,
@@ -1123,6 +1127,16 @@ export default function App() {
       config: { connection: { ...connection }, root, ...config },
     };
     history.current = { past: [], future: [] };
+    const landing = model.getActiveTabset() ?? model.getFirstTabSet();
+    const maximized = model.getMaximizedTabset();
+    if (
+      maximized &&
+      planOpenInMaximized({
+        maximizedId: maximized.getId(),
+        targetId: landing?.getId(),
+      }) === "restore"
+    )
+      model.doAction(Actions.maximizeToggle(maximized.getId()));
     if (!layout.current?.addTabToActiveTabSet(tab)) {
       const first = model.getFirstTabSet();
       if (first)

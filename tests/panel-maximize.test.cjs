@@ -177,7 +177,7 @@ test("panel-maximize tracer: the plan flips one group of the real flexlayout mod
   assert.ok(
     has(
       app,
-      'import { planMaximize, type MaximizeRequest } from "./panel-maximize";',
+      'import { planMaximize, planOpenInMaximized, type MaximizeRequest, } from "./panel-maximize";',
     ),
   );
   assert.ok(has(app, "TabNode, TabSetNode, type ILayoutApi,"));
@@ -416,6 +416,7 @@ test("panel-maximize plan: only toggle or none, restore always targets the maxim
   // The module is data in, data out: nothing it can reach could touch a layout or a PTY.
   assert.deepEqual(Object.keys(pure).sort(), [
     "planMaximize",
+    "planOpenInMaximized",
     "withoutMaximized",
   ]);
   const source = read("src/panel-maximize.ts");
@@ -641,8 +642,8 @@ test("panel-maximize double-click: the built-in maximize stays on, a tab still r
   );
   assert.equal(
     count(app, "Actions.maximizeToggle("),
-    2,
-    "the navigator and the new function are the only direct flips",
+    3,
+    "the navigator, the new function and the open-in-maximized restore are the only direct flips",
   );
   assert.ok(
     has(
@@ -913,4 +914,46 @@ test("panel-maximize chord, Escape and docs: the shortcut is claimed before the 
       "NAVIGATION.md is missing: " + fragment,
     );
   }
+});
+
+test("planOpenInMaximized restores only when the new tab would land in a hidden group, never throws, and the open path calls it", () => {
+  const { planOpenInMaximized } = pure;
+  assert.equal(
+    planOpenInMaximized({ maximizedId: null, targetId: "a" }),
+    "keep",
+  );
+  assert.equal(
+    planOpenInMaximized({ maximizedId: "a", targetId: "a" }),
+    "keep",
+  );
+  assert.equal(
+    planOpenInMaximized({ maximizedId: "a", targetId: "b" }),
+    "restore",
+  );
+  assert.equal(
+    planOpenInMaximized({ maximizedId: "a", targetId: null }),
+    "keep",
+  );
+  for (const bad of [
+    null,
+    undefined,
+    0,
+    "x",
+    [],
+    {},
+    { maximizedId: 5, targetId: {} },
+    { maximizedId: "", targetId: "b" },
+  ])
+    assert.equal(planOpenInMaximized(bad), "keep");
+  const app = appText();
+  const open = between(
+    app,
+    "const addPanel = (",
+    "modelChanged(model); setRecentPanels",
+  );
+  assert.ok(open.includes("planOpenInMaximized("));
+  assert.ok(
+    open.indexOf("planOpenInMaximized(") <
+      open.indexOf("addTabToActiveTabSet("),
+  );
 });
