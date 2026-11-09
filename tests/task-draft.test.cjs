@@ -1021,3 +1021,231 @@ test("task-draft command: the command center request reads the selection once th
     }
   }
 });
+
+test("task-draft menu: the real right-click menu has Create task from selection right after Save selection as snippet, enabled only with a selection, and a click announces the selection and types, pastes and sends nothing", () => {
+  const { TASK_DRAFT_EVENT } = lib;
+  const SAVE = "Save selection as snippet" + char(0x2026);
+  const TASK = "Create task from selection" + char(0x2026);
+  const ctx = mountTools("  npm test  ");
+  try {
+    ctx.openMenu(790);
+    assert.deepEqual(
+      ctx.items().map((i) => i.label),
+      ["Copy", SAVE, TASK, "Paste", "Select all"],
+    );
+    assert.equal(
+      ctx.menuStyle().top,
+      577,
+      "room for the extra item at the bottom edge",
+    );
+    const item = ctx.items().find((i) => i.label === TASK);
+    assert.equal(item.disabled, false);
+    item.click();
+    assert.equal(ctx.events.length, 1);
+    assert.equal(ctx.events[0].type, TASK_DRAFT_EVENT);
+    assert.deepEqual(ctx.events[0].detail, {
+      id: "t-77",
+      text: "  npm test  ",
+    });
+    assert.equal(ctx.notice(), "");
+    assert.deepEqual(ctx.items(), [], "the menu closed");
+    assert.deepEqual(ctx.touched, { pasted: [], written: [], clipboard: [] });
+  } finally {
+    ctx.restore();
+  }
+
+  // Without a selection the item is disabled; even a forced click announces nothing and says why.
+  const none = mountTools("");
+  try {
+    none.openMenu();
+    const item = none.items().find((i) => i.label === TASK);
+    assert.equal(item.disabled, true);
+    item.click();
+    assert.deepEqual(none.events, []);
+    assert.equal(none.notice(), "Select some terminal text first.");
+  } finally {
+    none.restore();
+  }
+
+  // A private key is refused in the menu too, with a notice that does not repeat it.
+  const key = mountTools("-----BEGIN PRIVATE KEY-----\nSECRETBYTES");
+  try {
+    key.openMenu();
+    key
+      .items()
+      .find((i) => i.label === TASK)
+      .click();
+    assert.deepEqual(key.events, []);
+    assert.ok(key.notice().includes("private key"));
+    assert.ok(!key.notice().includes("SECRETBYTES"));
+  } finally {
+    key.restore();
+  }
+});
+
+test("task-draft board: a prepared dialog never defaults the owner, never overwrites a task being written, throws its text away when closed, shows the text as typed and creates only through its own button", async () => {
+  const { draftFromSelection } = lib;
+  const prepare = (text, suggested = "") => {
+    const draft = draftFromSelection(text, { suggested });
+    assert.equal(draft.ok, true);
+    const { ok, ...rest } = draft;
+    return rest;
+  };
+  const creates = (board) =>
+    board.calls.rigAction.filter(([, a]) => a.op === "taskCreate");
+  const subject = (board) => board.byLabel("Task subject").props.value;
+  const brief = (board) => board.byLabel("Task brief").props.value;
+  const owner = (board) => board.byLabel("Task destination").props.value;
+
+  // Without a draft the Assign work button is what it always was: an empty dialog, no review note, the first seat as owner.
+  let board = boardHarness();
+  try {
+    await board.flush();
+    assert.equal(board.props.onDraftTaken !== undefined, true);
+    board.button("Assign work").props.onClick();
+    assert.equal(board.modal().props.title, "Assign work to a seat");
+    assert.equal(subject(board), "");
+    assert.equal(brief(board), "");
+    assert.equal(
+      owner(board),
+      "dev-a@hrig",
+      "the existing button keeps its own default",
+    );
+    assert.deepEqual(
+      board.notes().filter((n) => n.includes("Prepared from")),
+      [],
+    );
+    board.modal().props.onClose();
+    assert.equal(board.modal(), undefined);
+
+    // A prepared dialog: the owner stays empty whatever the suggestion, and the suggestion is only a line of text.
+    board.give(
+      prepare(
+        "<img src=x onerror=alert(1)>\n[a](javascript:1)\n**bold**",
+        "dev-b@hrig",
+      ),
+    );
+    assert.equal(board.calls.taken, 1);
+    assert.equal(owner(board), "");
+    assert.equal(board.button("Create assigned task").props.disabled, true);
+    assert.equal(subject(board), "<img src=x onerror=alert(1)>");
+    assert.equal(
+      brief(board),
+      "<img src=x onerror=alert(1)>\n[a](javascript:1)\n**bold**",
+    );
+    assert.ok(board.notes().some((n) => n.includes("terminal of dev-b@hrig")));
+    const raw = JSON.stringify(
+      board.all().map((n) => Object.keys(n.props || {})),
+    );
+    assert.ok(!raw.includes("dangerouslySetInnerHTML"), "text only");
+    assert.equal(board.byLabel("Task subject").props.onKeyDown, undefined);
+    assert.equal(board.byLabel("Task brief").props.onKeyDown, undefined);
+
+    // Closing it throws the text away: the next Assign work dialog is empty and has no note.
+    board.modal().props.onClose();
+    assert.equal(board.modal(), undefined);
+    board.button("Assign work").props.onClick();
+    assert.equal(subject(board), "");
+    assert.equal(brief(board), "");
+    assert.deepEqual(
+      board.notes().filter((n) => n.includes("Prepared from")),
+      [],
+    );
+    board.modal().props.onClose();
+
+    // A suggestion that names a seat that is not listed gives no hint; a cut and a warning are named in the note.
+    board.give({
+      ...prepare("password=hunter2secret " + "z ".repeat(5000), "dev-z@hrig"),
+    });
+    const notes = board.notes().join(" | ");
+    assert.ok(!notes.includes("terminal of"), notes);
+    assert.ok(notes.includes("cut to the first 8,000 characters"));
+    assert.ok(notes.includes("looks like it holds a key, token or password"));
+    assert.ok(notes.includes(lib.SECRETS_WARNING));
+    assert.equal(owner(board), "");
+    board.modal().props.onClose();
+
+    // The person edits what was prepared, picks an owner and presses the dialog's own button: what is created is what was reviewed.
+    board.give(prepare("first line\nsecond line", "dev-a@hrig"));
+    board.type("Task subject", "A better subject");
+    board.type("Task brief", "A better brief");
+    board.type("Task destination", "dev-a@hrig");
+    assert.deepEqual(creates(board), [], "editing and choosing create nothing");
+    board.button("Create assigned task").props.onClick();
+    await board.flush();
+    assert.deepEqual(creates(board), [
+      [
+        CONNECTION,
+        {
+          op: "taskCreate",
+          id: undefined,
+          title: "A better subject",
+          destination: "dev-a@hrig",
+          body: "A better brief",
+        },
+      ],
+    ]);
+    assert.equal(board.modal(), undefined);
+    assert.deepEqual(
+      board.notes().filter((n) => n.includes("Prepared from")),
+      [],
+      "the note is gone with the dialog",
+    );
+    assert.deepEqual(board.calls.sendMessage, []);
+  } finally {
+    board.unmount();
+  }
+
+  // A task already being written is never overwritten, and the person is told in the dialog.
+  board = boardHarness();
+  try {
+    await board.flush();
+    board.button("Assign work").props.onClick();
+    board.type("Task subject", "half written");
+    board.give(prepare("from the terminal"));
+    assert.equal(board.calls.taken, 1, "the draft is taken either way");
+    assert.equal(subject(board), "half written");
+    assert.equal(brief(board), "");
+    assert.equal(board.errors().length >= 1, true);
+    assert.ok(
+      board
+        .all()
+        .some(
+          (n) =>
+            n.type === "ErrorBox" &&
+            n.props.error.includes("already being written"),
+        ),
+    );
+    assert.equal(
+      owner(board),
+      "dev-a@hrig",
+      "the open dialog is left as it was",
+    );
+    assert.deepEqual(creates(board), []);
+    // An empty open dialog is not a task being written: it is filled in.
+    board.type("Task subject", "");
+    board.give(prepare("from the terminal"));
+    assert.equal(subject(board), "from the terminal");
+    assert.equal(
+      owner(board),
+      "",
+      "a prepared dialog never defaults the owner",
+    );
+    board.modal().props.onClose();
+
+    // A prepared dialog replaces open task details, which only show a task.
+    board
+      .all()
+      .find((n) => n.type === "button" && n.props.className === "task-card")
+      .props.onClick();
+    await board.flush();
+    assert.equal(board.modal().props.title, "Task details");
+    board.give(prepare("from the terminal"));
+    assert.equal(board.modal().props.title, "Assign work to a seat");
+    assert.equal(subject(board), "from the terminal");
+    assert.deepEqual(creates(board), []);
+    assert.deepEqual(board.calls.sendMessage, []);
+  } finally {
+    board.unmount();
+  }
+});

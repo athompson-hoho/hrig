@@ -305,7 +305,7 @@ export default function TerminalTools({
           role="menu"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 190 - (menuLink ? LINK_ITEMS_HEIGHT : 0)),
+            top: Math.min(menu.y, window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0)),
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -325,6 +325,9 @@ export default function TerminalTools({
           </button>
           <button role="menuitem" disabled={!menu.selection} onClick={choose(saveSelectionAsSnippet)}>
             <span>Save selection as snippet…</span>
+          </button>
+          <button role="menuitem" disabled={!menu.selection} onClick={choose(createTaskFromSelection)}>
+            <span>Create task from selection…</span>
           </button>
           <button role="menuitem" onClick={choose(paste)}>
             <span>Paste</span>

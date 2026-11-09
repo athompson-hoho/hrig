@@ -20,6 +20,7 @@ const count = (text, part) => text.split(part).length - 1;
 const char = (code) => String.fromCharCode(code);
 const ELLIPSIS = char(0x2026);
 const MENU_LABEL = "Save selection as snippet" + ELLIPSIS;
+const TASK_LABEL = "Create task from selection" + ELLIPSIS;
 
 function bundle(entry, external = []) {
   return buildSync({
@@ -308,10 +309,16 @@ test("snippet-draft tracer: the real right-click menu turns a one-line selection
   try {
     ctx.openMenu(790);
     const labels = ctx.items().map((i) => i.label);
-    assert.deepEqual(labels, ["Copy", MENU_LABEL, "Paste", "Select all"]);
+    assert.deepEqual(labels, [
+      "Copy",
+      MENU_LABEL,
+      TASK_LABEL,
+      "Paste",
+      "Select all",
+    ]);
     assert.equal(
       ctx.menuStyle().top,
-      610,
+      577,
       "room for the extra item at the bottom edge",
     );
     const item = ctx.items().find((i) => i.label === MENU_LABEL);
@@ -685,7 +692,7 @@ test("snippet-draft wiring: the pure module touches nothing, the menu item and t
     1,
   );
   assert.equal(count(tools, "Save selection as snippet"), 1);
-  assert.equal(count(tools, "window.innerHeight - 190"), 1);
+  assert.equal(count(tools, "window.innerHeight - 223"), 1);
   const handler = tools.slice(
     tools.indexOf("const saveSelectionAsSnippet"),
     tools.indexOf("const [hasImage,setHasImage]"),

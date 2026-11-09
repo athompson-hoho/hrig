@@ -326,6 +326,7 @@ const newLinks = () => {
 const BASE_MENU = [
   "Copy",
   "Save selection as snippet" + char(8230),
+  "Create task from selection" + char(8230),
   "Paste",
   "Select all",
 ];
@@ -354,13 +355,13 @@ test("terminal-link-at tracer: a link the real xterm web-links addon reports und
     );
   }
 
-  // No link under the pointer: the menu is exactly what it was, and the bottom clamp is the old one.
+  // No link under the pointer: the menu has no link items, and the bottom clamp is the one without them.
   const none = mountTools({ links: ref, selection: "sel" });
   try {
     none.openMenu(790);
     assert.deepEqual(none.labels(), BASE_MENU);
     assert.equal(none.separators(), 1);
-    assert.equal(none.menuStyle().top, 610);
+    assert.equal(none.menuStyle().top, 577);
   } finally {
     none.restore();
   }
@@ -380,11 +381,11 @@ test("terminal-link-at tracer: a link the real xterm web-links addon reports und
     ctx.openMenu(790);
     assert.deepEqual(ctx.labels(), ["Open link", "Copy link", ...BASE_MENU]);
     assert.equal(ctx.separators(), 2);
-    assert.equal(ctx.menuStyle().top, 533, "800 - 190 - 77");
+    assert.equal(ctx.menuStyle().top, 500, "800 - 223 - 77");
     assert.equal(ctx.menuStyle().left, 10);
     // The link was captured at the right-click: the pointer leaving later does not change an open menu.
     ref.current.hovered = null;
-    assert.equal(ctx.labels().length, 6);
+    assert.equal(ctx.labels().length, 7);
     await ctx.click("Copy link");
     assert.deepEqual(ctx.touched.written, [URL1], "the link text, once");
     assert.equal(ctx.notice(), "Link copied.");
@@ -750,7 +751,7 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
   assert.equal(
     count(
       tools,
-      "window.innerHeight - 190 - (menuLink ? LINK_ITEMS_HEIGHT : 0)",
+      "window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0)",
     ),
     1,
   );
@@ -784,19 +785,19 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
     2 * px(rule(".dropdown"), "padding") + 2 * px(rule(".dropdown"), "border");
   assert.equal(
     items,
-    7,
-    "Open link, Copy link, Copy, Save, Paste, Paste image, Select all",
+    8,
+    "Open link, Copy link, Copy, Save, Create task, Paste, Paste image, Select all",
   );
   assert.equal(separators, 2);
   assert.equal(
-    frame + item * 5 + sep,
-    190,
-    "the old clamp is the old tallest menu",
+    frame + item * 6 + sep,
+    223,
+    "the clamp is the tallest menu without link items",
   );
   assert.equal(
     frame + item * items + sep * separators,
-    190 + 77,
-    "the new clamp is the new tallest menu",
+    223 + 77,
+    "the clamp with link items is the tallest menu",
   );
 
   // The installed xterm and addon say what the plan relies on.
