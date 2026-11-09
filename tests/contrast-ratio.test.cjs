@@ -723,3 +723,234 @@ test("contrast-ratio fix: a color used only for borders that sat under 3:1 now d
   assert.ok(contrastRatio(BLACK, highlight) > 15);
   assert.ok(contrastRatio(BLACK, closeHover) > 11);
 });
+
+test("contrast-ratio terminal: the colors High Contrast hands to the terminal and the editor are measured; the normal ANSI colors, the cursor and the editor text meet WCAG 2.x and the two known exceptions are recorded, not hidden", () => {
+  const settings = load("src/settings.ts");
+  const prefs = {
+    ...settings.defaults,
+    "terminal.theme": "inherit",
+    "appearance.accent": "theme",
+  };
+  const hc = theme.themes[HC];
+  const terminal = theme.terminalTheme(prefs, HC);
+  const editor = theme.editorTheme(prefs, HC);
+  const bg = terminal.background;
+  const eb = editor.colors["editor.background"];
+  assert.equal(bg, hc.panel);
+  assert.equal(terminal.foreground, hc.text);
+  const text = (name, fg, back) => ({ name, fg, bg: back, kind: "text" });
+  const graphic = (name, fg, back) => ({
+    name,
+    fg,
+    bg: back,
+    kind: "non-text",
+  });
+  const pairs = [
+    text("terminal text", terminal.foreground, bg),
+    ...[
+      "red",
+      "green",
+      "yellow",
+      "blue",
+      "magenta",
+      "cyan",
+      "white",
+      "brightBlack",
+    ].map((name) => text("ANSI " + name, terminal[name], bg)),
+    graphic("terminal cursor", terminal.cursor, bg),
+    text(
+      "terminal text on the selection",
+      terminal.foreground,
+      terminal.selectionBackground,
+    ),
+    text("editor text", editor.colors["editor.foreground"], eb),
+    text(
+      "editor line numbers",
+      editor.colors["editorLineNumber.foreground"],
+      eb,
+    ),
+    graphic("editor cursor", editor.colors["editorCursor.foreground"], eb),
+    graphic(
+      "editor widget border",
+      editor.colors["editorWidget.border"],
+      editor.colors["editorWidget.background"],
+    ),
+  ];
+  const results = checkPairs(pairs);
+  assert.deepEqual(
+    results.filter((r) => !r.pass).map((r) => r.name),
+    [],
+  );
+  assert.deepEqual(
+    Object.fromEntries(results.map((r) => [r.name, round2(r.ratio)])),
+    {
+      "terminal text": 21,
+      "ANSI red": 9.2,
+      "ANSI green": 12.81,
+      "ANSI yellow": 12.24,
+      "ANSI blue": 9.94,
+      "ANSI magenta": 9.37,
+      "ANSI cyan": 12.43,
+      "ANSI white": 15.28,
+      "ANSI brightBlack": 5.02,
+      "terminal cursor": 15.46,
+      "terminal text on the selection": 8.13,
+      "editor text": 21,
+      "editor line numbers": 13.6,
+      "editor cursor": 15.46,
+      "editor widget border": 9.07,
+    },
+  );
+  // Known exceptions, measured and left as they are: ANSI black is a background color (the terminal.minimumContrastRatio setting lifts it where a program prints with it), and no WCAG criterion requires a selection highlight; the real look is a HUMAN-UAT check.
+  assert.equal(round2(contrastRatio(terminal.black, bg)), 1.34);
+  assert.equal(round2(contrastRatio(terminal.selectionBackground, bg)), 2.58);
+  // Nothing here is derived by themeColor: High Contrast has no ANSI or syntax palette of its own, so the default ANSI colors and Monaco's own token colors are used and are not measured by this test.
+  assert.equal(hc.ansi, undefined);
+  assert.equal(hc.syntax, undefined);
+  assert.deepEqual(editor.rules, []);
+  assert.equal(editor.base, "vs-dark");
+});
+
+test("contrast-ratio docs: SETTINGS.md has one High Contrast paragraph, after the theme notes, that says what is measured, the two thresholds, what was changed and what is left to a person", () => {
+  const raw = read("SETTINGS.md");
+  assert.ok(!/[^\n -~]/.test(raw), "plain ASCII");
+  assert.ok(raw.endsWith("\n") && !raw.endsWith("\n\n"), "one final line feed");
+  const lines = raw.split("\n");
+  const at = lines.findIndex((l) => l.startsWith("High Contrast: "));
+  assert.ok(at > 0);
+  assert.equal(lines.filter((l) => l.startsWith("High Contrast: ")).length, 1);
+  assert.equal(lines[at - 1], "");
+  assert.ok(
+    lines[at - 2].startsWith(
+      "Terminals can follow the app or use any bundled palette",
+    ),
+    "directly after the last theme note",
+  );
+  const paragraph = lines[at];
+  for (const claim of [
+    "its colors are measured, not only chosen by eye",
+    "WCAG 2.x",
+    "4.5:1 is required for text and 3:1 for borders, controls and the focus ring",
+    "Borders that were too dim against its black background are now drawn in the theme's border color",
+    "black on the selection highlight and on the hovered window close button",
+    "no other theme changed",
+    "ANSI black in the terminal (about 1.3:1) and the terminal selection color (about 2.6:1)",
+    "terminal.minimumContrastRatio",
+    "How the theme looks on a real screen is checked by hand",
+  ])
+    assert.ok(paragraph.includes(claim), "SETTINGS.md must say: " + claim);
+  // The catalog row still names the theme and the older notes are not touched: the host label paragraph is still directly before the follow-up ideas.
+  assert.ok(
+    raw.includes(
+      "| Coordinated themes | HRig Dark, Graphite, Midnight, Daylight, High Contrast, and Follow Windows",
+    ),
+  );
+  const host = lines.findIndex((l) => l.startsWith("Host label and tint: "));
+  assert.ok(lines[host + 2].startsWith("## Follow-up ideas"));
+  // No setting was added for it.
+  assert.ok(
+    !lines.some(
+      (l) =>
+        /^\| `[a-z.]*[cC]ontrast[a-zA-Z.]*` \|/.test(l) &&
+        !l.includes("terminal.minimumContrastRatio"),
+    ),
+  );
+});
+
+test("contrast-ratio wiring: the module is pure and used only by its test; High Contrast alone takes the new branch of themeColor; the stylesheet rules sit beside the theme's own rules and nothing is added at the end", () => {
+  const moduleText = read("src/contrast-ratio.ts");
+  assert.ok(!/[^\n -~]/.test(moduleText), "plain ASCII");
+  const codeLines = moduleText
+    .split("\n")
+    .filter((l) => !/^\s*(\/\*\*|\*|\/\/)/.test(l));
+  assert.ok(
+    !codeLines.some((l) => /\bimport\b|\brequire\b/.test(l)),
+    "no import",
+  );
+  assert.ok(
+    !codeLines.some((l) =>
+      /\b(window|document|navigator|fetch|process|localStorage|sessionStorage|setTimeout|setInterval|console)\b|Date\.now|new Date|Math\.random|innerHTML/.test(
+        l,
+      ),
+    ),
+    "no page, storage, clock, timer or network",
+  );
+  const lines = moduleText.split("\n");
+  const exported = lines
+    .map((l, i) => [l, i])
+    .filter(([l]) => l.startsWith("export "));
+  assert.equal(exported.length, 10, "four types and six functions");
+  for (const [l, i] of exported)
+    assert.ok(
+      lines[i - 1].trimEnd().endsWith("*/"),
+      "a doc comment above: " + l,
+    );
+  const files = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((f) => /\.(ts|tsx)$/.test(f) && f !== "contrast-ratio.ts");
+  assert.deepEqual(
+    files.filter((f) => /from "\.\/contrast-ratio"/.test(read("src/" + f))),
+    [],
+    "no app file imports the module: it exists for the test",
+  );
+
+  // themeColor: one new guard, High Contrast only, after the community themes and before the derived colors.
+  const themes = read("src/themes.ts");
+  const guard =
+    '  }\n  if (id === "high-contrast" && highContrastBorders.has(source.toLowerCase()))\n    return p.line;\n  let color: string;\n';
+  assert.equal(themes.split(guard).length - 1, 1);
+  assert.equal(themes.split('id === "high-contrast"').length - 1, 1);
+  assert.equal(themes.split("highContrastBorders").length - 1, 2);
+  assert.ok(
+    themes.includes(
+      'export function themeColor(source: string, id: ThemeId, accent = "theme") {',
+    ),
+    "signature unchanged",
+  );
+  const list = /const highContrastBorders = new Set\(\[\n([\s\S]*?)\]\);/.exec(
+    themes,
+  );
+  assert.ok(list);
+  const entries = list[1].split("\n").filter(Boolean);
+  assert.ok(entries.length >= 50);
+  for (const entry of entries)
+    assert.ok(/^ {2}"#[0-9a-f]{6}",$/.test(entry), entry);
+  assert.equal(new Set(entries).size, entries.length, "no color twice");
+  assert.deepEqual(
+    fs
+      .readdirSync(path.join(root, "src"))
+      .filter(
+        (f) =>
+          /\.(ts|tsx)$/.test(f) && read("src/" + f).includes('"high-contrast"'),
+      )
+      .sort(),
+    ["theme-catalog.ts", "themes.ts"],
+  );
+  assert.ok(
+    themes.includes('themeColor(source, id, p["appearance.accent"]),'),
+    "applyTheme still re-colors every source through themeColor",
+  );
+
+  // styles.css: the new rules are one block, directly after the theme's own focus ring rule and before the next rule, with no important flag.
+  const css = read("src/styles.css");
+  const block =
+    ':root[data-theme="high-contrast"] :focus-visible {\n  outline: 2px solid #ffffff;\n  outline-offset: 2px;\n}\n/* High Contrast: the two borders whose color is also a background elsewhere, and the text on the two light highlights. */\n:root[data-theme="high-contrast"] kbd,\n:root[data-theme="high-contrast"] .sidebar-footer {\n  border-color: var(--line);\n}\n:root[data-theme="high-contrast"] ::selection {\n  color: #000000;\n}\n:root[data-theme="high-contrast"] .window-controls button:last-child:hover {\n  color: #000000;\n}\n\n.theme-collection h4 {';
+  assert.equal(css.split(block).length - 1, 1);
+  assert.ok(
+    css.includes(
+      ':root[data-theme="high-contrast"] {\n  --line: #9cacbf;\n  --muted: #c6d1e0;\n}\n:root[data-theme="high-contrast"] input,\n:root[data-theme="high-contrast"] select,\n:root[data-theme="high-contrast"] textarea,\n:root[data-theme="high-contrast"] .theme-picker > button {\n  border-color: var(--line);\n}\n:root[data-theme="high-contrast"] :focus-visible {',
+    ),
+    "the theme's own rules are as they were",
+  );
+  assert.ok(css.split(':root[data-theme="high-contrast"]').length - 1 >= 10);
+  assert.ok(!/!important/.test(block));
+  assert.ok(
+    css
+      .trimEnd()
+      .endsWith(
+        ".terminal-size.terminal-output-counter {\n  left: 12px;\n  transform: none;\n  animation: none;\n}",
+      ),
+    "the output counter rule is still the last rule",
+  );
+  assert.equal(css.split("{").length, css.split("}").length, "braces balance");
+});
