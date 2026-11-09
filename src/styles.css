@@ -4387,3 +4387,56 @@ button:hover {
     opacity: 0;
   }
 }
+/* Task details: rendered markdown body */
+.task-markdown {
+  margin: 10px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-c8d7e3);
+}
+.task-markdown:focus-visible {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
+}
+.task-markdown > :last-child {
+  margin-bottom: 0;
+}
+.task-markdown p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+.task-markdown h3,
+.task-markdown h4,
+.task-markdown h5 {
+  margin: 14px 0 6px;
+  font-weight: 500;
+  color: var(--color-dce4ef);
+}
+.task-markdown > :first-child {
+  margin-top: 0;
+}
+.task-markdown h3 {
+  font-size: 15px;
+}
+.task-markdown h4 {
+  font-size: 13px;
+}
+.task-markdown h5 {
+  font-size: 12px;
+}
+.task-markdown pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--color-12171e);
+  border: 1px solid var(--color-313b49);
+  border-radius: 6px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--color-8c9eb5);
+}
+/* end of Task details */

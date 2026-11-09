@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
+import TaskDetailBody from "./TaskDetailBody";
 import {
   MAX_FILTER_TEXT,
   TASK_STATES,
@@ -314,7 +315,11 @@ export default function TaskBoard({
               </label>
             </>
           ) : detail ? (
-            <pre className="json-result">{JSON.stringify(detail, null, 2)}</pre>
+            <TaskDetailBody detail={detail}>
+              <pre className="json-result">
+                {JSON.stringify(detail, null, 2)}
+              </pre>
+            </TaskDetailBody>
           ) : (
             <Loading />
           )}
