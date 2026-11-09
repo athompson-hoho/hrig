@@ -12,6 +12,11 @@ const collapse = (text) => text.replace(/\s+/g, " ").trim();
 const stripComments = (text) =>
   text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const count = (text, part) => text.split(part).length - 1;
+const tight = (text) =>
+  collapse(text)
+    .replace(/\( /g, "(")
+    .replace(/ \)/g, ")")
+    .replace(/, \}/g, " }");
 const between = (text, from, to) => {
   const start = text.indexOf(from);
   assert.ok(start >= 0, "missing anchor: " + from);
@@ -1248,4 +1253,448 @@ test("task-draft board: a prepared dialog never defaults the owner, never overwr
   } finally {
     board.unmount();
   }
+});
+
+test("task-draft wiring: the pure module touches nothing, the entry points only ask, the app only opens the dialog, the board only fills it in and creates only through its own button, and nothing else changes", () => {
+  const moduleSource = read("src/task-draft.ts");
+  const code = stripComments(moduleSource);
+  assert.ok(!/[^ -~\n]/.test(moduleSource), "printable ASCII only");
+  assert.deepEqual([...code.matchAll(/^import /gm)], [], "no imports");
+  for (const banned of [
+    /\bdocument\b/,
+    /\bReact\b/,
+    /window\.hrig/,
+    /\bDate\b/,
+    /setTimeout|setInterval/,
+    /\bfetch\b/,
+    /localStorage|sessionStorage|indexedDB/,
+    /\basync\b|\bawait\b/,
+    /Math\.random|randomUUID/,
+    /\bconsole\b/,
+    /export default/,
+    /\brequire\b/,
+    /clipboard|writeTerminal|sendTerminalCommand|getSelection|rigAction|taskCreate/,
+  ])
+    assert.ok(!banned.test(code), "the module stays quiet: " + banned);
+  assert.equal(count(code, "window.dispatchEvent("), 1);
+  assert.equal(count(code, "window.addEventListener("), 1);
+  assert.equal(count(code, "window.removeEventListener("), 1);
+  assert.deepEqual(
+    [...code.matchAll(/^export (?:const|function|type|interface) (\w+)/gm)]
+      .map((m) => m[1])
+      .sort(),
+    [
+      "MAX_BODY",
+      "MAX_READ",
+      "MAX_SUBJECT",
+      "SECRETS_WARNING",
+      "TASK_DRAFT_EVENT",
+      "TaskDraft",
+      "TaskDraftResult",
+      "draftFromSelection",
+      "onTaskDraft",
+      "ownerHint",
+      "publishTaskDraft",
+      "requestTaskDraft",
+      "reviewNote",
+      "validRecipient",
+    ],
+  );
+  const lines = moduleSource.split("\n");
+  for (const [index, line] of lines.entries())
+    if (/^export /.test(line))
+      assert.ok(lines[index - 1].startsWith("/** "), "doc comment: " + line);
+
+  // The terminal tools: one new import, one handler that only asks, one effect for the command center, one menu item after Save selection as snippet.
+  const toolsSource = read("src/TerminalTools.tsx");
+  const tools = tight(stripComments(toolsSource));
+  assert.equal(
+    count(tools, 'import { requestTaskDraft } from "./task-draft";'),
+    1,
+  );
+  assert.equal(count(tools, "requestTaskDraft("), 1);
+  assert.equal(
+    count(
+      tools,
+      "const createTaskFromSelection = () => setNotice(requestTaskDraft(terminalId, selectedText()));",
+    ),
+    1,
+    "the same one read of the selection as copy and snippets",
+  );
+  assert.equal(
+    count(
+      tools,
+      "useEffect(() => { if (taskRequest) createTaskFromSelection(); }, [taskRequest]);",
+    ),
+    1,
+  );
+  assert.equal(count(tools, "taskRequest = 0,"), 1);
+  assert.equal(count(tools, "taskRequest?: number;"), 1);
+  assert.equal(
+    count(
+      tools,
+      'role="menuitem" disabled={!menu.selection} onClick={choose(createTaskFromSelection)}',
+    ),
+    1,
+  );
+  assert.equal(count(tools, "Create task from selection"), 1, "the menu label");
+  assert.equal(
+    count(tools, "<span>Create task from selection" + char(0x2026) + "</span>"),
+    1,
+  );
+  const saveAt = tools.indexOf("choose(saveSelectionAsSnippet)");
+  const taskAt = tools.indexOf("choose(createTaskFromSelection)");
+  assert.ok(
+    saveAt > 0 && saveAt < taskAt && taskAt < tools.indexOf("choose(paste)"),
+  );
+  assert.equal(count(tools, "window.innerHeight - 223"), 1);
+  const asks = between(
+    tools,
+    "const createTaskFromSelection",
+    "const [hasImage,setHasImage]",
+  );
+  assert.ok(
+    !/paste|writeTerminal|writeText|sendTerminalCommand|onChange|terminalSnippets|clipboard|getSelection|navigator|rigAction|hrig/.test(
+      asks,
+    ),
+    "the handler and the effect only ask",
+  );
+
+  // The panel only counts the request; it never reads the selection, so the terminal tools stay the one reader of it.
+  const panel = tight(stripComments(read("src/TerminalPanel.tsx")));
+  assert.equal(
+    count(panel, "const [taskRequest, setTaskRequest] = useState(0);"),
+    1,
+  );
+  assert.equal(
+    count(
+      panel,
+      'if (command === "task-from-selection") setTaskRequest(n => n + 1);',
+    ),
+    1,
+  );
+  assert.equal(count(panel, "taskRequest={taskRequest}"), 1);
+  assert.ok(!/task-draft|getSelection|requestTaskDraft/.test(panel));
+  assert.equal(
+    count(read("src/terminal-commands.ts"), '"task-from-selection"'),
+    1,
+  );
+
+  // The app: one listener through the module, a ref so the handler sees the current terminals, a board addressed by tab id, no way to create.
+  const app = tight(stripComments(read("src/App.tsx")));
+  assert.equal(
+    count(app, 'import { onTaskDraft, type TaskDraft } from "./task-draft";'),
+    1,
+  );
+  assert.equal(count(app, "onTaskDraft("), 1);
+  assert.equal(
+    count(
+      app,
+      "useEffect(() => onTaskDraft((id, draft) => openTaskDraft.current(id, draft)), []);",
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      app,
+      "const [taskDraft, setTaskDraft] = useState<{tabId: string; draft: TaskDraft} | null>(null);",
+    ),
+    1,
+  );
+  assert.ok(
+    app.indexOf("const [taskDraft, setTaskDraft]") <
+      app.indexOf("const factory = (node: TabNode)"),
+    "declared before the factory that reads it",
+  );
+  assert.equal(
+    count(app, "setTaskDraft("),
+    2,
+    "set once from the event, cleared once when the board took it",
+  );
+  assert.equal(count(app, "onDraftTaken={() => setTaskDraft(null)}"), 1);
+  assert.equal(
+    count(
+      app,
+      "draft={taskDraft && taskDraft.tabId === node.getId() ? taskDraft.draft : null}",
+    ),
+    1,
+  );
+  assert.equal(count(app, "<TaskBoard"), 1);
+  assert.ok(
+    app.includes(
+      'notify("Create task from selection is not available in this terminal");',
+    ),
+  );
+  assert.equal(
+    count(
+      app,
+      'action: () => {model.doAction(Actions.selectTab(t.id!));requestAnimationFrame(() => sendTerminalCommand(target.id, "task-from-selection"));}',
+    ),
+    1,
+  );
+  assert.equal(count(app, '"Terminal: Create task from selection"'), 1);
+  const opener = app.slice(
+    app.indexOf("openTaskDraft.current = "),
+    app.indexOf("useEffect(() => onTaskDraft("),
+  );
+  assert.ok(
+    opener.includes(
+      "terminalTabs.find(t => (t.config as PanelConfig).terminalId === id)",
+    ),
+    "the board opens for the terminal that asked",
+  );
+  assert.ok(
+    opener.includes(
+      'suggested: cfg.seat ? cfg.seat.name + "@" + cfg.seat.rigName : ""',
+    ),
+    "the seat of that terminal is only a suggestion",
+  );
+  assert.ok(
+    opener.includes(
+      'const board = allTabs().find(t => t.component === "queue" && (t.config as PanelConfig).connection.id === cfg.connection.id);',
+    ),
+    "a board already open for that connection is reused",
+  );
+  assert.ok(
+    opener.includes(
+      'const tabId = board?.id || uid(); if (board) model.doAction(Actions.selectTab(tabId)); else addPanel("queue", "Task queue", {connection: cfg.connection, mode: currentRig?.name}, tabId);',
+    ),
+    "else a new one is opened under a known id",
+  );
+  assert.ok(
+    !/rigAction|taskCreate|sendMessage|writeTerminal|sendTerminalCommand|destination|setState/.test(
+      opener,
+    ),
+    "the listener never creates, sends or chooses an owner",
+  );
+  assert.equal(
+    count(app, "taskCreate"),
+    0,
+    "the app has no way to create a task",
+  );
+
+  // The board: the draft only fills state, the owner is set to nothing, and the one call of mutate is still the dialog's own button.
+  const boardSource = read("src/TaskBoard.tsx");
+  const board = tight(stripComments(boardSource));
+  assert.equal(
+    count(
+      board,
+      'import { ownerHint, reviewNote, type TaskDraft } from "./task-draft";',
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      board,
+      "const [prepared, setPrepared] = useState<TaskDraft | null>(null);",
+    ),
+    1,
+  );
+  assert.equal(count(board, "draft?: TaskDraft | null;"), 1);
+  assert.equal(count(board, "onDraftTaken?: () => void;"), 1);
+  const effect = between(board, "if (!draft) return;", "}, [draft]);");
+  assert.ok(
+    !/rigAction|sendMessage|mutate|hrig|window|setBusy|setRefresh/.test(effect),
+    "the effect only fills the dialog",
+  );
+  assert.equal(
+    count(effect, 'setDestination("")'),
+    1,
+    "the owner is set to nothing",
+  );
+  assert.ok(
+    !/setDestination\((?!"")/.test(effect),
+    "and never to anything else",
+  );
+  assert.equal(count(effect, "setTitle(draft.subject)"), 1);
+  assert.equal(count(effect, "setBody(draft.body)"), 1);
+  assert.equal(count(effect, "onDraftTaken?.()"), 1);
+  assert.ok(
+    board.indexOf("}, [draft]);") < board.indexOf("const addresses ="),
+    "before the handlers the older tests pin",
+  );
+  assert.equal(count(board, "mutate("), 1, "still one caller of mutate");
+  assert.equal(
+    count(
+      board,
+      'onClick={() => mutate(create ? "taskCreate" : "taskHandoff")}',
+    ),
+    1,
+  );
+  assert.equal(count(board, "{reviewNote(prepared)}"), 1);
+  assert.equal(count(board, "ownerHint(prepared, seats)"), 2);
+  assert.equal(count(board, "dangerouslySetInnerHTML"), 0);
+  assert.equal(count(boardSource, "style="), 0);
+  assert.equal(count(boardSource, "className={"), 0);
+  const bridge = [
+    ...stripComments(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g),
+  ]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(bridge, ["queue", "rigAction", "rigAction", "sendMessage"]);
+
+  // Nothing else uses the module, and the main process, the settings, the shortcuts and the stylesheet do not know the feature.
+  const users = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((f) => /\.tsx?$/.test(f) && f !== "task-draft.ts")
+    .filter((f) => read("src/" + f).includes("task-draft"))
+    .sort();
+  assert.deepEqual(users, ["App.tsx", "TaskBoard.tsx", "TerminalTools.tsx"]);
+  for (const file of [
+    "src/shortcuts.ts",
+    "src/settings.ts",
+    "src/styles.css",
+    "src/types.ts",
+    "src/SettingsPage.tsx",
+  ])
+    assert.ok(!/task-draft|taskDraft|TaskDraft/.test(read(file)), file);
+  for (const file of fs.readdirSync(path.join(root, "electron")))
+    if (/\.(cjs|mjs|js)$/.test(file))
+      assert.ok(
+        !/task-draft|taskDraft|TASK_DRAFT|terminal-task-draft|task-from-selection/.test(
+          read("electron/" + file),
+        ),
+        file,
+      );
+  // The create path is the one the dialog always had.
+  const features = tight(read("electron/features.cjs"));
+  assert.equal(
+    count(
+      features,
+      'case "taskCreate": args = [ "queue", "create", "--source", "hrig-desktop", "--destination", text(a.destination), "--summary", text(a.title), "--body", text(a.body), "--json", ]; break;',
+    ),
+    1,
+  );
+});
+
+test("task-draft docs: TASKS.md and the design note say what is prepared and what is created, why the owner is never chosen, how the selection is treated and what was rejected", () => {
+  const { MAX_SUBJECT, MAX_BODY, MAX_READ, SECRETS_WARNING } = lib;
+  const doc = read("TASKS.md");
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, "\n### Creating a task from a selection\n"), 1);
+  assert.equal(
+    count(doc, "\n## "),
+    2,
+    "the two level 2 headings other tests count are untouched",
+  );
+  const at = doc.indexOf("\n### Creating a task from a selection\n");
+  assert.ok(at > doc.indexOf("separate, explicit actions."));
+  assert.ok(at < doc.indexOf("\n### Keyboard navigation\n"));
+  assert.ok(at < doc.indexOf("\n### Card details\n"));
+  const next = doc.indexOf("\n### ", at + 1);
+  const section = doc.slice(at + 1, next);
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 3);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line per paragraph");
+  const say = (paragraph, parts) => {
+    const flat = collapse(paragraph);
+    for (const part of parts)
+      assert.ok(flat.includes(part), "TASKS.md says: " + part);
+  };
+  say(paragraphs[0], [
+    "right-click and choose Create task from selection",
+    "choose Terminal: Create task from selection for that terminal",
+    "greyed out when nothing is selected",
+    "the one already open for that connection, else a new one",
+    "the Assign work dialog filled in",
+    "the subject is the first line of the selection (cut at " +
+      MAX_SUBJECT +
+      " characters)",
+    "the task brief is the selection (cut at " +
+      MAX_BODY.toLocaleString("en-US") +
+      " characters",
+    "This only prepares a task: nothing is created, sent or typed until you press Create assigned task",
+    "the dialog's own button and the same path as Assign work",
+    "closing the dialog throws the prepared text away",
+    "A task you are already writing in the dialog is never overwritten",
+  ]);
+  say(paragraphs[1], [
+    "The owner is never chosen for you",
+    "it stays on Choose a seat",
+    "Create assigned task stays disabled until you pick one",
+    "names that seat as a suggestion, and it is not selected",
+    "The Assign work button itself still starts with the first seat as owner, as before",
+    "only a prepared dialog starts empty",
+  ]);
+  say(paragraphs[2], [
+    "The selection is untrusted text",
+    "Control, zero-width and direction-changing characters and terminal escape sequences are removed",
+    "line breaks are kept",
+    "plain text in the subject and brief boxes, never as HTML or Markdown and never run",
+    "At most " +
+      MAX_READ.toLocaleString("en-US") +
+      " characters of a selection are read and " +
+      MAX_BODY.toLocaleString("en-US") +
+      " kept",
+    "looks like a private key block is refused with a notice",
+    "token, an API key or a password is prepared with a second warning",
+    "every prepared dialog says: " + SECRETS_WARNING,
+    "OpenRig enforces ownership and policy on the created task as for any other",
+    "docs/task-from-selection.md has the design note",
+  ]);
+  // The names the docs use are the names in the code.
+  assert.ok(read("src/TaskBoard.tsx").includes('"Create assigned task"'));
+  assert.ok(read("src/TaskBoard.tsx").includes("Choose a seat"));
+  assert.ok(read("src/TaskBoard.tsx").includes("Assign work"));
+  assert.ok(
+    read("src/App.tsx").includes("Terminal: Create task from selection"),
+  );
+  assert.ok(
+    read("src/TerminalTools.tsx").includes("Create task from selection"),
+  );
+
+  const note = read("docs/task-from-selection.md");
+  assert.ok(!/[^\n -~]/.test(note), "plain ASCII");
+  assert.ok(note.endsWith(".\n") && !note.endsWith("\n\n"));
+  assert.ok(!note.includes("\r"));
+  assert.ok(
+    note.startsWith(
+      "# Creating a task from a terminal selection\n\nStatus: built. It only prepares a task. Creating it stays with the existing Assign work dialog.\n",
+    ),
+  );
+  const headings = note.split("\n").filter((l) => l.startsWith("## "));
+  assert.deepEqual(headings, [
+    "## What it does",
+    "## Prepared versus created",
+    "## Why the owner is never chosen for you",
+    "## Secrets and untrusted text",
+    "## Ownership and policy",
+    "## Rejected alternatives",
+  ]);
+  const flat = collapse(note);
+  for (const part of [
+    "Create task from selection, or open the command center and choose Terminal: Create task from selection",
+    "cut at " + MAX_SUBJECT + " characters",
+    "cut at " + MAX_BODY.toLocaleString("en-US") + " characters",
+    "the owner is left empty",
+    "nothing is created until you press Create assigned task",
+    "Closing the dialog throws the prepared text away",
+    "`taskCreate`: `rig queue create` with source `hrig-desktop`",
+    "This feature adds no IPC channel, no preload member and no main process code",
+    "A task you are already writing in the dialog is never overwritten",
+    "Nothing is typed into the terminal, pasted or sent to a seat",
+    "A task goes to the seat a person decides on",
+    "Create assigned task stays disabled until you pick one",
+    "it is a line of text, not a selection",
+    "The Assign work button itself still starts with the first seat as owner, as it always did",
+    "At most " +
+      MAX_READ.toLocaleString("en-US") +
+      " characters of a selection are read and " +
+      MAX_BODY.toLocaleString("en-US") +
+      " are kept",
+    "never as HTML or Markdown, and never run",
+    "refused with a notice that does not repeat it",
+    SECRETS_WARNING,
+    "These checks are a help, not a guarantee",
+    "stored by OpenRig and shown to its owner",
+    "starts with two dashes",
+    "OpenRig enforces ownership and policy on the created task as for any other",
+    "HRig does not impersonate a managed seat",
+    "a one-click send",
+    "a command line invites a paste into a shell",
+    "editor selections, sending one selection to several seats",
+  ])
+    assert.ok(flat.includes(part), "design note says: " + part);
 });
