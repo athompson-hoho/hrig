@@ -1616,3 +1616,295 @@ test("undo-toast wiring: the module is pure and ASCII with the pinned exports, A
     "no new rule for the button: it reuses .toast and .small-button",
   );
 });
+
+// ---------------------------------------------------------------------------
+// The other two entry points and the census of who may offer Undo.
+
+const seatTab = (id, name) => ({
+  type: "tab",
+  id: "seat:local:" + id,
+  name,
+  component: "terminal",
+  config: {
+    connection: { id: "local" },
+    root: "/p",
+    seat: { id, name, session: "s-" + id },
+    terminalId: "seat:local:" + id,
+  },
+});
+const SEATS = [
+  { id: "s1", name: "Planner", session: "s-s1" },
+  { id: "s2", name: "Idle", session: null },
+  { id: "s3", name: "Builder", session: "s-s3" },
+];
+
+test("undo-toast callers: Open all rig sessions and a role template offer Undo through the same path, nothing is offered when the panels did not move or an edit prompt is open, and no other layout change offers it", () => {
+  // Open all rig sessions: the real openAll over the real model.
+  const sessions = world({ tabs: ["a", "b"], seats: SEATS });
+  const before = sessions.json();
+  sessions.act((c) => c.openAll());
+  assert.equal(sessions.s.toast, "Rig sessions arranged", "the old text");
+  assert.deepEqual(sessions.s.events, [["Rig sessions arranged", "success"]]);
+  const ids = sessions.api
+    .allTabs()
+    .map((t) => t.id)
+    .sort();
+  assert.deepEqual(
+    ids,
+    ["a", "b", "seat:local:s1", "seat:local:s3"],
+    "the idle seat is not opened",
+  );
+  assert.equal(sessions.history.past.length, 1);
+  const button = sessions.undoButton();
+  assert.ok(button, "Undo is offered");
+  assert.deepEqual(
+    sessions.pending().map((t) => t.ms),
+    [lib.UNDO_MS],
+  );
+  sessions.act(() => button.props.onClick());
+  assert.equal(sessions.json(), before, "back to exactly the earlier layout");
+  assert.equal(sessions.s.toast, "");
+  assert.equal(sessions.history.past.length, 0);
+  assert.equal(sessions.history.future.length, 1);
+  sessions.act(() => button.props.onClick());
+  assert.equal(sessions.json(), before, "a second click does nothing");
+  assert.equal(sessions.history.future.length, 1);
+
+  // Every session is already open in the same place: the notice stays plain.
+  const open = world({
+    tabJsons: [seatTab("s1", "Planner")],
+    seats: [SEATS[0]],
+  });
+  const openBefore = open.shape();
+  open.act((c) => c.openAll());
+  assert.equal(open.shape(), openBefore);
+  assert.equal(open.s.toast, "Rig sessions arranged");
+  assert.equal(open.undoButton(), undefined, "nothing moved, nothing to undo");
+  assert.deepEqual(
+    open.pending().map((t) => t.ms),
+    [4500],
+  );
+
+  // A role template: the real handler over the real instantiateRoles.
+  const tabs = [
+    {
+      type: "tab",
+      id: "a",
+      name: "a",
+      component: "editor",
+      config: { path: "x.txt" },
+    },
+    seatTab("s1", "Planner"),
+    seatTab("s3", "Builder"),
+  ];
+  const template = {
+    id: "t1",
+    name: "Review pair",
+    model: real.roleSnapshot(arrangement(tabs, "Focus").toJson()),
+  };
+  const role = world({ tabJsons: tabs, start: "Team", seats: SEATS });
+  const roleBefore = role.json();
+  role.act((c) => c.applyTemplate(template));
+  assert.equal(role.s.toast, "Role template applied: Review pair");
+  assert.deepEqual(role.s.events, [
+    ["Role template applied: Review pair", "success"],
+  ]);
+  assert.notEqual(role.json(), roleBefore, "the template replaced the layout");
+  assert.equal(role.history.past.length, 1);
+  const roleButton = role.undoButton();
+  assert.ok(roleButton, "Undo is offered after a role template");
+  role.act(() => roleButton.props.onClick());
+  assert.equal(
+    role.json(),
+    roleBefore,
+    "the earlier layout is back, panel for panel",
+  );
+  assert.equal(role.history.future.length, 1);
+  role.act(() => roleButton.props.onClick());
+  assert.equal(role.json(), roleBefore);
+
+  // The name in the notice is cleaned like any other.
+  const named = world({ tabJsons: tabs, start: "Team", seats: SEATS });
+  named.act((c) =>
+    c.applyTemplate({
+      ...template,
+      name: "  x" + char(0x202e) + "y\n" + "z".repeat(60),
+    }),
+  );
+  assert.equal(
+    named.s.toast,
+    "Role template applied: xy " + "z".repeat(34) + "...",
+  );
+
+  // With no rig chosen nothing is applied: the old notice, no history, no button.
+  const none = world({
+    tabJsons: tabs,
+    start: "Team",
+    seats: SEATS,
+    activeRig: "",
+  });
+  const noneBefore = none.json();
+  none.act((c) => c.applyTemplate(template));
+  assert.equal(
+    none.s.toast,
+    "Select one rig in the sidebar before applying a role template.",
+  );
+  assert.equal(none.undoButton(), undefined);
+  assert.equal(none.history.past.length, 0);
+  assert.equal(none.json(), noneBefore);
+
+  // Unsaved edits: the replacement waits behind the prompt, and the offer comes only when it runs.
+  const held = world({ tabJsons: tabs, start: "Team", seats: SEATS });
+  held.s.hold = true;
+  const heldBefore = held.json();
+  held.act((c) => c.applyTemplate(template));
+  assert.equal(held.s.asked.length, 1, "the prompt is asked");
+  assert.equal(held.s.toast, "", "no notice yet");
+  assert.equal(held.history.past.length, 0);
+  assert.equal(
+    held.json(),
+    heldBefore,
+    "nothing changed while the prompt is open",
+  );
+  held.act(() => held.s.asked[0]());
+  assert.equal(held.s.toast, "Role template applied: Review pair");
+  assert.ok(held.undoButton());
+  held.act(() => held.undoButton().props.onClick());
+  assert.equal(held.json(), heldBefore);
+
+  // A template that puts the same panels in the same places changes nothing to undo.
+  const lone = world({ tabJsons: [seatTab("s1", "Planner")], seats: SEATS });
+  const loneTemplate = {
+    id: "t2",
+    name: "Solo",
+    model: real.roleSnapshot(lone.model.toJson()),
+  };
+  const loneBefore = lone.shape();
+  lone.act((c) => c.applyTemplate(loneTemplate));
+  assert.equal(lone.shape(), loneBefore);
+  assert.equal(lone.s.toast, "Role template applied: Solo");
+  assert.equal(lone.undoButton(), undefined);
+
+  // The census: three call sites, one per kind, each in its own handler; every other
+  // remember() caller is an incremental edit that never announces anything.
+  const app = tight(stripComments(read("src/App.tsx")));
+  assert.equal(count(app, "announceLayout("), 3);
+  assert.equal(count(app, 'announceLayout("preset", preset, next);'), 1);
+  assert.equal(count(app, 'announceLayout("sessions", "", next);'), 1);
+  assert.equal(count(app, 'announceLayout("role", template.name, next);'), 1);
+  assert.equal(
+    count(stripComments(ARRANGE_TEXT), "announceLayout("),
+    2,
+    "applyPreset and openAll",
+  );
+  assert.equal(
+    count(stripComments(ROLE_TEXT), "announceLayout("),
+    1,
+    "the role handler",
+  );
+  assert.equal(
+    count(app, "remember();"),
+    9,
+    "the callers of remember are the ones there were",
+  );
+  assert.ok(
+    !app.includes('notify("Rig sessions arranged")'),
+    "the old notice moved into the module",
+  );
+  assert.ok(!app.includes("arrangement applied"), "and so did the preset text");
+  for (const [first, last] of [
+    ["const movePanel = (", "const openSeatBeside = ("],
+    [
+      "const onAction = (action: Action) => {",
+      "const markDirty = useCallback(",
+    ],
+    ["const toggleMaximize = (", "const reopenClosedPanel = () => {"],
+  ]) {
+    const from = app.indexOf(tight(first));
+    assert.ok(from >= 0, first);
+    const to = app.indexOf(tight(last), from + 5);
+    assert.ok(to > from, last);
+    assert.ok(
+      !app.slice(from, to).includes("announceLayout"),
+      "an incremental edit does not announce: " + first,
+    );
+    assert.ok(app.slice(from, to).includes("remember();"), first);
+  }
+  const arranger = tight(
+    stripComments(cut('case "arranger": {', 'case "doctor":')),
+  );
+  for (const edit of ["onRenameGroup", "onMove=", "onEqual="]) {
+    const from = arranger.indexOf(edit);
+    assert.ok(from >= 0, edit);
+    const to = arranger.indexOf("onUndo=", from);
+    assert.ok(!arranger.slice(from, to).includes("announceLayout"), edit);
+  }
+  // Saved layouts are restored without history, so they never offer Undo.
+  const restore = tight(
+    stripComments(
+      cut("const next = restoreModel(saved.model);", "notify(`Restored"),
+    ),
+  );
+  assert.ok(
+    !restore.includes("remember") && !restore.includes("announceLayout"),
+  );
+});
+
+test("undo-toast docs: NAVIGATION.md has one paragraph that says where the Undo button appears, what it undoes, how long it stays, when it goes away, what never shows it and that nothing is sent", () => {
+  const raw = read("NAVIGATION.md");
+  assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark is kept");
+  assert.ok(raw.endsWith(".\n") && !raw.endsWith("\n\n"));
+  assert.ok(!raw.includes("\r"));
+  const lines = raw.split("\n");
+  const mine = lines.filter((l) => l.startsWith("Layout undo notice:"));
+  assert.equal(mine.length, 1);
+  const paragraph = mine[0];
+  assert.ok(isAscii(paragraph), "plain ASCII");
+  const at = lines.indexOf(paragraph);
+  assert.ok(
+    lines[at - 1] === "" && lines[at + 1] === "",
+    "a paragraph of its own",
+  );
+  const index = (start) => lines.findIndex((l) => l.startsWith(start));
+  assert.ok(
+    at > index("Double-click the empty part of a panel group's tab strip"),
+  );
+  assert.ok(at < index("The command center entry Toggle focus mode"));
+  assert.equal(count(raw, "Layout undo notice:"), 1);
+  for (const part of [
+    "after Arrange: Team, Focus or Review",
+    "the command center, the Layout presets menu or the Arrange workspace panel",
+    "when the review workspace arranges Review as it opens a seat or a diff",
+    "Open all rig sessions",
+    "applying a saved role template in Arrange workspace",
+    "has an Undo button",
+    "One click puts the previous layout back",
+    "one step through the same history as the command center entry Undo arrangement and Redo arrangement",
+    "closes the notice",
+    "Redo arrangement brings the new layout back",
+    "The notice stays for " +
+      lib.UNDO_MS / 1000 +
+      " seconds instead of " +
+      lib.NOTICE_MS / 1000,
+    "the time stops while the pointer rests on it",
+    "only offered when the panels really moved",
+    "leaving the plain notice",
+    "another arrangement, a panel moved, split, resized or renamed, a panel opened or closed, or an Undo or Redo from elsewhere",
+    "only undo the change it was shown for, and only once",
+    "ignoring it changes nothing",
+    "Single moves, splits, group renames, equal sizes and maximize do not show it",
+    "restoring a saved layout from the Layout presets menu has no Undo",
+    "there is no setting or shortcut for the button",
+    "the command center entry Undo arrangement is the keyboard route and works at any time",
+    "only changes where panels are shown",
+    "nothing is typed or sent to a terminal or seat",
+  ])
+    assert.ok(paragraph.includes(part), "paragraph: " + part);
+  assert.ok(paragraph.endsWith("seat."));
+  // The neighbours the other documentation tests pin are where they were.
+  assert.ok(
+    index("Ctrl+Tab switches panels") ===
+      index("Ctrl+Shift+P (Cmd+Shift+P) finds existing panels") + 2,
+  );
+  assert.equal(count(paragraph, "Undo arrangement"), 3);
+});

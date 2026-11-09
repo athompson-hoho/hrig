@@ -1369,7 +1369,7 @@ export default function App() {
     const next = arrangement(existing, "Team");
     setModel(next);
     modelChanged(next);
-    notify("Rig sessions arranged");
+    announceLayout("sessions", "", next);
   };
   // Keeps only the kind and identifiers needed to reopen; call before the delete.
   const rememberClosed = (id: string) => {
@@ -1644,6 +1644,7 @@ export default function App() {
                 );
                 setModel(next);
                 modelChanged(next);
+                announceLayout("role", template.name, next);
               });
             }}
             onDeleteTemplate={(id) =>
