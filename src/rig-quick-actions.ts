@@ -14,7 +14,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = Object.freeze([
 export const quickAction = (id: unknown): QuickAction | null =>
   QUICK_ACTIONS.find((a) => a.id === id) ?? null;
 
-const UNSAFE = /[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤⁦-⁩﻿]/;
+const UNSAFE = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/;
 
 /** A rig id is prefilled only if it is plain text that cleaning would not change. */
 export function safeRigId(id: unknown): string | undefined {

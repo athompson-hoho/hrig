@@ -1,4 +1,16 @@
-import { defaults, type Preferences } from "./settings";
+import type { Preferences } from "./settings";
+
+// Fallbacks mirror the defaults in settings.ts (a test keeps them in sync). They are
+// literals so this module does not load settings.ts, which reads the platform.
+const FALLBACK = {
+  insertSpaces: true,
+  wordWrap: "on",
+  minimap: false,
+  lineNumbers: "on",
+  fontLigatures: false,
+  renderWhitespace: "selection",
+  bracketPairs: true,
+} as const;
 
 const WRAP = ["on", "off"] as const;
 const NUMBERS = ["on", "relative", "off"] as const;
@@ -22,14 +34,14 @@ export function monacoEditorOptions(
     fontSize: preferences["editor.fontSize"],
     fontFamily: preferences["editor.fontFamily"],
     tabSize: preferences["editor.tabSize"],
-    insertSpaces: bool(preferences["editor.insertSpaces"], defaults["editor.insertSpaces"]),
+    insertSpaces: bool(preferences["editor.insertSpaces"], FALLBACK.insertSpaces),
     detectIndentation: false,
-    wordWrap: oneOf(preferences["editor.wordWrap"], WRAP, defaults["editor.wordWrap"] as "on" | "off"),
-    minimap: { enabled: bool(preferences["editor.minimap"], defaults["editor.minimap"]) },
-    lineNumbers: oneOf(preferences["editor.lineNumbers"], NUMBERS, defaults["editor.lineNumbers"] as "on"),
-    fontLigatures: bool(preferences["editor.fontLigatures"], defaults["editor.fontLigatures"]),
-    renderWhitespace: oneOf(preferences["editor.renderWhitespace"], WHITESPACE, defaults["editor.renderWhitespace"] as "selection"),
-    bracketPairColorization: { enabled: bool(preferences["editor.bracketPairs"], defaults["editor.bracketPairs"]) },
+    wordWrap: oneOf(preferences["editor.wordWrap"], WRAP, FALLBACK.wordWrap),
+    minimap: { enabled: bool(preferences["editor.minimap"], FALLBACK.minimap) },
+    lineNumbers: oneOf(preferences["editor.lineNumbers"], NUMBERS, FALLBACK.lineNumbers),
+    fontLigatures: bool(preferences["editor.fontLigatures"], FALLBACK.fontLigatures),
+    renderWhitespace: oneOf(preferences["editor.renderWhitespace"], WHITESPACE, FALLBACK.renderWhitespace),
+    bracketPairColorization: { enabled: bool(preferences["editor.bracketPairs"], FALLBACK.bracketPairs) },
     automaticLayout: true,
     scrollBeyondLastLine: false,
     smoothScrolling: !reducedMotion,

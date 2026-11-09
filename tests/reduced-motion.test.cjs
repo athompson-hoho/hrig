@@ -18,7 +18,8 @@ test('setting wins; otherwise the OS preference decides; failures mean motion al
 });
 test('script-driven motion goes through the helper; audit doc lists it', () => {
   const ed = fs.readFileSync('src/EditorPanel.tsx', 'utf8'), te = fs.readFileSync('src/TerminalPanel.tsx', 'utf8');
-  assert.match(ed, /smoothScrolling: !motionReduced\(preferences\["appearance\.reduceMotion"\]\)/);
+  assert.match(ed, /monacoEditorOptions\(\s*preferences,\s*motionReduced\(preferences\["appearance\.reduceMotion"\]\),?\s*\)/);
+  assert.match(fs.readFileSync('src/editor-options.ts', 'utf8'), /smoothScrolling: !reducedMotion/);
   assert.match(te, /cursorBlink: !motionReduced\(false\)/);
   assert.match(te, /!motionReduced\(preferences\["appearance\.reduceMotion"\]\)/);
   assert.doesNotMatch(ed + te, /smoothScrolling: !preferences|cursorBlink: true/);

@@ -45,3 +45,12 @@ test('EditorPanel builds options only through the shared function, for editor an
   assert.equal((src.match(/\.\.\.editorOptions/g) || []).length, 2, 'Editor and DiffEditor both spread it');
   assert.doesNotMatch(src, /preferences\["editor\.wordWrap"\] as/);
 });
+
+test('fallbacks equal the real defaults, and the module does not load settings.ts at runtime', () => {
+  const src = fs.readFileSync('src/editor-options.ts', 'utf8');
+  assert.match(src, /import type \{ Preferences \} from "\.\/settings"/);
+  assert.doesNotMatch(src, /import \{[^}]*\} from "\.\/settings"/);
+  const d = defaults;
+  assert.deepEqual(J([d['editor.insertSpaces'], d['editor.wordWrap'], d['editor.minimap'], d['editor.lineNumbers'], d['editor.fontLigatures'], d['editor.renderWhitespace'], d['editor.bracketPairs']]),
+    [true, 'on', false, 'on', false, 'selection', true]);
+});
