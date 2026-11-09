@@ -168,6 +168,7 @@ export interface HrigAPI {
       content?: string;
       revision?: string;
       query?: string;
+      options?: { regex: boolean; wholeWord: boolean };
     },
   ): Promise<any>;
   rigAction(

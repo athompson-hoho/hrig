@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const teamAssessment = require("./team-assessment.cjs");
+const contentSearch = require("./content-search.cjs");
 
 async function assessTeam(connection, request) {
   core.validateConnection(connection);
@@ -225,27 +226,39 @@ elif op=='rename':
  if os.path.exists(dest): raise Exception('Destination already exists')
  os.rename(target,dest);print(json.dumps({'renamed':True}))
 elif op=='searchText':
- out=[];scanned=0;query=a.get('query','').lower()
+ import time
+ out=[];scanned=0;reason='';query=a.get('query','');o=a.get('options')
  if not query: raise Exception('Enter search text')
+ low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs')
+ if o is not None and (o.get('regex') or o.get('wholeWord')):
+  src=query if o.get('regex') else re.escape(query)
+  if o.get('wholeWord'): src=r'(?<!\\w)(?:'+src+r')(?!\\w)'
+  try: pattern=re.compile(src,re.IGNORECASE)
+  except re.error as e: raise Exception('Invalid regular expression: '+str(e)[:160])
+ def spent(): return budget is not None and (time.monotonic()-started)*1000>=budget
+ def hit(text): return bool(pattern.search(text[:1000])) if pattern else low in text.lower()
  for folder,dirs,files in os.walk(root,followlinks=False):
   dirs[:]=[d for d in dirs if d not in ['.git','node_modules','dist','.venv','.next','release'] and not os.path.islink(os.path.join(folder,d))]
   for name in files:
    scanned+=1;p=os.path.join(folder,name)
+   if spent(): reason='time';break
    if os.path.islink(p): continue
    try:
     content=read(p)['content']
     for line,text in enumerate(content.splitlines(),1):
-     if query in text.lower(): out.append({'path':os.path.relpath(p,root).replace(os.sep,'/'),'line':line,'text':text[:250]})
+     if spent(): reason='time';break
+     if hit(text): out.append({'path':os.path.relpath(p,root).replace(os.sep,'/'),'line':line,'text':text[:250]})
      if len(out)>=200: break
    except (OSError,UnicodeError,Exception): pass
-   if len(out)>=200 or scanned>=20000: break
-  if len(out)>=200 or scanned>=20000: break
- print(json.dumps(out))
+   if reason or len(out)>=200 or scanned>=20000: break
+  if reason or len(out)>=200 or scanned>=20000: break
+ reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=20000 else '')
+ print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned}))
 `;
 function revision(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
-async function edit(connection, a) {
+async function edit(connection, a, hooks = {}) {
   if (!a || !["read", "save", "create", "rename", "searchText"].includes(a.op))
     throw new Error("Unsupported editor operation.");
   if (typeof a.root !== "string" || typeof (a.path || "") !== "string")
@@ -261,7 +274,16 @@ async function edit(connection, a) {
     (typeof a.query !== "string" || !a.query || a.query.length > 300)
   )
     throw new Error("Enter search text under 300 characters.");
-  if (connection.kind !== "local") return python(connection, EDIT_PY, a);
+  const search =
+    a.op === "searchText"
+      ? contentSearch.prepare(a, connection.kind !== "local", hooks)
+      : null;
+  if (connection.kind !== "local")
+    return python(
+      connection,
+      EDIT_PY,
+      search && !search.legacy ? { ...a, options: search.options } : a,
+    );
   const target = await core.localPath(
     a.root,
     a.path,
@@ -302,12 +324,21 @@ async function edit(connection, a) {
   }
   if (a.op === "searchText") {
     const results = [];
+    const budget = contentSearch.createBudget(
+      hooks.now || Date.now,
+      search.budgetMs,
+    );
     let count = 0;
+    let timedOut = false;
     const scan = async (folder, depth = 0) => {
       if (depth > 25) return;
       for (const e of await fs
         .readdir(folder, { withFileTypes: true })
         .catch(() => [])) {
+        if (budget.expired()) {
+          timedOut = true;
+          return;
+        }
         if (
           e.isSymbolicLink() ||
           [
@@ -332,7 +363,11 @@ async function edit(connection, a) {
                   .toString("utf8")
                   .split(/\r?\n/)
                   .entries()) {
-                  if (line.toLowerCase().includes(a.query.toLowerCase()))
+                  if (budget.expired()) {
+                    timedOut = true;
+                    break;
+                  }
+                  if (search.test(line))
                     results.push({
                       path: path.relative(target, full).replaceAll("\\", "/"),
                       line: i + 1,
@@ -343,11 +378,19 @@ async function edit(connection, a) {
             }
           } catch {}
         }
-        if (count >= 20000 || results.length >= 200) return;
+        if (timedOut || count >= 20000 || results.length >= 200) return;
       }
     };
     await scan(target);
-    return results;
+    if (search.legacy) return results;
+    const reason = timedOut
+      ? "time"
+      : results.length >= 200
+        ? "matches"
+        : count >= 20000
+          ? "files"
+          : "";
+    return { matches: results, truncated: reason !== "", reason, scanned: count };
   }
 }
 const relaunchSession = require("./session-relaunch.cjs").createSessionRelaunch({ inventory: c => core.inventory(c), runRig, parseJson: core.parseJson });
@@ -713,6 +756,7 @@ module.exports = {
   runRig,
   diagnose,
   edit,
+  EDIT_PY,
   rigAction,
   ports,
 };
