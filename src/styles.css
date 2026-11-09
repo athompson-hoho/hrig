@@ -4243,6 +4243,17 @@ button:hover {
   outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
+/* High Contrast: the two borders whose color is also a background elsewhere, and the text on the two light highlights. */
+:root[data-theme="high-contrast"] kbd,
+:root[data-theme="high-contrast"] .sidebar-footer {
+  border-color: var(--line);
+}
+:root[data-theme="high-contrast"] ::selection {
+  color: #000000;
+}
+:root[data-theme="high-contrast"] .window-controls button:last-child:hover {
+  color: #000000;
+}
 
 .theme-collection h4 {
   font-size: 10px;

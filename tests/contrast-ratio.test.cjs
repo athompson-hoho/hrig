@@ -375,3 +375,351 @@ test("contrast-ratio pins: themeColor gives every theme except High Contrast exa
     "the default theme keeps the original palette",
   );
 });
+
+// ---- What the stylesheets draw in High Contrast ----
+const HC_ROOT = ':root[data-theme="high-contrast"]';
+const HC_PREFIX = HC_ROOT + " ";
+
+function parseDeclarations(body) {
+  return body
+    .split(";")
+    .map((d) => d.trim())
+    .filter((d) => d.includes(":"))
+    .map((d) => {
+      const at = d.indexOf(":");
+      return [d.slice(0, at).trim().toLowerCase(), d.slice(at + 1).trim()];
+    });
+}
+
+// Every rule of a stylesheet with its selector (whitespace collapsed) and declarations; the rules inside @media and @keyframes are included, the at-rules themselves are not.
+function cssRules(text) {
+  const rules = [];
+  const open = [];
+  let body = "";
+  for (const ch of text.replace(/\/\*[\s\S]*?\*\//g, "")) {
+    if (ch === "{") {
+      open.push(body.trim());
+      body = "";
+    } else if (ch === "}") {
+      const selector = open.pop();
+      if (selector && !selector.startsWith("@") && body.trim())
+        rules.push({
+          selector: selector.replace(/\s+/g, " "),
+          declarations: parseDeclarations(body),
+        });
+      body = "";
+    } else body += ch;
+  }
+  return rules;
+}
+
+// Splits at a separator that is not inside parentheses.
+function topLevel(value, separator) {
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (const ch of value.replace(/\s+/g, " ")) {
+    if (ch === "(") depth += 1;
+    if (ch === ")") depth -= 1;
+    if (ch === separator && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+    } else current += ch;
+  }
+  parts.push(current.trim());
+  return parts.filter(Boolean);
+}
+
+function roleOf(prop) {
+  if (prop === "color") return "text";
+  if (/^background(-color)?$/.test(prop)) return "background";
+  if (/^border/.test(prop) || prop === "outline") return "border";
+  if (prop === "accent-color") return "control";
+  if (prop === "box-shadow") return "shadow";
+  if (prop.startsWith("--")) return "variable";
+  return null;
+}
+
+function opaque(color, backing) {
+  const rgb = parseHex(color, backing);
+  return (
+    "#" +
+    [rgb.r, rgb.g, rgb.b].map((c) => c.toString(16).padStart(2, "0")).join("")
+  );
+}
+function translucent(color) {
+  return (
+    (color.length === 9 && !color.endsWith("ff")) ||
+    (color.length === 5 && !color.endsWith("f"))
+  );
+}
+
+// Reads src/styles.css and src/navigation.css and resolves every color the way the theme does in High Contrast: a --color-xxxxxx token through the real themeColor, --muted and --line through the theme's own rule, the rest through :root. Returns the text, border and control pairs to check, the roles of every token and the High Contrast overrides.
+function scanStylesheets() {
+  const rules = [
+    ...cssRules(read("src/styles.css")),
+    ...cssRules(read("src/navigation.css")),
+  ];
+  const defined = new Set();
+  for (const rule of rules)
+    if (rule.selector === ":root")
+      for (const [prop] of rule.declarations)
+        if (/^--color-[0-9a-f]{3,8}$/.test(prop)) defined.add(prop.slice(8));
+  const vars = new Map();
+  const colorOf = (value, depth = 0) => {
+    const v = value.trim().replace(/\s*!important$/, "");
+    if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v))
+      return v.toLowerCase();
+    if (v === "white") return "#ffffff";
+    if (v === "black") return BLACK;
+    const m = /^var\(\s*--([a-z0-9-]+)\s*(?:,\s*([\s\S]+))?\)$/i.exec(v);
+    if (!m || depth > 4) return null;
+    const [, name, fallback] = m;
+    const token = /^color-([0-9a-f]{3,8})$/.exec(name);
+    let found = null;
+    if (token)
+      found = defined.has(token[1])
+        ? theme.themeColor("#" + token[1], HC)
+        : null;
+    else found = vars.get(name) || null;
+    if (found) return found;
+    return fallback ? colorOf(fallback, depth + 1) : null;
+  };
+  for (const rule of rules)
+    if (rule.selector === ":root")
+      for (const [prop, value] of rule.declarations)
+        if (prop.startsWith("--") && !prop.startsWith("--color-"))
+          vars.set(prop.slice(2), colorOf(value));
+  for (const rule of rules)
+    if (rule.selector === HC_ROOT)
+      for (const [prop, value] of rule.declarations)
+        if (prop.startsWith("--")) vars.set(prop.slice(2), colorOf(value));
+
+  // High Contrast overrides written as ':root[data-theme="high-contrast"] <selector> { ... }': base selector -> property -> color.
+  const overrides = new Map();
+  for (const rule of rules)
+    for (const part of rule.selector.split(",").map((s) => s.trim()))
+      if (part.startsWith(HC_PREFIX)) {
+        const base = part.slice(HC_PREFIX.length).trim();
+        const map = overrides.get(base) || new Map();
+        for (const [prop, value] of rule.declarations) {
+          const color = colorOf(value);
+          if (color) map.set(prop, color);
+        }
+        overrides.set(base, map);
+      }
+  const overridden = (selectors, prop) => {
+    const keys =
+      prop === "color"
+        ? ["color"]
+        : prop === "border"
+          ? ["border-color"]
+          : prop.startsWith("border")
+            ? [prop.endsWith("-color") ? prop : prop + "-color", "border-color"]
+            : [prop];
+    for (const selector of selectors)
+      for (const key of keys) {
+        const color =
+          overrides.get(selector) && overrides.get(selector).get(key);
+        if (color) return color;
+      }
+    return null;
+  };
+
+  const roles = new Map();
+  const undefinedTokens = new Set();
+  const pairs = [];
+  const hc = theme.themes[HC];
+  for (const rule of rules) {
+    const selectors = rule.selector.split(",").map((s) => s.trim());
+    for (const [prop, value] of rule.declarations) {
+      const tokens = [...value.matchAll(/var\(--color-([0-9a-f]{3,8})\b/g)].map(
+        (m) => m[1],
+      );
+      if (!tokens.length) continue;
+      const role = roleOf(prop);
+      assert.ok(
+        role,
+        "a token is used by a property no rule classifies: " +
+          prop +
+          " in " +
+          rule.selector,
+      );
+      for (const token of tokens) {
+        if (!roles.has(token)) roles.set(token, new Set());
+        roles.get(token).add(role);
+        if (!defined.has(token)) undefinedTokens.add(token);
+      }
+    }
+    // The theme's own overrides and the rules that never apply in High Contrast are not measured.
+    if (
+      selectors.every((s) => s.startsWith(HC_PREFIX)) ||
+      rule.selector === HC_ROOT ||
+      rule.selector.includes(':not([data-theme="high-contrast"])')
+    )
+      continue;
+    const backgrounds = [];
+    for (const [prop, value] of rule.declarations)
+      if (roleOf(prop) === "background") {
+        const color = colorOf(value);
+        if (color)
+          backgrounds.push({ value, color: opaque(color, hc.background) });
+      }
+    const backing = backgrounds.length
+      ? backgrounds
+      : [{ value: "the theme background", color: hc.background }];
+    for (const [prop, value] of rule.declarations) {
+      const role = roleOf(prop);
+      if (role === "text") {
+        const fg = overridden(selectors, prop) || colorOf(value);
+        if (fg)
+          for (const b of backing)
+            pairs.push({
+              name: rule.selector + " { color: " + value + " } on " + b.value,
+              kind: "text",
+              fg,
+              bg: b.color,
+            });
+      } else if (role === "border" || role === "control" || role === "shadow") {
+        const layers = role === "shadow" ? topLevel(value, ",") : [value];
+        for (const layer of layers) {
+          const words = topLevel(layer, " ");
+          if (role === "shadow" && !words.includes("inset")) continue;
+          const word = words.reverse().find((w) => colorOf(w));
+          if (!word) continue;
+          const color = overridden(selectors, prop) || colorOf(word);
+          if (translucent(color)) continue;
+          pairs.push({
+            name: rule.selector + " { " + prop + ": " + value + " }",
+            kind: "non-text",
+            fg: color,
+            bg: hc.background,
+          });
+        }
+      }
+    }
+  }
+  const selection = rules.find((r) => r.selector === "::selection");
+  assert.ok(selection, "the stylesheet has a ::selection rule");
+  const selectionBg = selection.declarations.find(([p]) => p === "background");
+  pairs.push({
+    name: "::selection text on the selection background",
+    kind: "text",
+    fg: overridden(["::selection"], "color") || theme.themeColor("#c9cdd7", HC),
+    bg: opaque(colorOf(selectionBg[1]), hc.background),
+  });
+  return { pairs, roles, undefinedTokens, defined, overrides, rules };
+}
+
+function describePair(r) {
+  return (
+    r.name +
+    " = " +
+    r.fg +
+    " on " +
+    r.bg +
+    ": " +
+    round2(r.ratio) +
+    " (needs " +
+    r.required +
+    ")"
+  );
+}
+
+test("contrast-ratio derived: every text, border and control color the stylesheets draw in High Contrast is measured on the real themeColor output and meets WCAG 2.x", () => {
+  const scan = scanStylesheets();
+  // The :root block defines exactly the 472 colors applyTheme re-colors.
+  assert.deepEqual(
+    [...scan.defined].sort(),
+    sourceColors.map((s) => s.slice(1).toLowerCase()).sort(),
+  );
+  // Four colors are used by the stylesheets but defined nowhere, so they are not themed in any theme (a finding of this phase; they cannot be measured).
+  assert.deepEqual([...scan.undefinedTokens].sort(), [
+    "91b4ec",
+    "98e2c2",
+    "dfc28e",
+    "ed929d",
+  ]);
+  const results = checkPairs(scan.pairs);
+  assert.ok(results.filter((r) => r.kind === "text").length >= 250);
+  assert.ok(results.filter((r) => r.kind === "non-text").length >= 100);
+  const failing = results.filter((r) => !r.pass);
+  assert.equal(
+    failing.length,
+    0,
+    failing.length +
+      " pair(s) under their WCAG threshold in High Contrast. Use var(--line) or var(--muted), or, for a color used only for borders, add it to highContrastBorders in src/themes.ts:\n" +
+      failing.map(describePair).join("\n"),
+  );
+});
+
+test("contrast-ratio fix: a color used only for borders that sat under 3:1 now draws the theme's border color, in High Contrast only, and every other High Contrast color is as it was", () => {
+  const scan = scanStylesheets();
+  const hc = theme.themes[HC];
+  const sources = new Set(sourceColors.map((s) => s.toLowerCase()));
+  const roles = [...scan.roles].filter(([token]) => sources.has("#" + token));
+  const borderOnly = new Set(
+    roles
+      .filter(([, set]) => set.size === 1 && set.has("border"))
+      .map(([token]) => "#" + token),
+  );
+  // The same palette under another id: the code High Contrast ran before this phase.
+  theme.themes["hc-before"] = { ...hc };
+  try {
+    let fixed = 0;
+    let kept = 0;
+    for (const accent of ACCENTS)
+      for (const source of sourceColors) {
+        const before = theme.themeColor(source, "hc-before", accent);
+        const dim =
+          borderOnly.has(source.toLowerCase()) &&
+          contrastRatio(before, hc.background) < 3;
+        assert.equal(
+          theme.themeColor(source, HC, accent),
+          dim ? hc.line : before,
+          source + " with accent " + accent,
+        );
+        if (dim) fixed += 1;
+        else kept += 1;
+      }
+    assert.ok(fixed >= 50 * ACCENTS.length, "fixed " + fixed);
+    assert.ok(kept > 400 * ACCENTS.length, "kept " + kept);
+    // A color that is also a background keeps its value (a hover color must stay dark) and is fixed by a rule for the one selector instead.
+    const mixed = roles
+      .filter(
+        ([token, set]) => set.has("border") && !borderOnly.has("#" + token),
+      )
+      .map(([token]) => "#" + token)
+      .filter(
+        (c) =>
+          contrastRatio(theme.themeColor(c, "hc-before"), hc.background) < 3,
+      );
+    for (const color of ["#2a2d36", "#333640"]) {
+      assert.ok(
+        mixed.includes(color),
+        color + " is used for more than borders",
+      );
+      assert.equal(
+        theme.themeColor(color, HC),
+        theme.themeColor(color, "hc-before"),
+      );
+    }
+  } finally {
+    delete theme.themes["hc-before"];
+  }
+  // The inserted High Contrast rules, read back from the stylesheet.
+  const get = (selector, prop) =>
+    scan.overrides.get(selector) && scan.overrides.get(selector).get(prop);
+  assert.equal(get("kbd", "border-color"), hc.line);
+  assert.equal(get(".sidebar-footer", "border-color"), hc.line);
+  assert.equal(get("::selection", "color"), BLACK);
+  assert.equal(get(".window-controls button:last-child:hover", "color"), BLACK);
+  // Why those two text rules exist: without them the text sat on a light highlight at 1.25:1 and 1.83:1.
+  const highlight = theme.themeColor("#3f6255", HC);
+  const closeHover = theme.themeColor("#b54754", HC);
+  const bodyText = theme.themeColor("#c9cdd7", HC);
+  assert.equal(round2(contrastRatio(bodyText, highlight)), 1.25);
+  assert.equal(round2(contrastRatio("#ffffff", closeHover)), 1.83);
+  assert.ok(contrastRatio(BLACK, highlight) > 15);
+  assert.ok(contrastRatio(BLACK, closeHover) > 11);
+});

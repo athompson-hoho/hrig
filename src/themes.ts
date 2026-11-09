@@ -48,6 +48,59 @@ export function themeId(
       ? (preferences["appearance.theme"] as ThemeId)
       : "hrig-dark";
 }
+// Colors the stylesheets use only for borders that came out under 3:1 against the black High Contrast background; the theme draws them in its own border color. tests/contrast-ratio.test.cjs derives the same list from the stylesheets.
+const highContrastBorders = new Set([
+  "#252932",
+  "#252b35",
+  "#252d2c",
+  "#272e37",
+  "#272f3b",
+  "#282b34",
+  "#282d38",
+  "#292e38",
+  "#29303a",
+  "#2b323e",
+  "#2b3843",
+  "#2c313c",
+  "#2c343e",
+  "#2d303b",
+  "#2e323d",
+  "#2e3540",
+  "#2e3541",
+  "#2e3946",
+  "#2e3b48",
+  "#2f323d",
+  "#30323d",
+  "#303743",
+  "#303946",
+  "#303a3c",
+  "#303a46",
+  "#303a48",
+  "#303b48",
+  "#303b49",
+  "#303b4a",
+  "#303d4b",
+  "#313541",
+  "#313b46",
+  "#313b49",
+  "#313c4a",
+  "#333944",
+  "#334638",
+  "#343844",
+  "#343a45",
+  "#343a46",
+  "#363c49",
+  "#384e41",
+  "#394b3f",
+  "#3a5146",
+  "#3c5041",
+  "#3c5143",
+  "#3c5147",
+  "#3d4c47",
+  "#3d5243",
+  "#3e5143",
+  "#50363d",
+]);
 export function themeColor(source: string, id: ThemeId, accent = "theme") {
   const p = themes[id],
     [r, g, b] = rgb(source),
@@ -82,6 +135,8 @@ export function themeColor(source: string, id: ThemeId, accent = "theme") {
     };
     if (anchors[source.toLowerCase()]) return anchors[source.toLowerCase()];
   }
+  if (id === "high-contrast" && highContrastBorders.has(source.toLowerCase()))
+    return p.line;
   let color: string;
   if (green) {
     color = p.dark
