@@ -19,6 +19,27 @@ export const welcomeTab: IJsonTabNode = {
   component: "welcome",
   enableClose: true,
 };
+export function normalizeOptionalTab(tab: IJsonTabNode): IJsonTabNode {
+  return tab.component === "editor" || tab.component === "diff" || tab.component === "settings"
+    ? { ...tab, enableRenderOnDemand: true }
+    : tab;
+}
+export function normalizeOptionalPanels(json: IJsonModel): IJsonModel {
+  // Follow model children only: config may itself contain tab-shaped user data.
+  const node = (value: any): any => {
+    if (value.type === "tab") return normalizeOptionalTab(value);
+    return { ...value, ...(value.children ? { children: value.children.map(node) } : {}) };
+  };
+  const layouts = (value: IJsonModel["subLayouts"]) => value &&
+    Object.fromEntries(Object.entries(value).map(([id, sub]) => [id, { ...sub, layout: node(sub.layout) }]));
+  return {
+    ...json,
+    layout: node(json.layout),
+    ...(json.borders ? { borders: json.borders.map(node) } : {}),
+    ...(json.subLayouts ? { subLayouts: layouts(json.subLayouts) } : {}),
+    ...(json.popouts ? { popouts: layouts(json.popouts) } : {}),
+  };
+}
 export function initialModel() {
   return Model.fromJson({
     global: globalLayout,
@@ -31,10 +52,10 @@ export function initialModel() {
 export function restoreModel(json?: IJsonModel) {
   try {
     if (json)
-      return Model.fromJson({
+      return Model.fromJson(normalizeOptionalPanels({
         ...json,
         global: { ...globalLayout, ...json.global },
-      });
+      }));
   } catch {}
   return initialModel();
 }
