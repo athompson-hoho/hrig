@@ -24,7 +24,7 @@ const cases = [
 for (const [input, summary, meaning] of cases) test(`finite Git copy: ${summary}`, () => {
   const snapshot = ['checking', 'unavailable'].includes(input.state) ? input : project(Object.freeze(input));
   assert.equal(describe(snapshot).summary, summary);
-  assert.equal(describe(snapshot).detail, `Open source control. ${meaning}${input.state === 'repository' ? ' Local Git snapshot; no remote fetch. Open Files and use Refresh files to check again.' : ''}`);
+  assert.equal(describe(snapshot).detail, `Open source control. ${meaning}${input.state === 'repository' ? ' Local Git snapshot; no remote fetch. Open Files and use Refresh files to check again.' : ''}${input.state !== 'checking' ? ' Snapshot, not live. Terminal checkouts or commits need Refresh files.' : ''}`);
 });
 test('pure comparison preserves zero safe limits and exact Unicode identity without mutation', () => {
   for (const n of [0, 1, Number.MAX_SAFE_INTEGER]) {

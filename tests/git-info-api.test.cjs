@@ -117,8 +117,8 @@ def run(argv,**kw):
  if args==['rev-parse','--is-inside-work-tree']: out=b'true\\n'
  elif args==['symbolic-ref','--quiet','HEAD']: out=b'refs/heads/topic\\n'
  elif args==['for-each-ref','--format=%(refname)%00%(objectname)%00%(upstream)','refs/heads/topic']: out=b'refs/heads/topic\\0'+b'a'*40+b'\\0refs/remotes/origin/topic\\n'
- elif args==['rev-parse','--verify','--quiet','--end-of-options','HEAD^{commit}']: out=b'a'*40+b'\\n'
- elif args==['rev-parse','--verify','--quiet','--end-of-options','refs/remotes/origin/topic^{commit}']: out=b'b'*40+b'\\n'
+ elif args==['rev-parse','--verify','--quiet','HEAD^{commit}']: out=b'a'*40+b'\\n'
+ elif args==['rev-parse','--verify','--quiet','refs/remotes/origin/topic^{commit}']: out=b'b'*40+b'\\n'
  else:
   assert args==['rev-list','--left-right','--count','a'*40+'...'+'b'*40]
   out=b'3\\t1\\n'
@@ -178,14 +178,14 @@ print(json.dumps(dict(value=value,error=error,calls=calls)))
 const A = 'a'.repeat(40), B = 'b'.repeat(40);
 const inside = { args: ['rev-parse', '--is-inside-work-tree'], stdout: 'true\n' };
 const sym = { args: ['symbolic-ref', '--quiet', 'HEAD'], stdout: 'refs/heads/topic\n' };
-const head = { args: ['rev-parse', '--verify', '--quiet', '--end-of-options', 'HEAD^{commit}'], stdout: A + '\n' };
+const head = { args: ['rev-parse', '--verify', '--quiet', 'HEAD^{commit}'], stdout: A + '\n' };
 const map = { args: ['for-each-ref', '--format=%(refname)%00%(objectname)%00%(upstream)', 'refs/heads/topic'], stdout: `refs/heads/topic\0${A}\0refs/remotes/origin/topic\n` };
-const up = { args: ['rev-parse', '--verify', '--quiet', '--end-of-options', 'refs/remotes/origin/topic^{commit}'], stdout: B + '\n' };
+const up = { args: ['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/topic^{commit}'], stdout: B + '\n' };
 const count = { args: ['rev-list', '--left-right', '--count', A + '...' + B], stdout: '3\t1\n' };
 const attached = [sym, head, map, up];
 const none = [sym, head, { ...map, stdout: `refs/heads/topic\0${A}\0\n` }];
 const detached = [{ ...sym, code: 1, stdout: '' }, head];
-const unborn = [sym, { ...head, code: 1, stdout: '' }, { args: ['show-ref', '--exists', 'refs/heads/topic'], code: 2 }];
+const unborn = [sym, { ...head, code: 1, stdout: '' }, { args: ['show-ref', '--verify', '--quiet', 'refs/heads/topic'], code: 1 }];
 const gone = [sym, head, map, { ...up, code: 1, stdout: '' }];
 const repo = { state: 'repository', head: 'attached', branch: 'topic', oid: A };
 const matrices = [
@@ -202,8 +202,10 @@ const matrices = [
   ['missing Git', [{ ...inside, missing: true }], null],
   ['symbolic exit128', [inside, { ...sym, code: 128, stdout: '', stderr: 'broken' }], null],
   ['symbolic exit1 needs commit', [inside, detached[0], { ...head, code: 1, stdout: '' }], null],
-  ['show-ref exit1 is error not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 1 }], null],
-  ['unsupported show-ref is not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 129 }], null],
+  ['present exact ref with unresolved HEAD is not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 0 }], null],
+  ['show-ref missing with diagnostic is not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 1, stderr: 'fatal: broken ref' }], null],
+  ['show-ref lookup error is not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 128, stderr: 'fatal: lookup failed' }], null],
+  ['unsupported show-ref is not unborn', [inside, ...unborn.slice(0, 2), { ...unborn[2], code: 129 }], { state: 'unavailable', reason: 'unsupported-git' }],
   ['sibling full ref is not exact', [inside, sym, head, { ...map, stdout: `refs/heads/topic-other\0${A}\0\n` }], null],
   ['sibling and exact mapping select exact', [inside, sym, head, { ...none[2], stdout: `refs/heads/topic-other\0${B}\0\n${none[2].stdout}` }, ...none], { ...repo, comparison: 'none' }],
   ['control-bearing branch', [inside, { ...sym, stdout: 'refs/heads/top\tic\n' }], null],

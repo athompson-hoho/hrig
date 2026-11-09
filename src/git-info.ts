@@ -1,6 +1,7 @@
 export type GitInfoSnapshot = {
   state: "repository" | "not-repository" | "unavailable" | "checking";
   root?: string;
+  reason?: "unsupported-git";
   head?: "attached" | "detached" | "unborn";
   branch?: string;
   oid?: string;
@@ -17,6 +18,9 @@ export function projectGitInfo(value: unknown): GitInfoSnapshot {
   const v = value as GitInfoSnapshot;
   if (!label(v.root)) return bad;
   const absent = (...keys: (keyof GitInfoSnapshot)[]) => keys.every(k => v[k] === undefined);
+  if (v.state === "unavailable") return v.reason === "unsupported-git" && absent("head", "branch", "oid", "comparison", "upstream", "ahead", "behind")
+    ? { state: "unavailable", root: v.root, reason: "unsupported-git" } : bad;
+  if (v.reason !== undefined) return bad;
   if (v.state === "not-repository") return absent("head", "branch", "oid", "comparison", "upstream", "ahead", "behind") ? { state: v.state, root: v.root } : bad;
   if (v.state !== "repository") return bad;
   if (v.head === "detached") {
@@ -39,7 +43,10 @@ export function describeGitInfo(v: GitInfoSnapshot): { summary: string; detail: 
   const refresh = "Open Files and use Refresh files to check again.";
   let summary: string, meaning: string;
   if (v.state === "checking") { summary = "Checking Git…"; meaning = "Checking Git information for the selected workspace."; }
-  else if (v.state === "unavailable") { summary = "Git unavailable"; meaning = `Git information is unavailable. ${refresh}`; }
+  else if (v.state === "unavailable") {
+    summary = v.reason === "unsupported-git" ? "Git unsupported" : "Git unavailable";
+    meaning = `${v.reason === "unsupported-git" ? "Git on this host does not support the required metadata commands." : "Git information is unavailable."} ${refresh}`;
+  }
   else if (v.state === "not-repository") { summary = "No Git repository"; meaning = "This workspace is not in a Git repository."; }
   else {
     if (v.head === "detached") { summary = "Detached HEAD"; meaning = "Detached HEAD; no branch is checked out. Ahead and behind counts are unavailable."; }
@@ -52,5 +59,6 @@ export function describeGitInfo(v: GitInfoSnapshot): { summary: string; detail: 
     else { summary = `${v.branch} · comparison unavailable`; meaning = `Branch ${v.branch}. ${v.upstream ? `Upstream ${v.upstream}. ` : ""}Ahead and behind counts are unavailable from local Git information.`; }
     meaning += ` Local Git snapshot; no remote fetch. ${refresh}`;
   }
+  if (v.state !== "checking") meaning += " Snapshot, not live. Terminal checkouts or commits need Refresh files.";
   return { summary, detail: `Open source control. ${meaning}` };
 }

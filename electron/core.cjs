@@ -265,7 +265,12 @@ async function localPath(root, relative = "", allowMissing = false) {
 }
 async function readGitInfo(root) {
   const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" };
-  const run = args => execute("git", ["-C", root, ...args], { env, exitResult: true });
+  const run = async args => {
+    const result = await execute("git", ["-C", root, ...args], { env, exitResult: true });
+    if (result.code !== 0 && (result.code === 129 || /(?:unknown|unrecognized|unsupported|invalid) (?:option|switch|command)|^usage:/im.test(result.stderr)))
+      throw Object.assign(new Error("Git metadata commands are unsupported."), { code: "GIT_METADATA_UNSUPPORTED" });
+    return result;
+  };
   const fail = () => { throw new Error("Git information is unavailable."); };
   const text = r => r.stdout.replace(/\r?\n$/, "");
   const safe = s => typeof s === "string" && !!s && !/[\x00-\x1f\x7f]/.test(s);
@@ -276,7 +281,7 @@ async function readGitInfo(root) {
     return fail();
   }
   if (text(inside) !== "true") return fail();
-  const resolve = ref => run(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]);
+  const resolve = ref => run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   const identity = async () => {
     const symbolic = await run(["symbolic-ref", "--quiet", "HEAD"]);
     if (![0, 1].includes(symbolic.code) || (symbolic.code === 1 && (symbolic.stdout || symbolic.stderr))) return fail();
@@ -285,8 +290,8 @@ async function readGitInfo(root) {
     const head = await resolve("HEAD");
     if (head.code !== 0) {
       if (!ref || head.code !== 1) return fail();
-      const exists = await run(["show-ref", "--exists", ref]);
-      if (exists.code !== 2) return fail();
+      const exists = await run(["show-ref", "--verify", "--quiet", ref]);
+      if (exists.code !== 1 || exists.stdout || exists.stderr) return fail();
       return { head: "unborn", branch: ref.slice(11), comparison: "none" };
     }
     const oid = text(head);
@@ -329,7 +334,13 @@ target=os.path.realpath(os.path.join(root,a.get('path','')))
 if os.path.commonpath([root,target])!=root: raise Exception('The file is outside the project folder')
 op=a['op']
 def git_run(args):
- try: return subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C',**({'GIT_OPTIONAL_LOCKS':'0'} if op in ['git','gitInfo'] else {})))
+ try:
+  result=subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C',**({'GIT_OPTIONAL_LOCKS':'0'} if op in ['git','gitInfo'] else {})))
+  if op=='gitInfo' and result.returncode!=0:
+   import re
+   if result.returncode==129 or re.search(rb'(?:unknown|unrecognized|unsupported|invalid) (?:option|switch|command)|^usage:',result.stderr,re.I|re.M):
+    print(json.dumps(dict(state='unavailable',root=root,reason='unsupported-git')));sys.exit(0)
+  return result
  except FileNotFoundError:
   print('Git is not installed on this machine. Install Git on the project host.',file=sys.stderr);sys.exit(1)
 def git_fail(result):
@@ -356,7 +367,7 @@ elif op=='gitInfo':
  def text(r): return re.sub(r'\\r?\\n$','',r.stdout.decode('utf-8'))
  def safe(s): return bool(s) and not re.search(r'[\\x00-\\x1f\\x7f]',s)
  def valid_oid(s): return re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})',s) is not None
- def resolve(ref): return git_run(['rev-parse','--verify','--quiet','--end-of-options',ref+'^{commit}'])
+ def resolve(ref): return git_run(['rev-parse','--verify','--quiet',ref+'^{commit}'])
  def identity():
   symbolic=git_run(['symbolic-ref','--quiet','HEAD'])
   if symbolic.returncode not in [0,1] or (symbolic.returncode==1 and (symbolic.stdout or symbolic.stderr)): fail()
@@ -365,7 +376,8 @@ elif op=='gitInfo':
   head=resolve('HEAD')
   if head.returncode!=0:
    if not ref or head.returncode!=1: fail()
-   if git_run(['show-ref','--exists',ref]).returncode!=2: fail()
+   exists=git_run(['show-ref','--verify','--quiet',ref])
+   if exists.returncode!=1 or exists.stdout or exists.stderr: fail()
    return dict(head='unborn',branch=ref[11:],comparison='none')
   oid=text(head)
   if not valid_oid(oid): fail()
@@ -476,7 +488,13 @@ async function fileOperation(connection, request) {
     request.path,
     ["original", "diff"].includes(request.op),
   );
-  if (request.op === "gitInfo") return readGitInfo(target);
+  if (request.op === "gitInfo") {
+    try { return await readGitInfo(target); }
+    catch (error) {
+      if (error.code === "GIT_METADATA_UNSUPPORTED") return { state: "unavailable", root: target, reason: "unsupported-git" };
+      throw error;
+    }
+  }
   if (request.op === "search") {
     const results = [];
     let scanned = 0;
