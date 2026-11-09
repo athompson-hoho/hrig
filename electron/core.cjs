@@ -161,6 +161,11 @@ function normalizeInventory(rigData, nodeData) {
               : "running"
           : n.sessionStatus || "unknown",
     activity: n.activityState?.display || n.agentActivity?.reason || "",
+    lastActivityAt:
+      typeof n.lastActivityAt === "string" &&
+      Number.isFinite(Date.parse(n.lastActivityAt))
+        ? n.lastActivityAt
+        : null,
     error: n.latestError || "",
     workCount: n.assignedWorkCount || 0,
   }));

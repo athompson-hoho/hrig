@@ -19,6 +19,7 @@ import {
 import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { seatActivityAge } from "./seat-activity-age";
 import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 import { sortSeats } from "./seat-sort";
@@ -140,7 +141,11 @@ export default function Sidebar({
   const favorites = seats.filter(s => pins.has(seatPinIdentity(connection, s.id)));
   const groups = groupSeatPods(seats.filter(s => !pins.has(seatPinIdentity(connection, s.id))), connection);
   const collapsed = new Set(podsAvailable ? normalizeCollapsedPods(collapsedPods) : []);
-  const renderSeat = (s: Seat) => (
+  const activityClock = Date.now(); // reader clock; refreshed by existing inventory rerenders, no timer
+  const ageCurrent = !inventoryError && pinsAvailable;
+  const renderSeat = (s: Seat) => {
+    const age = seatActivityAge(s.lastActivityAt, activityClock, ageCurrent);
+    return (
     <div className="session-row" key={s.id}>
       <button
         disabled={!!inventoryError}
@@ -149,7 +154,7 @@ export default function Sidebar({
         onClick={() => onSeat(s)}
         className="seat-row"
         key={s.id}
-        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
+        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"} · ${age.tooltip}`}
       >
         <span
           className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
@@ -160,6 +165,9 @@ export default function Sidebar({
           <strong>{s.name}</strong>
           <small>
             {s.rigName} · {s.runtime}
+            {age.available && (
+              <span className="seat-age" aria-label={age.label}> · {age.text} ago</span>
+            )}
           </small>
         </span>
         <StatusDot status={s.status} />
@@ -185,7 +193,8 @@ export default function Sidebar({
         <RotateCw size={13} />
       </IconButton>
     </div>
-  );
+    );
+  };
   type SessionRow = { key: string; seat: Seat; group?: typeof groups[number] }
     | { key: string; group: typeof groups[number]; seat?: undefined };
   const owner = pinConnectionIdentity(connection);

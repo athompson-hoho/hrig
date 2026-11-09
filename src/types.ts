@@ -26,6 +26,8 @@ export interface Seat {
   session: string | null;
   status: string;
   activity: string;
+  /** Raw OpenRig lastActivityAt (ISO) when reported and valid; otherwise null/absent (old host). */
+  lastActivityAt?: string | null;
   error: string;
   workCount: number;
 }
