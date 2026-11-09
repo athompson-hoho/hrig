@@ -19,11 +19,20 @@ export function resolveRevealPath(connection: Connection, root: string, path: st
   platform: string): string | null {
   if (typeof path !== "string" || !path) return null;
   const windows = connection.kind === "local" && platform === "win32";
-  if (windows && (/^[A-Za-z]:/.test(path) || path.startsWith("\\\\"))) {
+  if (windows && (/^[A-Za-z]:/.test(path) || path.startsWith("\\\\") || path.startsWith("//"))) {
     const normalize = (value: string) => value.replaceAll("\\", "/");
-    const base = normalize(root).replace(/\/$/, ""), target = normalize(path);
-    const absolute = (value: string) => /^[A-Za-z]:\//.test(value) || /^\/\/[^/]+\/[^/]+\//.test(value + "/");
-    if (!absolute(base) || !absolute(target) ||
+    const normalizedRoot = normalize(root);
+    const base = normalizedRoot.replace(/\/$/, ""), target = normalize(path);
+    const absolute = (value: string) => {
+      if (/^[A-Za-z]:\//.test(value)) {
+        const tail = value.slice(3).replace(/\/$/, "");
+        return !tail || safeParts(tail);
+      }
+      if (!value.startsWith("//")) return false;
+      const tail = value.slice(2).replace(/\/$/, "");
+      return tail.split("/").length >= 2 && safeParts(tail);
+    };
+    if (!absolute(normalizedRoot) || !absolute(target) ||
       !target.toLowerCase().startsWith(base.toLowerCase() + "/")) return null;
     const relative = target.slice(base.length + 1);
     if (!safeParts(relative) || base.split("/").some(p => p === "." || p === "..")) return null;

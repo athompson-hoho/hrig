@@ -78,6 +78,7 @@ import {
   StatusDot,
 } from "./components";
 import Sidebar from "./Sidebar";
+import { fileTreeOwner } from "./file-tree";
 import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
 import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
 import { SettingsContext } from "./SettingsContext";
@@ -1952,6 +1953,14 @@ export default function App() {
     );
   const tabCount = allTabs().filter((t) => t.component === "terminal").length;
   void revision;
+  const sidebarFileOwner = fileTreeOwner(connection, root);
+  const activeFile = (() => {
+    const selected = model.getActiveTabset()?.getSelectedNode();
+    if (!selected || !["editor", "diff"].includes(selected.getComponent())) return null;
+    const config = selected.getConfig() as PanelConfig;
+    return config?.connection && typeof config.root === "string" && typeof config.path === "string"
+      ? config as PanelConfig & { path: string } : null;
+  })();
   return (
     <SettingsContext.Provider value={settingsContext}>
       <div className="app" inert={updateRestarting || undefined}>
@@ -2133,8 +2142,19 @@ export default function App() {
                 onSeatBeside={openSeatBeside}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
-                onFile={(path) => openFile(path)}
-                onDiff={(path) => openFile(path, true)}
+                activeFile={activeFile}
+                onFile={(path) => {
+                  const latest = stateRef.current;
+                  const current = latest.connections.find(c => c.id === latest.activeConnection) || latest.connections[0] || local;
+                  if (modelRef.current !== model || fileTreeOwner(current, latest.roots[current.id] || current.root) !== sidebarFileOwner) return;
+                  openFile(path, false, undefined, { connection, root });
+                }}
+                onDiff={(path) => {
+                  const latest = stateRef.current;
+                  const current = latest.connections.find(c => c.id === latest.activeConnection) || latest.connections[0] || local;
+                  if (modelRef.current !== model || fileTreeOwner(current, latest.roots[current.id] || current.root) !== sidebarFileOwner) return;
+                  openFile(path, true, undefined, { connection, root });
+                }}
                 fileRevision={fileRevision}
               />
               <div className="sidebar-resizer" onPointerDown={resizeSidebar} />
