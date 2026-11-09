@@ -2,6 +2,8 @@ import { cloneElement, useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, FileCode2, Folder, Search } from "lucide-react";
 import type { Connection, FileEntry } from "./types";
 import { compareFileEntries, fileTreeOwner, normalizeFileQuery, projectFileMatches, resolveRevealPath } from "./file-tree";
+import { projectGitStatus, gitCounts, gitRowRecords, gitRecordText } from "./git-badges";
+import type { GitSnapshot } from "./git-badges";
 
 export type ActiveFileTarget = { connection: Connection; root: string; path: string };
 type Props = { connection: Connection; root: string; refresh: number;
@@ -28,6 +30,23 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
   const verified = verification?.refresh === refresh ? verification.listings : undefined;
   const [reveal, setReveal] = useState<{ token: object; state: "pending" | "success" | "missing" | "error"; path: string } | null>(null);
   const alive = useRef(true);
+  const [gitAttempt, setGitAttempt] = useState(0);
+  const [git, setGit] = useState<{ token: object; snapshot: GitSnapshot } | null>(null);
+  const [gitDetails, setGitDetails] = useState<object | null>(null);
+  const gitSignature = JSON.stringify([fileTreeOwner(connection, root), refresh, gitAttempt]);
+  const gitLifetime = useRef({ signature: gitSignature, token: {} });
+  if (gitLifetime.current.signature !== gitSignature) gitLifetime.current = { signature: gitSignature, token: {} };
+  const gitToken = gitLifetime.current.token;
+  const gitCurrent = () => alive.current && currentOwner() && gitLifetime.current.token === gitToken;
+  const snapshot = git?.token === gitToken && currentOwner() ? git.snapshot : null;
+  const gitRecords = snapshot?.state === "ready" ? snapshot.records : [];
+  useEffect(() => {
+    let active = true;
+    Promise.resolve().then(() => active && gitCurrent() ? window.hrig.git(connection, root) : null)
+      .then(data => { if (active && gitCurrent()) setGit({ token: gitToken, snapshot: projectGitStatus(data) }); })
+      .catch(() => { if (active && gitCurrent()) setGit({ token: gitToken, snapshot: { state: "unavailable" } }); });
+    return () => { active = false; };
+  }, [gitSignature]);
   const owner = fileTreeOwner(connection, root);
   const target = activeFile ? JSON.stringify([fileTreeOwner(activeFile.connection, activeFile.root), activeFile.path]) : "";
   const signature = JSON.stringify([query, target, refresh, searchAttempt]);
@@ -119,14 +138,19 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       count ? `${count} matching files in the searched scope.` : "No matching files in the searched scope." :
     reveal?.state === "pending" && !shownReveal ? cancelled : "";
   const row = (file: FileEntry, depth: number, context = false) => {
+    const reported = gitRowRecords(gitRecords, file.path, file.directory);
+    const counts = gitCounts(reported);
+    const meaning = reported.length ? file.directory ? `Reported descendant statuses: ${counts.map(c => `${c.letter} ${c.count}`).join("; ")}` : reported[0].description : "";
+    const label = file.path + (meaning ? ` — ${meaning}` : "");
     const highlighted = !context && shownReveal?.state === "success" && shownReveal.path === file.path;
     const content = <>{file.directory ? expanded.has(file.path) || context ? <ChevronDown size={12} /> : <ChevronRight size={12} /> : <span className="tree-spacer" />}
       {file.directory ? <Folder size={14} className="folder-icon" /> : <FileCode2 size={14} className={`file-icon ${file.name.split(".").pop()}`} />}
-      <span>{file.name}</span>{highlighted && <span className="sr-only">Revealed file</span>}</>;
-    if (context && file.directory) return <div key={file.path} className="file-row" title={file.path} aria-label={file.path}
+      <span className="file-name">{file.name}</span>{highlighted && <span className="sr-only">Revealed file</span>}
+      {counts.map(c => <span key={c.letter} className="git-badge" title={meaning}>{c.letter}{file.directory ? ` ${c.count}` : ""}</span>)}</>;
+    if (context && file.directory) return <div key={file.path} className="file-row" title={label} aria-label={label}
       style={{ paddingLeft: 14 + depth * 13 }}>{content}</div>;
     return <button key={file.path} type="button" className={`file-row${highlighted ? " file-revealed" : ""}`}
-      title={file.path} aria-label={file.path} aria-expanded={file.directory ? expanded.has(file.path) : undefined}
+      title={label} aria-label={label} aria-expanded={file.directory ? expanded.has(file.path) : undefined}
       style={{ paddingLeft: 14 + depth * 13 }}
       ref={highlighted ? node => {
         if (node && current() && scrolled.current !== token) {
@@ -143,6 +167,26 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       }}>{content}</button>;
   };
   return <div className="file-explorer sidebar-scroll">
+    <div className="explorer-git explorer-notice" role="status" aria-live="polite" aria-atomic="true" aria-busy={!snapshot}>
+      {!snapshot ? "Checking Git status…" : snapshot.state === "not-repository" ? "This project is not in a Git repository." : snapshot.state === "unavailable" ? "Git status is unavailable for this project. Retry Git status." : gitRecords.length ? `Git reported ${gitRecords.length} status records for this project.` : "No reported Git changes in this project."}
+      {snapshot?.state !== "ready" && (snapshot || gitAttempt > 0) && <button type="button" disabled={!snapshot} onClick={() => {
+        if (!gitCurrent()) return;
+        gitLifetime.current = { ...gitLifetime.current, token: {} };
+        setGitAttempt(n => n + 1);
+      }}>Retry Git status</button>}
+      {snapshot?.state === "ready" && <>
+        <div>Reported Git status only. Unlisted paths are not confirmed clean; directory contents may not be individually reported.</div>
+        {!!gitRecords.length && <>
+          <div aria-label="Reported descendant statuses:">{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>
+          <details key={gitSignature} open={gitDetails === gitToken} onToggle={e => {
+            if (gitCurrent()) setGitDetails(e.currentTarget.open ? gitToken : null);
+          }}>
+            <summary>Reported Git paths ({gitRecords.length} {gitRecords.length === 1 ? "record" : "records"})</summary>
+            {gitDetails === gitToken && <ul className="git-reported-paths">{gitRecords.map(record => <li key={record.path}>{gitRecordText(record)}</li>)}</ul>}
+          </details>
+        </>}
+      </>}
+    </div>
     <div className="sidebar-search file-filter">
       <Search size={13} />
       <input aria-label="Filter project files" placeholder="Filter files by name or path…" maxLength={300}
