@@ -1,4 +1,4 @@
-export interface CompareSeat { id: string; name: string; rigName: string; session?: string; pod?: string }
+export interface CompareSeat { id: string; name: string; rigName: string; session?: string | null; pod?: string | null }
 
 /** Seats that can be shown beside `current`: other sessions with a recorded session name. */
 export function compareCandidates<T extends CompareSeat>(seats: readonly T[], current: CompareSeat): T[] {
