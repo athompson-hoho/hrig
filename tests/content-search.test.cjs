@@ -1325,3 +1325,247 @@ test("content-search glob python", { skip: !pythonOk }, async () => {
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("content-search backstop", async () => {
+  const risky = cs.compileQuery({ query: ".*.*.*x", regex: true });
+  assert.equal(risky.risky, true);
+  assert.equal(typeof risky.scan, "function");
+  assert.equal(cs.compileQuery({ query: "foo.*bar", regex: true }).scan, null);
+  assert.equal(cs.compileQuery({ query: "foo" }).scan, null);
+  assert.equal(cs.compileQuery({ query: "foo", wholeWord: true }).scan, null);
+  assert.equal(cs.LIMITS.FILE_MS, 2000);
+  // A runaway match is stopped by the time limit instead of hanging the process.
+  const started = Date.now();
+  assert.equal(risky.scan("a".repeat(1000) + "\n", 200, 300), null);
+  assert.ok(Date.now() - started < 4000, "the limit stops a runaway match");
+  assert.equal(
+    risky.scan("ok x\n", 200, 300).join(),
+    "0",
+    "the matcher still works afterwards",
+  );
+  // Where it does not run away the scan agrees with the per-line test, line by line.
+  const texts = [
+    "import a from b\nnothing\n  import c from d\n",
+    "x\r\ny x\r\n\r\nx",
+    "x".repeat(1200) + "\nx\n" + "y".repeat(1100) + "x\n",
+    "",
+    "no match here",
+  ];
+  for (const pattern of [
+    "^\\s*import .* from",
+    "\\w+@\\w+\\.\\w+",
+    ".*.*x",
+    "x",
+  ]) {
+    const compiled = cs.compileQuery({ query: pattern, regex: true });
+    for (const text of texts) {
+      const direct = text
+        .split(/\r?\n/)
+        .flatMap((line, i) => (compiled.test(line) ? [i] : []));
+      assert.deepEqual(
+        cs.findLines(
+          text,
+          compiled.source,
+          compiled.flags,
+          cs.LIMITS.MAX_LINE,
+          1e9,
+        ),
+        direct,
+        pattern,
+      );
+      if (compiled.scan)
+        assert.deepEqual(compiled.scan(text, 1e9, 5000), direct, pattern);
+    }
+  }
+  assert.deepEqual(cs.findLines("x\nx\nx\nx", "x", "iu", 1000, 2), [0, 1]);
+  assert.equal(cs.createBudget(() => 0, Infinity).remaining(), Infinity);
+  let now = 0;
+  const budget = cs.createBudget(() => now, 100);
+  now = 30;
+  assert.equal(budget.remaining(), 70);
+  now = 500;
+  assert.equal(budget.remaining(), 0);
+  // Through the whole search: the answer says it ran out of time, and the other files are not lost before it.
+  const root = await project({
+    "bad.txt": "a".repeat(1000) + "\n",
+    "ok.txt": "x here\n",
+  });
+  try {
+    const t0 = Date.now();
+    const found = await search(
+      root,
+      ".*.*.*x",
+      { regex: true, wholeWord: false },
+      { fileMs: 300 },
+    );
+    assert.ok(
+      Date.now() - t0 < 1500,
+      "the per-file limit given by the hook ends the scan",
+    );
+    assert.equal(found.reason, "time");
+    assert.equal(found.truncated, true);
+    const benign = await search(root, "^\\s*x.*", {
+      regex: true,
+      wholeWord: false,
+    });
+    assert.equal(at(benign), "ok.txt:1");
+    const twice = await search(root, "x.*.*", {
+      regex: true,
+      wholeWord: false,
+    });
+    assert.equal(at(twice), "ok.txt:1");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+  // The same on the Python side: a hostile pattern sent by hand is abandoned at the budget.
+  if (pythonOk) {
+    const dir = await project({
+      "a.txt": "a".repeat(40) + "\n",
+      "b.txt": "b\n",
+    });
+    try {
+      const wrapped =
+        "import base64;exec(base64.b64decode(" +
+        JSON.stringify(Buffer.from(features.EDIT_PY).toString("base64")) +
+        "))";
+      const run = (request) =>
+        spawnSync(
+          "python3",
+          [
+            "-W",
+            "error::SyntaxWarning",
+            "-W",
+            "error::DeprecationWarning",
+            "-c",
+            wrapped,
+          ],
+          {
+            input: JSON.stringify(request),
+            encoding: "utf8",
+            timeout: 20000,
+          },
+        );
+      const p0 = Date.now();
+      const stopped = run({
+        op: "searchText",
+        root: dir,
+        path: "",
+        query: "(a+)+b",
+        options: { regex: true, wholeWord: false, budgetMs: 500 },
+      });
+      assert.equal(stopped.status, 0, stopped.stderr);
+      const answer = JSON.parse(stopped.stdout);
+      assert.deepEqual([answer.truncated, answer.reason], [true, "time"]);
+      assert.ok(Date.now() - p0 < 15000, "the alarm abandons the match");
+      const fine = run({
+        op: "searchText",
+        root: dir,
+        path: "",
+        query: "b",
+        options: { regex: true, wholeWord: true, budgetMs: 10000 },
+      });
+      assert.equal(fine.status, 0, fine.stderr);
+      assert.ok(
+        !/SyntaxWarning|DeprecationWarning/.test(fine.stderr),
+        "no Python syntax warning",
+      );
+      assert.equal(JSON.parse(fine.stdout).matches.length, 1);
+      // The alarm can fire anywhere in the walk, not only inside a pattern search: it ends the answer, not the script.
+      const wide = await project(
+        Object.fromEntries(
+          Array.from({ length: 1500 }, (_, i) => [`f${i}.txt`, "x\n"]),
+        ),
+      );
+      try {
+        const early = run({
+          op: "searchText",
+          root: wide,
+          path: "",
+          query: "x",
+          options: { regex: false, wholeWord: false, budgetMs: 1 },
+        });
+        assert.equal(early.status, 0, early.stderr);
+        assert.equal(JSON.parse(early.stdout).reason, "time");
+      } finally {
+        await fs.rm(wide, { recursive: true, force: true });
+      }
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  }
+  // The private context holds nothing from the app.
+  const source = read("electron/content-search.cjs");
+  assert.ok(source.includes("vm.createContext({})"));
+  assert.ok(!/context\.(require|process|module|globalThis|fs)/.test(source));
+  const requires = [...source.matchAll(/require\(["']([^"']+)["']\)/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(requires, ["node:vm"]);
+  const featuresSource = read("electron/features.cjs");
+  for (const token of [
+    "signal.setitimer(signal.ITIMER_REAL,max(budget,1)/1000.0)",
+    "except Budget: return False",
+    "signal.setitimer(signal.ITIMER_REAL,0)",
+  ])
+    assert.ok(featuresSource.includes(token), token);
+});
+
+test("content-search docs", () => {
+  const doc = read("docs/content-search.md");
+  const nav = read("NAVIGATION.md");
+  assert.ok(!/[^\x20-\x7e\n]/.test(doc), "ASCII only");
+  assert.ok(doc.startsWith("# Project text search\n"));
+  const L = cs.LIMITS;
+  const claims = [
+    "literal, case-insensitive search, exactly as before",
+    "There is no setting for any of this.",
+    "never run, opened as commands or sent to a terminal or seat",
+    "**Regular expression** (the `.*` button)",
+    "**Whole word** (the `Word` button)",
+    "**Files** (the `Files` button)",
+    "With every option off nothing changes",
+    "A glob without a slash matches a file or folder name at any depth",
+    "Globs are case-sensitive.",
+    "Braces and character classes are not supported",
+    "any `..` segment",
+    "Globs only filter the search. They never add a path to it",
+    "still count toward the 20,000 file limit",
+    `is longer than ${L.MAX_PATTERN} characters`,
+    "uses a backreference, a lookbehind or a named group",
+    `repeat count over ${L.MAX_REPEAT.toLocaleString("en-US")}`,
+    "repeats a group without an upper limit",
+    `more than ${L.MAX_UNBOUNDED} unbounded repeats`,
+    `more than ${L.MAX_DOUBLINGS} doubling points`,
+    "`(a+)+$`",
+    "| Search text | 300 characters (a regular expression: 200) |",
+    "| Matches shown | 200 |",
+    `| Files visited | ${L.MAX_FILES.toLocaleString("en-US")} |`,
+    "| File size | 2 MB; files with a NUL byte are skipped |",
+    `| Folder depth (local) | ${L.MAX_DEPTH} |`,
+    `| Line shown | ${L.MAX_TEXT} characters |`,
+    `the first ${L.MAX_LINE.toLocaleString("en-US")} characters`,
+    `| Time | ${L.BUDGET_MS / 1000} seconds for the whole search |`,
+    "A literal search with no option reads whole lines, however long.",
+    "private context with a two second limit",
+    "Residual risk, stated plainly",
+    "not a proof",
+    "not measured inside the packaged app",
+    "25 second limit",
+    "separate worker process is a larger change and is not part of this feature",
+    "## Local, WSL and SSH",
+    "Python `re` module",
+    "`\\p{...}`",
+    "Python splits lines at more characters than a line feed",
+    "## Not included",
+    "Replace in files, grouping matches by file, streaming or cancelling a running search, context lines around a match",
+  ];
+  const flat = doc.replace(/ +/g, " ");
+  for (const claim of claims) assert.ok(flat.includes(claim), claim);
+  assert.ok(!/future HR-16 work/.test(nav));
+  assert.ok(
+    nav.includes(
+      "See docs/content-search.md for the syntax, the limits and the differences",
+    ),
+  );
+  assert.ok(nav.includes("stays literal and case-insensitive by default"));
+});

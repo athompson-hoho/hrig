@@ -236,7 +236,15 @@ elif op=='searchText':
   try: pattern=re.compile(src,re.IGNORECASE)
   except re.error as e: raise Exception('Invalid regular expression: '+str(e)[:160])
  inc=(o or {}).get('include') or [];exc=(o or {}).get('exclude') or []
- def spent(): return budget is not None and (time.monotonic()-started)*1000>=budget
+ import signal
+ st={'late':False,'re':False}
+ class Budget(BaseException): pass
+ def alarm(sig,frm):
+  st['late']=True
+  if st['re']: raise Budget()
+ if budget is not None and hasattr(signal,'setitimer'):
+  signal.signal(signal.SIGALRM,alarm);signal.setitimer(signal.ITIMER_REAL,max(budget,1)/1000.0)
+ def spent(): return budget is not None and (st['late'] or (time.monotonic()-started)*1000>=budget)
  def nm(pat,name):
   p=n=0;star=-1;mark=0
   while n<len(name):
@@ -261,7 +269,12 @@ elif op=='searchText':
  def allowed(rel):
   parts=rel.split('/')
   return (not inc or any(gh(g,parts) for g in inc)) and not any(gh(g,parts) for g in exc)
- def hit(text): return bool(pattern.search(text[:1000])) if pattern else low in text.lower()
+ def hit(text):
+  if not pattern: return low in text.lower()
+  st['re']=True
+  try: return bool(pattern.search(text[:1000]))
+  except Budget: return False
+  finally: st['re']=False
  for folder,dirs,files in os.walk(root,followlinks=False):
   dirs[:]=[d for d in dirs if d not in ['.git','node_modules','dist','.venv','.next','release'] and not os.path.islink(os.path.join(folder,d))]
   for name in files:
@@ -278,6 +291,7 @@ elif op=='searchText':
    except (OSError,UnicodeError,Exception): pass
    if reason or len(out)>=200 or scanned>=cap: break
   if reason or len(out)>=200 or scanned>=cap: break
+ if budget is not None and hasattr(signal,'setitimer'): signal.setitimer(signal.ITIMER_REAL,0)
  reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=cap else '')
  print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned}))
 `;
@@ -386,23 +400,41 @@ async function edit(connection, a, hooks = {}) {
           try {
             if (search.allows(rel) && (await fs.stat(full)).size <= 2000000) {
               const data = await fs.readFile(full);
-              if (!data.includes(0))
-                for (const [i, line] of data
-                  .toString("utf8")
-                  .split(/\r?\n/)
-                  .entries()) {
-                  if (budget.expired()) {
-                    timedOut = true;
-                    break;
+              if (!data.includes(0)) {
+                const text = data.toString("utf8");
+                const lines = text.split(/\r?\n/);
+                if (search.scan) {
+                  const hits = search.scan(
+                    text,
+                    200 - results.length,
+                    Math.min(
+                      hooks.fileMs || contentSearch.LIMITS.FILE_MS,
+                      budget.remaining(),
+                    ),
+                  );
+                  if (hits === null) timedOut = true;
+                  else
+                    for (const i of hits)
+                      results.push({
+                        path: rel,
+                        line: i + 1,
+                        text: lines[i].slice(0, 250),
+                      });
+                } else
+                  for (const [i, line] of lines.entries()) {
+                    if (budget.expired()) {
+                      timedOut = true;
+                      break;
+                    }
+                    if (search.test(line))
+                      results.push({
+                        path: rel,
+                        line: i + 1,
+                        text: line.slice(0, 250),
+                      });
+                    if (results.length >= 200) break;
                   }
-                  if (search.test(line))
-                    results.push({
-                      path: rel,
-                      line: i + 1,
-                      text: line.slice(0, 250),
-                    });
-                  if (results.length >= 200) break;
-                }
+              }
             }
           } catch {}
         }

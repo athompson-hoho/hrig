@@ -1,4 +1,5 @@
 "use strict";
+const vm = require("node:vm");
 // Project text search: the pure matcher, the regular expression pre-check and
 // the request normalizer, shared by the main process and the tests. No
 // file system, no process, no Electron: the walk itself lives in features.cjs.
@@ -19,6 +20,7 @@ const LIMITS = Object.freeze({
   MAX_REPEAT: 1000,
   MAX_GLOBS: 20,
   MAX_GLOB: 200,
+  FILE_MS: 2000,
 });
 
 const OPTION_FLAGS = ["regex", "wholeWord"];
@@ -201,7 +203,55 @@ function inspectPattern(pattern, portable = false) {
 }
 
 /**
- * Compiles the search text into {test(line), risky, literal}. With both
+ * The regular expression scan of one file: the indexes of the first matching
+ * lines. It is self-contained so its source can run in a fresh vm context,
+ * where a time limit can stop a runaway match (see scanBounded).
+ */
+function findLines(text, source, flags, cap, maxHits) {
+  const re = new RegExp(source, flags);
+  const lines = text.split(/\r?\n/);
+  const hits = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (re.test(line.length > cap ? line.slice(0, cap) : line)) {
+      hits.push(i);
+      if (hits.length >= maxHits) break;
+    }
+  }
+  return hits;
+}
+
+/**
+ * Returns scan(text, maxHits, timeoutMs) for a pattern: findLines run in a
+ * private vm context with a wall-clock limit. It answers the line indexes, or
+ * null when the limit stopped a runaway match. The context holds nothing but
+ * the five values assigned for the call.
+ */
+function scanBounded(source, flags) {
+  const context = vm.createContext({});
+  const script = new vm.Script(
+    `(${findLines.toString()})(text, source, flags, cap, maxHits)`,
+  );
+  return (text, maxHits, timeoutMs) => {
+    context.text = text;
+    context.source = source;
+    context.flags = flags;
+    context.cap = LIMITS.MAX_LINE;
+    context.maxHits = maxHits;
+    try {
+      const options = Number.isFinite(timeoutMs)
+        ? { timeout: Math.max(1, Math.ceil(timeoutMs)) }
+        : {};
+      return Array.from(script.runInContext(context, options));
+    } catch (e) {
+      if (e && e.code === "ERR_SCRIPT_EXECUTION_TIMEOUT") return null;
+      throw e;
+    }
+  };
+}
+
+/**
+ * Compiles the search text into {test(line), scan, risky, literal}. With both
  * options off it is exactly the original literal, case-insensitive substring
  * test. Regular expression and whole word searches use a Unicode, case-
  * insensitive pattern and test at most the first 1,000 characters of a line;
@@ -226,6 +276,7 @@ function compileQuery({
       test: (line) => line.toLowerCase().includes(needle),
       risky: false,
       literal: true,
+      scan: null,
     };
   }
   let source;
@@ -249,6 +300,7 @@ function compileQuery({
     test: (line) => re.test(line.length > cap ? line.slice(0, cap) : line),
     risky,
     literal: false,
+    scan: risky ? scanBounded(source, "iu") : null,
     source,
     flags: "iu",
   };
@@ -439,7 +491,11 @@ function compileGlobs(includeText = "", excludeText = "") {
 /** A wall-clock budget over an injected clock; a budget of Infinity never expires. */
 function createBudget(now, ms) {
   const start = now();
-  return { expired: () => ms !== Infinity && now() - start >= ms };
+  return {
+    expired: () => ms !== Infinity && now() - start >= ms,
+    remaining: () =>
+      ms === Infinity ? Infinity : Math.max(0, ms - (now() - start)),
+  };
 }
 
 /**
@@ -455,6 +511,7 @@ function prepare(request, remote = false, hooks = {}) {
       options: null,
       test: compileQuery({ query: request.query }).test,
       allows: () => true,
+      scan: null,
       risky: false,
       budgetMs: Infinity,
     };
@@ -484,6 +541,7 @@ function prepare(request, remote = false, hooks = {}) {
     },
     test: compiled.test,
     allows: globs.allow,
+    scan: compiled.scan,
     risky: compiled.risky,
     budgetMs,
   };
@@ -493,6 +551,7 @@ module.exports = {
   LIMITS,
   escapeRegExp,
   inspectPattern,
+  findLines,
   compileQuery,
   normalizeSearchOptions,
   splitGlobs,
