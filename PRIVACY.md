@@ -11,7 +11,7 @@ Settings, selected connection details, workspace layouts, drafts/recovery copies
 
 ### Remembered session list (optional)
 
-If you turn on "Remember the last session list" (off by default), HRig stores a copy of the last verified OpenRig session list for each connection (up to ten) in an owner-only file named `inventory-cache.json` in HRig's application data folder: rig, pod, session and model names, runtimes, status and activity text, work counts and last-activity times. Error text is not stored. Entries older than seven days are ignored. HRig shows the copy only as a last known snapshot with its original age and keeps session actions disabled until a live check succeeds. Turning the setting off deletes the file. It is not uploaded anywhere, and uninstalling HRig does not remove it.
+If you turn on "Remember the last session list" (off by default), HRig stores a copy of the last verified OpenRig session list for each connection (up to ten) in a file named `inventory-cache.json` in HRig's application data folder: rig, pod, session and model names, runtimes, status and activity text, work counts and last-activity times. Error text is not stored. Entries older than seven days are ignored. HRig shows the copy only as a last known snapshot with its original age and keeps session actions disabled until a live check succeeds. The file is created readable only by your account on macOS and Linux; on Windows it inherits the permissions of your user profile folder. Turning the setting off deletes the file. It is not uploaded anywhere, and uninstalling HRig does not remove it.
 
 ## Connections and agents
 

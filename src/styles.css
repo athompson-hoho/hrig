@@ -4606,3 +4606,8 @@ button:hover {
 .file-preview-text { margin: 0; padding: 12px 16px; flex: 1; overflow: auto; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; white-space: pre; user-select: text; }
 .activity-log-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 10px; }
 .activity-log-controls .subtle { white-space: normal; }
+.statusbar .status-connection { position: relative; height: 100%; display: flex; align-items: stretch; padding: 0; gap: 0; }
+.statusbar .status-connection-button { cursor: pointer; }
+.statusbar .status-connection-button:hover, .statusbar .status-connection-button:focus-visible { filter: brightness(1.15); }
+.statusbar .status-connection-menu { top: auto; bottom: calc(100% + 4px); left: 0; min-width: 255px; max-height: 50vh; overflow: auto; font-size: 11px; }
+.statusbar .status-connection-menu > button { font-size: 11px; }

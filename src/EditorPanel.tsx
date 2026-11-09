@@ -172,8 +172,8 @@ export default function EditorPanel({
   const [error, setError] = useEditorState(generation, "");
   const [saving, setSaving] = useEditorState(generation, false);
   const [dirty, setDirty] = useEditorState(generation, false);
-  const [mdPreview, setMdPreview] = useState(false);
-  const [inspected, setInspected] = useState<FileInspection | null>(null);
+  const [mdPreview, setMdPreview] = useEditorState(generation, false);
+  const [inspected, setInspected] = useEditorState<FileInspection | null>(generation, null);
   const [externalState, setExternalState] = useEditorState<{
     content: string;
     revision: string;

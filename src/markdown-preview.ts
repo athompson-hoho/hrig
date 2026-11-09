@@ -20,6 +20,8 @@ export type Block =
   | { t: "hr" };
 
 export const MAX_PREVIEW_CHARS = 200000;
+/** Longer single paragraphs are shown as plain text (no inline formatting). */
+export const MAX_INLINE_CHARS = 20000;
 const MAX_DEPTH = 8;
 
 const SAFE_HREF = /^(https?:\/\/|mailto:)/i;
@@ -31,12 +33,14 @@ function pushText(out: Inline[], text: string) {
   else out.push({ t: "text", text });
 }
 
+// Every lazy span is bounded (400 chars) so an unclosed opener can never scan the
+// rest of a paragraph: inline work stays linear in the input size.
 const INLINE =
-  /\\([\\`*_{}\[\]()#+\-.!|>~<])|(`+)([\s\S]*?[^`])\2(?!`)|(\*\*|__)(?=\S)([\s\S]*?\S)\4|(\*|_)(?=\S)([\s\S]*?\S)\6|(!?)\[([^\]]*)\]\(\s*([^)\s]*)(?:\s+"[^"]*")?\s*\)|<((?:https?:\/\/|mailto:)[^>\s]+)>/g;
+  /\\([\\`*_{}\[\]()#+\-.!|>~<])|(`+)([\s\S]{0,400}?[^`])\2(?!`)|(\*\*|__)(?=\S)([\s\S]{0,400}?\S)\4|(\*|_)(?=\S)([\s\S]{0,400}?\S)\6|(!?)\[([^\]]*)\]\(\s*([^)\s]*)(?:\s+"[^"]*")?\s*\)|<((?:https?:\/\/|mailto:)[^>\s]+)>/g;
 
 export function parseInline(source: string, depth = 0): Inline[] {
   const out: Inline[] = [];
-  if (depth > MAX_DEPTH) {
+  if (depth > MAX_DEPTH || source.length > MAX_INLINE_CHARS) {
     pushText(out, source);
     return out;
   }

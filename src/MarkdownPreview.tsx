@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { parseMarkdown, type Block, type Inline } from "./markdown-preview";
 
 // Renders the parsed Markdown tree as React elements. No HTML is ever injected,
@@ -69,7 +69,7 @@ function blocks(list: Block[], base = ""): ReactNode[] {
 }
 
 export default function MarkdownPreview({ source }: { source: string }) {
-  const model = parseMarkdown(source);
+  const model = useMemo(() => parseMarkdown(source), [source]);
   return (
     <div className="markdown-preview" role="region" aria-label="Markdown preview" tabIndex={0}>
       {model.blocks.length ? blocks(model.blocks) : <p className="subtle">This file is empty.</p>}

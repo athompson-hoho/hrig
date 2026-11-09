@@ -238,7 +238,7 @@ export default function App() {
   const [projectOpening, setProjectOpening] = useState(false);
   const [recentPanels, setRecentPanels] = useState<string[]>([]);
   const modelOwners = useRef(new WeakMap<Model, string>());
-  const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
+  const [menu, setMenu] = useState<"layout" | "connection" | "statusConnection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
   const cacheInventoryPref = useRef(false);
@@ -2519,11 +2519,41 @@ export default function App() {
           <footer className="statusbar">
             <AccountStatus connection={connection} />
             <div>
-              <span className="status-brand">
-                <Network size={11} />
-                {connection.kind === "local"
-                  ? "Local workspace"
-                  : `${connection.kind.toUpperCase()}: ${connection.name}`}
+              <span className="status-connection">
+                <button
+                  type="button"
+                  className="status-brand status-connection-button"
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "statusConnection"}
+                  title={`Connection: ${connection.name}. Choose another configured connection.`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenu(menu === "statusConnection" ? null : "statusConnection");
+                  }}
+                >
+                  <Network size={11} />
+                  {connection.kind === "local"
+                    ? "Local workspace"
+                    : `${connection.kind.toUpperCase()}: ${connection.name}`}
+                  <ChevronDown size={10} aria-hidden="true" />
+                </button>
+                {menu === "statusConnection" && (
+                  <div className="dropdown status-connection-menu" role="menu" aria-label="Connections">
+                    {state.connections.map((c) => (
+                      <button
+                        key={c.id}
+                        role="menuitemradio"
+                        aria-checked={c.id === connection.id}
+                        onClick={() => chooseConnection(c.id)}
+                      >
+                        <Network size={14} />
+                        <span>{c.name}</span>
+                        <small>{c.kind.toUpperCase()}</small>
+                        {c.id === connection.id && <Check size={13} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </span>
               <GitInfoStatus connection={connection} root={root} revision={fileRevision}
                 onOpen={() => {

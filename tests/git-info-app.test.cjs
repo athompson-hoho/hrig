@@ -37,7 +37,9 @@ function mountGitInfoApp(options = {}) {
           // Inert stand-ins for the rig-health status element (not under test here).
           RigHealthStatus: () => null, attentionScope: () => ({ inventory: null, ready: false }),
           inventory: null, inventoryHealth: { current: { key: '', verified: false } },
-          inventoryError: '', state: { activeRig: '' },
+          inventoryError: '', state: { activeRig: '', connections: [] },
+          // Inert stand-ins for the status-bar connection switcher.
+          menu: null, setMenu() {}, chooseConnection() {}, ChevronDown: 'chevron-icon',
           setSection: value => events.push(['section', value]),
           setSidebar: value => events.push(['sidebar', value]),
           addPanel: (...args) => events.push(['panel', ...args]),

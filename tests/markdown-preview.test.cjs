@@ -101,3 +101,16 @@ test('actual MarkdownPreview renders elements only: links inert, images unloaded
   const text = view.text(nodes.find(n => n.props?.className === 'markdown-preview'));
   assert.match(text, /<script>1<\/script>/); assert.match(text, /\[image: p\]/); assert.match(text, /\(https:\/\/a\.dev\)/);
 });
+
+test('pathological inline input stays fast (unclosed openers are bounded)', () => {
+  const t = () => Date.now();
+  for (const unit of ['**a ', '__a ', '*a ', '`a ', '[a](b ', '![a](b ', '_ a ']) {
+    const src = unit.repeat(Math.floor(200000 / unit.length));
+    const t0 = t();
+    parseMarkdown(src);
+    assert.ok(t() - t0 < 1500, `${JSON.stringify(unit)} took ${t() - t0} ms`);
+  }
+  // Short paragraphs still format; very long single paragraphs fall back to plain text.
+  assert.equal(parseInline('a **b** c')[1].t, 'strong');
+  assert.deepEqual(parseInline('**x** '.repeat(5000)).map(n => n.t), ['text']);
+});
