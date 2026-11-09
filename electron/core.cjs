@@ -275,7 +275,6 @@ async function readGitInfo(root) {
     if (inside.code === 128 && /^fatal: not a git repository(?:\s|\()/i.test(inside.stderr.trim())) return { state: "not-repository", root };
     return fail();
   }
-  if (text(inside) === "false") return { state: "not-repository", root };
   if (text(inside) !== "true") return fail();
   const resolve = ref => run(["rev-parse", "--verify", "--quiet", "--end-of-options", `${ref}^{commit}`]);
   const identity = async () => {
@@ -391,7 +390,6 @@ elif op=='gitInfo':
  if inside.returncode!=0:
   if inside.returncode==128 and re.match(rb'^fatal: not a git repository(?:\\s|\\()',inside.stderr.strip(),re.I): print(json.dumps(dict(state='not-repository',root=root)));sys.exit(0)
   fail()
- if text(inside)=='false': print(json.dumps(dict(state='not-repository',root=root)));sys.exit(0)
  if text(inside)!='true': fail()
  before=identity()
  out=dict(state='repository',root=root,**before)

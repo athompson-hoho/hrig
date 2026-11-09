@@ -20,7 +20,7 @@ function mountGitInfoApp(options = {}) {
   const events = [], requests = [], pendingReads = [];
   const connection = options.connection || { id: 'synthetic', kind: 'local', name: 'Synthetic', root: '/synthetic-alias' };
   const view = mountComponent(null, null, {
-    connection, root: '/synthetic-alias', fileRevision: 0, visible: options.visible ?? true,
+    connection, root: options.root || '/synthetic-alias', fileRevision: 0, visible: options.visible ?? true,
   }, {
     api: { file(owner, request) {
       requests.push({ owner, request });
@@ -50,6 +50,52 @@ function mountGitInfoApp(options = {}) {
     async settle() { await settle(); await Promise.all(pendingReads); await settle(); },
     sourceButton() { return view.nodes().find(n => n.type === 'button' &&
       (view.text(n).includes('Source control') || n.props['aria-label']?.startsWith('Open source control.'))); },
+  });
+}
+
+if (require.main === module) {
+  const { test } = require('node:test');
+  test('actual App selected workspace and Refresh/save revisions own footer independently of saved panel', async t => {
+    const app = ts.createSourceFile('src/App.tsx', fs.readFileSync('src/App.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    function nodes(predicate) {
+      const found = []; const visit = n => { if (predicate(n)) found.push(n); ts.forEachChild(n, visit); }; visit(app); return found;
+    }
+    function evaluate(node, scope) {
+      const context = vm.createContext(scope);
+      vm.runInContext(ts.transpileModule(`result = (${node.getText(app)});`, {
+        compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+      }).outputText, context); return context.result;
+    }
+    const declaration = name => { const found = nodes(n => ts.isVariableDeclaration(n) && n.name.getText(app) === name); assert.equal(found.length, 1); return found[0].initializer; };
+    const selected = { id: 'selected', kind: 'ssh', name: 'Selected', host: 'synthetic.invalid', root: '/selected/default' };
+    const saved = { id: 'saved', kind: 'local', root: '/saved' };
+    const state = { connections: [saved, selected], activeConnection: 'selected', roots: { selected: '/selected/exact' } };
+    const scope = { state, local: saved, config: { connection: saved, root: saved.root }, activeFile: { connection: saved, root: saved.root } };
+    scope.connection = evaluate(declaration('connection'), scope);
+    scope.root = evaluate(declaration('root'), scope);
+    assert.equal(scope.connection, selected); assert.equal(scope.root, '/selected/exact');
+    const result = { state: 'repository', root: '/canonical', head: 'attached', branch: 'selected-topic', oid: 'a'.repeat(40), comparison: 'none' };
+    const v = mountGitInfoApp({ connection: scope.connection, root: scope.root, file: () => result });
+    t.after(() => v.unmount()); await v.settle(); assert.equal(v.text(v.sourceButton()), 'selected-topic · no upstream');
+    assert.equal(v.requests[0].owner, selected); assert.equal(v.requests[0].request.root, '/selected/exact');
+    let revision = 0, refresh = 0;
+    const callbacks = { setRefresh: fn => { refresh = fn(refresh); }, setFileRevision: fn => { revision = fn(revision); } };
+    evaluate(declaration('refreshAll'), callbacks)(); assert.equal(refresh, 1); assert.equal(revision, 1);
+    v.update({ fileRevision: revision }); assert.equal(v.text(v.sourceButton()), 'Checking Git…'); await v.settle();
+    // Execute the actual successful Save All function tail, including its revision update.
+    const saveDispatch = nodes(n => ts.isExpressionStatement(n) && n.getText(app).startsWith('window.dispatchEvent(new Event("hrig:buffers-saved"))'));
+    assert.equal(saveDispatch.length, 1);
+    const statements = Array.from(saveDispatch[0].parent.statements);
+    const next = statements[statements.indexOf(saveDispatch[0]) + 1];
+    const context = vm.createContext(callbacks);
+    vm.runInContext(ts.transpileModule(next.getText(app), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+    assert.equal(revision, 2); v.update({ fileRevision: revision }); await v.settle();
+    assert.equal(v.requests.length, 3); assert.equal(v.text(v.sourceButton()), 'selected-topic · no upstream');
+    v.update({ visible: false }); await v.settle(); assert.equal(v.sourceButton(), undefined);
+    v.update({ fileRevision: 3 }); await v.settle(); assert.equal(v.requests.length, 3);
+    v.update({ visible: true }); await v.settle(); assert.equal(v.requests.length, 4);
+    v.event(v.sourceButton(), 'onClick'); assert.deepEqual(v.events, [['section', 'changes'], ['sidebar', true]]);
+    assert.equal(scope.config.connection, saved); assert.equal(scope.activeFile.connection, saved);
   });
 }
 
