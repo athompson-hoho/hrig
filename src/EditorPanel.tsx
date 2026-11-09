@@ -22,6 +22,7 @@ import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { breadcrumbs } from "./breadcrumb";
 import { motionReduced } from "./reduced-motion";
+import { shouldFormatOnSave } from "./format-on-save";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
 import {
@@ -260,7 +261,42 @@ export default function EditorPanel({
       editorRef.current?.setPosition({ lineNumber: config.line, column: 1 });
     }
   }, [config.line]);
-  const save = async () => {
+  const formatting = useRef(false);
+  // Opt-in (editor.formatOnSave): runs only on an explicit Save, with the
+  // editor's built-in formatter; if it fails the file is saved as written.
+  // Returns null (so Save stays synchronous) when formatting does not apply.
+  const formatBeforeSave = (): Promise<void> | null => {
+    if (!preferences["editor.formatOnSave"] || diff) return null;
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model || diff || !ownsBuffer()) return null;
+    if (!shouldFormatOnSave({
+      enabled: preferences["editor.formatOnSave"],
+      languageId: model.getLanguageId(),
+      chars: model.getValueLength(),
+      readOnly: editor.getOption(monaco.editor.EditorOption.readOnly),
+    })) return null;
+    const action = editor.getAction("editor.action.formatDocument");
+    if (!action?.isSupported()) return null;
+    formatting.current = true;
+    const before = model.getValue();
+    return Promise.resolve(action.run())
+      .then(() => {
+        if (model.getValue() !== before) setNotice("Formatted on save");
+      })
+      .catch(() => {
+        setNotice("Could not format this file; it was saved as written.");
+      })
+      .finally(() => {
+        formatting.current = false;
+      });
+  };
+  const save = () => {
+    if (formatting.current) return;
+    const pending = formatBeforeSave();
+    return pending ? pending.then(saveNow) : saveNow();
+  };
+  const saveNow = async () => {
     const buffer = buffers.get(id);
     if (!buffer || !ownsBuffer() || generation.busy) return;
     generation.busy = true;

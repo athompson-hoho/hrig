@@ -21,6 +21,7 @@ export const defaults = {
   "editor.diffSideBySide": true,
   "editor.largeFileWarnKb": 1024,
   "editor.breadcrumbs": false,
+  "editor.formatOnSave": false,
   "editor.autoReload": true,
   "terminal.fontSize": 13,
   "terminal.fontFamily":
@@ -252,6 +253,13 @@ export const schema: Setting[] = [
     label: "Side-by-side diffs",
     description:
       "Compare versions in two columns. Turn off for an inline diff.",
+  },
+  {
+    key: "editor.formatOnSave",
+    category: "Editor",
+    label: "Format on save",
+    description:
+      "When you press Save, first format JSON, CSS/SCSS/Less, HTML, JavaScript and TypeScript files with the editor's built-in formatter. Off by default. Other file types and files over 500,000 characters are saved as written, and no external tools are run.",
   },
   {
     key: "editor.breadcrumbs",
