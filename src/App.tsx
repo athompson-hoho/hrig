@@ -162,7 +162,13 @@ import { isPanelCycleKey } from "./shortcuts";
 import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
 import PanelContextMenu, { type PanelMenu } from "./PanelContextMenu";
 import { dirtyPrompt, panelKind } from "./panel-close-targets";
-import { applyCustomTitle, type TitlePatch } from "./panel-title";
+import {
+  applyCustomTitle,
+  canRename,
+  isRenamed,
+  resetTitle,
+  type TitlePatch,
+} from "./panel-title";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1454,6 +1460,15 @@ export default function App() {
       clearBuffer(id);
       rememberClosed(id);
     }
+    // A rename typed on the tab itself (double-click or F2) follows the same title rules as the menu for a terminal; other panels keep the built-in rename.
+    if (action.type === Actions.RENAME_TAB) {
+      const tab = titledTab(action.data.node);
+      if (!canRename(tab)) return action;
+      const patch = applyCustomTitle(tab, action.data.text);
+      return patch
+        ? Actions.updateNodeAttributes(action.data.node, patch)
+        : undefined;
+    }
     return action;
   };
   const markDirty = useCallback((id: string, dirty: boolean) => {
@@ -1493,6 +1508,8 @@ export default function App() {
   };
   const renamePanel = (id: string, text: string) =>
     retitleTab(id, applyCustomTitle(titledTab(id), text));
+  const resetPanelName = (id: string) =>
+    retitleTab(id, resetTitle(titledTab(id)));
   const savePending = async () => {
     if (!pending) return;
     setActionError("");
@@ -3606,9 +3623,11 @@ export default function App() {
         )}
         <PanelContextMenu
           menu={tabMenu}
+          renamed={!!tabMenu && isRenamed(titledTab(tabMenu.id))}
           onDismiss={() => setTabMenu(null)}
           onClosePanels={closePanels}
           onRenamePanel={renamePanel}
+          onResetPanel={resetPanelName}
         />
         {pending && (
           <Modal

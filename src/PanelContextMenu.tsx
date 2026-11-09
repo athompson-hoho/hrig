@@ -25,20 +25,24 @@ const ITEMS: { scope: CloseScope; label: string }[] = [
  * The right-click menu of a panel tab. It only chooses which panels to close:
  * onClosePanels receives the ids and closes them through the app's own close
  * and unsaved-edits flow, after a confirmation when more than one panel or
- * any terminal would close. For a terminal panel it also offers Rename: the
- * typed text goes to onRenamePanel as it is and the app cleans it, so a title
- * is only ever a label.
+ * any terminal would close. For a terminal panel it also offers Rename and,
+ * once renamed, Reset name: the typed text goes to onRenamePanel as it is and
+ * the app cleans it, so a title is only ever a label.
  */
 export default function PanelContextMenu({
   menu,
+  renamed = false,
   onDismiss,
   onClosePanels,
   onRenamePanel,
+  onResetPanel,
 }: {
   menu: PanelMenu | null;
+  renamed?: boolean;
   onDismiss: () => void;
   onClosePanels: (ids: string[]) => void;
   onRenamePanel: (id: string, text: string) => void;
+  onResetPanel: (id: string) => void;
 }) {
   const [ask, setAsk] = useState<ClosePlan | null>(null);
   const [rename, setRename] = useState<{ id: string; text: string } | null>(
@@ -72,6 +76,11 @@ export default function PanelContextMenu({
     onDismiss();
     setRename({ id: menu.id, text: clicked ? clicked.name : "" });
   };
+  const resetName = () => {
+    if (!menu) return;
+    onDismiss();
+    onResetPanel(menu.id);
+  };
   const saveRename = () => {
     const done = rename;
     setRename(null);
@@ -86,7 +95,10 @@ export default function PanelContextMenu({
           aria-label="Panel"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 130 - (titled ? 44 : 0)),
+            top: Math.min(
+              menu.y,
+              window.innerHeight - 130 - (titled ? (renamed ? 77 : 44) : 0),
+            ),
           }}
           onMouseDown={(event) => event.stopPropagation()}
         >
@@ -106,6 +118,11 @@ export default function PanelContextMenu({
           {titled && (
             <button role="menuitem" onClick={startRename}>
               <span>Rename...</span>
+            </button>
+          )}
+          {titled && renamed && (
+            <button role="menuitem" onClick={resetName}>
+              <span>Reset name</span>
             </button>
           )}
         </div>

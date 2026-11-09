@@ -933,3 +933,381 @@ test("panel-title rules: normalizeTitle cleans, cuts and refuses as specified, a
   assert.equal({}.polluted, undefined);
   assert.equal(Object.keys(proto).includes("__proto__"), false);
 });
+
+// ---------------------------------------------------------------------------
+// Reset name, the title typed on the tab itself, and restoring a damaged workspace.
+
+function resetWorld(model) {
+  const doActions = [];
+  const wrapped = {
+    getNodeById: (id) => model.getNodeById(id),
+    toJson: () => model.toJson(),
+    doAction: (action) => {
+      doActions.push(action);
+      return model.doAction(action);
+    },
+  };
+  const text = cut(
+    read("src/App.tsx"),
+    "const titledTab = (id: string) => {",
+    "const savePending = async () => {",
+  );
+  const out = compile(
+    text,
+    {
+      model: wrapped,
+      TabNode,
+      Actions,
+      applyCustomTitle: real.applyCustomTitle,
+      resetTitle: real.resetTitle,
+      modelChanged: () => {},
+    },
+    "titledTab, renamePanel, resetPanelName",
+  );
+  return { ...out, doActions };
+}
+// The real onAction of App.tsx over the real model; every close, history and bridge call is recorded.
+function actionWorld(model) {
+  const log = [];
+  const text = cut(
+    read("src/App.tsx"),
+    "const onAction = (action: Action) => {",
+    "const markDirty = useCallback(",
+  );
+  const out = compile(
+    text,
+    {
+      remember: () => log.push("remember"),
+      history: { current: { past: [], future: [] } },
+      dirtyTabs: { current: new Set() },
+      setPending: () => log.push("pending"),
+      setActionError: () => log.push("error"),
+      closeTab: () => log.push("closeTab"),
+      clearBuffer: () => log.push("clearBuffer"),
+      rememberClosed: () => log.push("rememberClosed"),
+      window: { hrig: { closeTerminal: () => log.push("closeTerminal") } },
+      model,
+      TabNode,
+      Actions,
+      titledTab: resetWorld(model).titledTab,
+      canRename: real.canRename,
+      applyCustomTitle: real.applyCustomTitle,
+    },
+    "onAction",
+  );
+  return { onAction: out.onAction, log };
+}
+const isHiddenCode = (code) =>
+  code < 32 ||
+  (code >= 127 && code <= 159) ||
+  (code >= 0x200b && code <= 0x200f) ||
+  (code >= 0x202a && code <= 0x202e) ||
+  (code >= 0x2066 && code <= 0x2069);
+const jsonTabs = (json) => {
+  const found = [];
+  const walk = (value) => {
+    if (!value || typeof value !== "object") return;
+    if (value.type === "tab") found.push(value);
+    else Object.values(value).forEach(walk);
+  };
+  walk(json);
+  return found;
+};
+
+test("panel-title reset: Reset name shows only on a renamed terminal and brings the original back exactly, also after a restart, for a title typed on the tab too, and layouts, presets, templates and history keep titles and original together", () => {
+  const panels = [
+    panelInfo("seat:local:s1", "reviewer-1", "seat"),
+    panelInfo("sh1", "Build", "shell"),
+    panelInfo("file:a", "a.txt", "file"),
+  ];
+  // The menu.
+  const menu = menuWorld({ x: 400, y: 300, id: "sh1", panels });
+  assert.deepEqual(menu.items(), [
+    "Close",
+    "Close others",
+    "Close to the right",
+    "Rename...",
+  ]);
+  menu.props.renamed = true;
+  menu.render();
+  assert.deepEqual(menu.items(), [
+    "Close",
+    "Close others",
+    "Close to the right",
+    "Rename...",
+    "Reset name",
+  ]);
+  const low = menuWorld({ x: 990, y: 790, id: "sh1", panels });
+  low.props.renamed = true;
+  low.render();
+  assert.deepEqual(low.menuNode().props.style, { left: 820, top: 593 });
+  menu.click("Reset name");
+  assert.equal(menu.calls.dismissed, 1);
+  assert.deepEqual(menu.calls.reset, ["sh1"]);
+  assert.equal(menu.modal(), undefined, "Reset opens no dialog");
+  assert.deepEqual(menu.calls.renamed, []);
+  const file = menuWorld({ x: 400, y: 300, id: "file:a", panels });
+  file.props.renamed = true;
+  file.render();
+  assert.deepEqual(file.items(), [
+    "Close",
+    "Close others",
+    "Close to the right",
+  ]);
+  for (const w of [menu, low, file]) w.done();
+
+  // Reset on the real model gives back the very same layout.
+  const model = Model.fromJson(workspaceJson());
+  const original = JSON.stringify(model.toJson());
+  const world = resetWorld(model);
+  world.renamePanel("sh1", "Build");
+  assert.notEqual(JSON.stringify(model.toJson()), original);
+  world.resetPanelName("sh1");
+  assert.equal(JSON.stringify(model.toJson()), original, "byte for byte");
+  const dispatched = world.doActions.length;
+  for (const id of ["sh1", "sh2", "file:a", "g1", "missing"])
+    world.resetPanelName(id);
+  assert.equal(
+    world.doActions.length,
+    dispatched,
+    "nothing to reset, nothing done",
+  );
+
+  // After a restart the original is still known.
+  world.renamePanel("sh1", "Build");
+  world.renamePanel("seat:local:s1", "Lead");
+  const before = JSON.parse(original).layout.children[0].children;
+  const restored = real.restoreModel(
+    JSON.parse(JSON.stringify(model.toJson())),
+  );
+  assert.equal(restored.getNodeById("sh1").getName(), "Build");
+  const again = resetWorld(restored);
+  again.resetPanelName("sh1");
+  again.resetPanelName("seat:local:s1");
+  assert.deepEqual(tabJson(restored, "sh1"), before[1]);
+  assert.deepEqual(tabJson(restored, "seat:local:s1"), before[0]);
+
+  // A title typed on the tab itself (double-click or F2) is the same rename.
+  const tabModel = Model.fromJson(workspaceJson());
+  const typed = actionWorld(tabModel);
+  const act = typed.onAction(
+    Actions.renameTab("sh1", "  Deploy\n now " + ch(7)),
+  );
+  assert.equal(act.type, Actions.UPDATE_NODE_ATTRIBUTES);
+  tabModel.doAction(act);
+  assert.equal(tabJson(tabModel, "sh1").name, "Deploy now");
+  assert.equal(tabJson(tabModel, "sh1").config.customTitle, "Deploy now");
+  assert.equal(tabJson(tabModel, "sh1").config.defaultTitle, "Shell");
+  assert.equal(
+    typed.onAction(Actions.renameTab("sh1", "Deploy now")),
+    undefined,
+    "the same title again changes nothing",
+  );
+  const undone = typed.onAction(Actions.renameTab("sh1", ""));
+  tabModel.doAction(undone);
+  assert.deepEqual(
+    tabJson(tabModel, "sh1"),
+    before[1],
+    "an empty title resets",
+  );
+  assert.equal(
+    typed.onAction(Actions.renameTab("sh2", "")),
+    undefined,
+    "an empty title on an untouched tab is cancelled",
+  );
+  assert.equal(typed.onAction(Actions.renameTab("sh2", "Shell")), undefined);
+  // Other panels keep the built-in rename, and every other action passes through.
+  for (const action of [
+    Actions.renameTab("file:a", "renamed file"),
+    Actions.renameTab("missing", "x"),
+    Actions.selectTab("sh1"),
+  ])
+    assert.equal(typed.onAction(action), action);
+  assert.deepEqual(typed.log, [], "no close, history or bridge call");
+  // The library really sends that action from the tab, and applies what onAction returns.
+  const dist = tight(
+    fs.readFileSync(
+      path.join(root, "node_modules/flexlayout-react/dist/index.js"),
+      "utf8",
+    ),
+  );
+  assert.ok(
+    dist.includes(
+      "controller.doAction(Actions.renameTab(tabNode.getId(), event.target.value));",
+    ),
+  );
+  assert.ok(
+    dist.includes(
+      "const outcome = this._props.onAction(action); if (outcome !== void 0) return this._props.model.doAction(outcome);",
+    ),
+  );
+  assert.equal(real.globalLayout.tabEnableRename, true);
+
+  // Titles travel with the tab: presets, Open all, templates and history snapshots.
+  const m = Model.fromJson(workspaceJson());
+  const w = resetWorld(m);
+  const snapshotBefore = m.toJson();
+  w.renamePanel("sh1", "Build");
+  w.renamePanel("seat:local:s1", "Lead");
+  const snapshotAfter = m.toJson();
+  const tabs = jsonTabs(m.toJson());
+  for (const preset of ["Team", "Focus", "Review"]) {
+    const arranged = real.arrangement(tabs, preset);
+    assert.deepEqual(tabJson(arranged, "sh1"), tabJson(m, "sh1"), preset);
+    assert.deepEqual(
+      tabJson(arranged, "seat:local:s1"),
+      tabJson(m, "seat:local:s1"),
+      preset,
+    );
+  }
+  assert.equal(
+    Model.fromJson(snapshotBefore, m).getNodeById("sh1").getName(),
+    "Shell",
+  );
+  assert.deepEqual(
+    tabJson(Model.fromJson(snapshotBefore), "sh1"),
+    before[1],
+    "an older snapshot has the old name and no keys",
+  );
+  assert.equal(
+    tabJson(Model.fromJson(snapshotAfter), "sh1").config.customTitle,
+    "Build",
+    "a newer snapshot has both",
+  );
+  const template = real.roleSnapshot(m.toJson());
+  const made = jsonTabs(
+    real.instantiateRoles(template, CONNECTION, "/p", [SEAT]),
+  );
+  const madeSeat = made.find((t) => t.id === "seat:local:s1");
+  assert.equal(
+    madeSeat.name,
+    "reviewer-1",
+    "a seat panel takes its seat name from the template",
+  );
+  assert.equal("customTitle" in madeSeat.config, false);
+  const madeShell = made.find((t) => t.name === "Build");
+  assert.equal(madeShell.component, "terminal");
+  assert.equal(
+    "customTitle" in madeShell.config,
+    false,
+    "a template keeps the text, not the reset",
+  );
+  assert.equal(lib.isRenamed(madeShell), false);
+  assert.equal(
+    lib.applyCustomTitle(madeShell, "Next").config.defaultTitle,
+    "Build",
+  );
+});
+
+test("panel-title restore: a damaged or hostile stored workspace opens with clean titles, a clean one opens exactly as before, and only an unreadable one is refused", () => {
+  const stored = workspaceJson();
+  const [seatTab, shellTabJson, fileTab] = stored.layout.children[0].children;
+  seatTab.name = "evil" + ch(0x202e, 0x2066) + "name" + "z".repeat(5000);
+  seatTab.config.customTitle = "line1\nline2" + ch(7);
+  seatTab.config.defaultTitle = "o".repeat(900);
+  shellTabJson.name = 42;
+  shellTabJson.config.customTitle = { a: 1 };
+  shellTabJson.config.defaultTitle = "stale";
+  fileTab.name = "f" + ch(0) + "ile" + ch(0x200b) + ".txt";
+  fileTab.config.customTitle = "x".repeat(100000);
+  stored.layout.children[1].children[0].name = "   ";
+  deepFreeze(stored);
+  const model = real.restoreModel(stored);
+  const seat = tabJson(model, "seat:local:s1");
+  assert.equal(seat.name, "line1 line2");
+  assert.equal(seat.config.customTitle, "line1 line2");
+  assert.equal(seat.config.defaultTitle, "o".repeat(200));
+  assert.deepEqual(seat.config.seat, SEAT, "the seat is untouched");
+  assert.equal(seat.config.terminalId, "seat:local:s1");
+  const shell = tabJson(model, "sh1");
+  assert.equal(shell.name, "Shell");
+  assert.equal(
+    "customTitle" in shell.config || "defaultTitle" in shell.config,
+    false,
+  );
+  const file = tabJson(model, "file:a");
+  assert.equal(file.name, "file.txt");
+  assert.equal("customTitle" in file.config, false);
+  assert.equal(tabJson(model, "sh2").name, "Shell");
+  // What is saved next is clean too.
+  const saved = JSON.stringify(model.toJson());
+  const saveTabs = jsonTabs(JSON.parse(saved));
+  assert.equal(saveTabs.length, 4);
+  for (const tab of saveTabs)
+    for (const text of [
+      tab.name,
+      tab.config.customTitle,
+      tab.config.defaultTitle,
+    ])
+      if (text !== undefined)
+        assert.ok(
+          Array.from(text).every((c) => !isHiddenCode(c.codePointAt(0))),
+          "no hidden character is saved: " + JSON.stringify(text),
+        );
+  assert.ok(saved.length < 20000, "no huge text is saved");
+  assert.equal(
+    JSON.stringify(real.restoreModel(JSON.parse(saved)).toJson()),
+    saved,
+    "a second restore changes nothing",
+  );
+
+  // A clean workspace opens exactly as the library would open it.
+  const clean = workspaceJson();
+  clean.layout.id = "root";
+  clean.layout.children[0].children[1].name = "Build";
+  clean.layout.children[0].children[1].config.customTitle = "Build";
+  clean.layout.children[0].children[1].config.defaultTitle = "Shell";
+  assert.deepEqual(
+    plain(real.restoreModel(plain(clean)).toJson()),
+    plain(
+      Model.fromJson({
+        ...plain(clean),
+        global: { ...real.globalLayout },
+      }).toJson(),
+    ),
+  );
+
+  // Only an unreadable layout is refused: it falls back to the welcome tab like any other.
+  const nest = (levels) => {
+    let node = {
+      type: "tabset",
+      children: [{ type: "tab", id: "t", name: "t", component: "editor" }],
+    };
+    for (let i = 0; i < levels; i++) node = { type: "row", children: [node] };
+    return { global: real.globalLayout, layout: node };
+  };
+  assert.equal(
+    real.restoreModel(nest(100)).getNodeById("welcome") !== undefined,
+    true,
+    "100 levels is refused",
+  );
+  const huge = workspaceJson();
+  huge.layout.children[0].children = Array.from({ length: 20001 }, (_, i) => ({
+    type: "tab",
+    id: "t" + i,
+    name: "t",
+    component: "editor",
+  }));
+  assert.ok(
+    real.restoreModel(huge).getNodeById("welcome"),
+    "20001 nodes is refused",
+  );
+  for (const junk of [
+    undefined,
+    null,
+    5,
+    "text",
+    true,
+    [],
+    {},
+    { layout: 5 },
+    { layout: { type: "row", children: "x" } },
+  ]) {
+    const out = real.restoreModel(junk);
+    assert.ok(
+      out.getNodeById,
+      "a model comes back for " + JSON.stringify(junk),
+    );
+  }
+  assert.ok(real.restoreModel(undefined).getNodeById("welcome"));
+});
