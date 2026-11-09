@@ -6,7 +6,7 @@ HRig is a desktop workspace for OpenRig. It does not operate a hosted project-st
 
 ## Local information
 
-Settings, selected connection details, workspace layouts, drafts/recovery copies, integration configuration, mobile pairing records and related local state are stored on the desktop computer. Drafts can contain unsaved source code and review/message text. Credential storage uses Electron's operating-system-backed encryption where the relevant integration supports it; CLI tools also maintain their own authentication stores. HRig's Windows uninstaller preserves application data, so uninstalling is not a credential or draft erasure operation. Use the applicable disconnect, device-revocation and saved-draft controls to remove those records.
+Settings, selected connection details, workspace layouts, per-file review checks, drafts/recovery copies, integration configuration, mobile pairing records and related local state are stored on the desktop computer. Drafts can contain unsaved source code and review/message text. Credential storage uses Electron's operating-system-backed encryption where the relevant integration supports it; CLI tools also maintain their own authentication stores. HRig's Windows uninstaller preserves application data, so uninstalling is not a credential or draft erasure operation. Use the applicable disconnect, device-revocation and saved-draft controls to remove those records.
 
 ## Connections and agents
 

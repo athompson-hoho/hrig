@@ -1092,3 +1092,304 @@ test("review-checks list: the progress line, the unreviewed-only view and Clear 
     },
   );
 });
+
+// ---- source wiring and docs ----
+function collapse(text) {
+  return text.replace(/\s+/g, " ");
+}
+function tight(text) {
+  return collapse(text)
+    .replace(/\( /g, "(")
+    .replace(/(?:, )? ?\)/g, ")");
+}
+function stripComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+}
+function count(text, needle) {
+  return text.split(needle).length - 1;
+}
+function has(text, needle) {
+  return text.includes(tight(needle));
+}
+const printable = (text) => !/[^\t\n -~]/.test(text);
+
+test("review-checks wiring: the module is pure, only the list, App and the state type know it, nothing is sent, written or exported, and the old selectors and message are intact", () => {
+  // The module: no import, no page, storage, clock or network, the exact exports, a doc comment above each.
+  const source = read("src/review-checks.ts");
+  const code = stripComments(source);
+  assert.ok(printable(source), "printable ASCII");
+  assert.equal(count(code, "import "), 0);
+  assert.equal(count(code, " from "), 0);
+  assert.ok(
+    !/\b(document|window|fetch|localStorage|sessionStorage|indexedDB|navigator|setTimeout|setInterval|Date|process|require|console|innerHTML)\b/.test(
+      code,
+    ),
+  );
+  const exported = [...code.matchAll(/^export (?:const|function|type) (\w+)/gm)]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(exported, [
+    "MAX_PATHS",
+    "MAX_PATH_CHARS",
+    "MAX_PROJECTS",
+    "MAX_RECHECK",
+    "MAX_REVISION_CHARS",
+    "ReviewChecks",
+    "ReviewState",
+    "isCheckable",
+    "isReviewed",
+    "normalizeReviewChecks",
+    "pruneReviewed",
+    "recheckPaths",
+    "reviewKey",
+    "reviewProgress",
+    "reviewState",
+    "toggleReviewed",
+    "usablePath",
+  ]);
+  const lines = source.split("\n");
+  lines.forEach((line, i) => {
+    if (line.startsWith("export "))
+      assert.ok(
+        lines[i - 1].startsWith("/** ") && lines[i - 1].endsWith(" */"),
+        "a doc comment above: " + line,
+      );
+  });
+
+  // Only the review list, App and the state type import it.
+  const users = fs
+    .readdirSync(path.join(root, "src"))
+    .filter((name) => /\.tsx?$/.test(name) && name !== "review-checks.ts")
+    .filter((name) => read("src/" + name).includes("./review-checks"))
+    .sort();
+  assert.deepEqual(users, ["App.tsx", "ReviewWorkspace.tsx", "types.ts"]);
+
+  // The state: one optional field next to the other saved lists, through the existing save path, normalized on load.
+  const types = tight(stripComments(read("src/types.ts")));
+  assert.equal(
+    count(types, 'reviewChecks?: import("./review-checks").ReviewChecks;'),
+    1,
+  );
+  assert.equal(count(types, 'hostTints?: import("./host-tint").HostTints;'), 1);
+  const app = tight(read("src/App.tsx"));
+  assert.equal(
+    count(app, 'import { normalizeReviewChecks } from "./review-checks";'),
+    1,
+  );
+  assert.ok(
+    has(
+      app,
+      "projectHistory: normalizeHistory(base.projectHistory), reviewChecks: normalizeReviewChecks(base.reviewChecks), connections,",
+    ),
+    "normalized on load next to the project history",
+  );
+  assert.ok(
+    has(
+      app,
+      "checks={state.reviewChecks} onChecks={(update) => setState((s) => { const current = normalizeReviewChecks(s.reviewChecks); const next = update(current); return next === current ? s : { ...s, reviewChecks: next }; }) }",
+    ),
+    "written through setState, and an unchanged list writes nothing",
+  );
+  assert.equal(count(app, "reviewChecks"), 5);
+  assert.equal(count(app, "normalizeReviewChecks("), 2);
+
+  // The list component: reads only, writes nothing, keeps the feedback message and the old selectors.
+  const raw = read("src/ReviewWorkspace.tsx");
+  const list = tight(raw);
+  assert.equal(count(list, "window.hrig.edit("), 5);
+  assert.equal(count(list, 'op: "read"'), 5);
+  assert.equal(
+    count(list, "draftOperation("),
+    1,
+    "the draft store is not used",
+  );
+  for (const word of [
+    "localStorage",
+    "sessionStorage",
+    "saveState",
+    "flushState",
+    "innerHTML",
+    "notify",
+    "rigAction",
+    "window.hrig.file(",
+    "window.hrig.drafts",
+  ])
+    assert.equal(count(list, word), 0, word);
+  assert.equal(count(list, "sendMessage("), 1);
+  const sent = list.slice(
+    list.indexOf("await window.hrig.sendMessage("),
+    list.indexOf("setSent(true);"),
+  );
+  assert.ok(
+    has(
+      sent,
+      'await window.hrig.sendMessage( connection, seat!.name + "@" + seat!.rigName, "Review feedback for project " + root + "\\n\\n" + notes .map( (n) => n.path + (n.line ? ":" + n.line : "") + "\\nRevision: " + n.revision + "\\n" + n.text, ) .join("\\n\\n"), );',
+    ),
+    "the feedback message is the same as before",
+  );
+  assert.ok(
+    !/check|reviewed|rkey|saved|seen|stateOf|unreadable/.test(
+      sent.replace('"Review feedback for project "', ""),
+    ),
+    "no review check reaches the message",
+  );
+  assert.equal(count(list, "<h3>Review workspace</h3>"), 1);
+  assert.ok(
+    has(
+      list,
+      "checks: ReviewChecks | undefined; onChecks: (update: (current: ReviewChecks) => ReviewChecks) => void;",
+    ),
+  );
+  assert.equal(count(list, "onChecks("), 4, "tick, untick, prune and clear");
+  assert.equal(
+    count(list, "const [unreviewedOnly, setUnreviewedOnly] = useState(false);"),
+    1,
+    "the view is component state only",
+  );
+  assert.ok(
+    has(
+      list,
+      'type="checkbox" aria-label={ usablePath(c.path) ? "Mark " + c.path + " reviewed" : "Mark file reviewed" }',
+    ),
+  );
+  assert.ok(
+    has(
+      list,
+      "<FileCode2 size={14} /> <span>{c.path}</span> <small>{c.status}</small> </button>",
+    ),
+    "the row button is unchanged",
+  );
+  assert.equal(count(list, "onDiff(c.path)"), 1);
+  for (const hint of [
+    "changed since reviewed",
+    "could not verify",
+    "not rechecked",
+  ])
+    assert.equal(count(list, '"' + hint + '"'), 1, hint);
+  // The toolbar sits outside .review-changes, so `.review-changes button` still means one file.
+  const bar = list.indexOf('className="review-progress"');
+  const box = list.indexOf('className="review-changes"');
+  const row = list.indexOf('className="review-file-row"');
+  assert.ok(bar > 0 && bar < box && box < row);
+  assert.equal(count(list, 'className="review-changes"'), 1);
+  const e2e = read("tests/e2e/roadmap.spec.ts");
+  assert.ok(e2e.includes('.locator(".review-changes button")'));
+  assert.ok(
+    read("tests/e2e/git-folder.spec.ts").includes(
+      '.locator(".review-changes")',
+    ),
+  );
+
+  // The style: the direct-child button rules became the row rules, edited in place and not at the end.
+  const css = read("src/styles.css");
+  assert.equal(count(css, ".review-changes > button"), 0);
+  const at = (needle) => {
+    const i = css.indexOf(needle);
+    assert.ok(i >= 0, "missing " + needle);
+    assert.equal(css.indexOf(needle, i + 1), -1, "once: " + needle);
+    return i;
+  };
+  assert.ok(
+    at(".review-changes {") < at(".review-progress {") &&
+      at(".review-progress {") < at(".review-file-row {") &&
+      at(".review-file-row {") < at(".review-file-row > button {") &&
+      at(".review-file-row > button {") < at(".review-changes small {") &&
+      at(".review-changes small {") < at(".section-heading {"),
+  );
+  const box2 = css.slice(
+    at(".review-file-row > input {"),
+    at(".review-file-row > button {"),
+  );
+  assert.ok(
+    /width: 14px;/.test(box2) && /padding: 0;/.test(box2),
+    "the checkbox undoes the global input box",
+  );
+  assert.equal(count(css, ".review-file-row > button > span {"), 1);
+
+  // Nothing about checks reaches the settings, the main process or the draft store.
+  for (const file of [
+    "src/settings.ts",
+    "src/SettingsPage.tsx",
+    "src/drafts.ts",
+    "electron/drafts.cjs",
+    "SETTINGS.md",
+  ]) {
+    const text = read(file);
+    assert.ok(!/reviewChecks|review-checks|review check/i.test(text), file);
+  }
+  for (const name of fs.readdirSync(path.join(root, "electron")))
+    if (name.endsWith(".cjs"))
+      assert.ok(
+        !/reviewChecks|review-checks/.test(read("electron/" + name)),
+        name,
+      );
+});
+
+test("review-checks docs: docs/review-checks.md and the README row say what a tick means, what is kept and where, what is never sent, and the limits", () => {
+  const note = read("docs/review-checks.md");
+  assert.ok(printable(note), "printable ASCII");
+  assert.equal(count(note, "\n# "), 0);
+  assert.ok(note.startsWith("# Review checks\n\nStatus: built."));
+  assert.ok(note.endsWith("\n") && !note.endsWith("\n\n"));
+  for (const fragment of [
+    "A tick means I looked at this file as it is now.",
+    "N of M reviewed",
+    "Show unreviewed only",
+    "it is only a view and is not remembered",
+    "Clear all checks",
+    "opaque hash the review notes already use",
+    "at most 50 per load or refresh",
+    "Same revision: the box is ticked and counts as reviewed.",
+    "changed since reviewed",
+    "The old tick is never kept silently.",
+    "could not verify",
+    "The saved tick is left as it is.",
+    "not rechecked",
+    "A deleted file",
+    "the box is disabled and its title says why",
+    "dropped when the list loads, unless the list is empty",
+    "saved workspace state on this computer",
+    "per connection and project folder",
+    "and no file content",
+    "At most 20 projects and 200 ticked files per project",
+    "at most 1,024 characters and a revision at most 128",
+    "They are not drafts",
+    "not put in the feedback message",
+    "not exported with the settings",
+    "not written to the Git index",
+    "not sent to a seat, a host or anywhere else",
+    "Syncing checks between computers, checks per hunk",
+  ])
+    assert.ok(note.includes(fragment), "missing: " + fragment);
+
+  const readme = read("README.md");
+  const rows = readme
+    .split("\n")
+    .filter((l) => l.startsWith("| Review workspace |"));
+  assert.equal(rows.length, 1);
+  const rowText = rows[0];
+  assert.ok(printable(rowText));
+  for (const fragment of [
+    "Select a feedback recipient, open a changed file beside sessions, collect file/line notes, and explicitly send feedback through OpenRig.",
+    "Each changed file can be ticked as reviewed",
+    "the tick stays on this computer",
+    "so an edited file loses it",
+    "(see [Review checks](docs/review-checks.md))",
+    "Git changes belong to the project; HRig does not infer which agent authored them.",
+  ])
+    assert.ok(rowText.includes(fragment), "missing: " + fragment);
+  assert.equal(count(readme, "docs/review-checks.md"), 1);
+  assert.equal(
+    count(readme, "TASKS.md"),
+    1,
+    "README keeps its single link to TASKS.md",
+  );
+
+  const privacy = read("PRIVACY.md");
+  assert.equal(count(privacy, "review checks"), 1);
+  assert.ok(
+    privacy.includes(
+      "workspace layouts, per-file review checks, drafts/recovery copies,",
+    ),
+  );
+});
