@@ -99,6 +99,8 @@ function useEditorState<T>(generation: { active: boolean }, initial: T | (() => 
   return [value, update] as const;
 }
 
+const DISK_CHECK_FAILURE_NOTICE = "Could not check disk changes. Your edits are preserved. HRig will check again on focus or at the next disk check.";
+
 function diskRead(result: { content?: unknown; revision?: unknown; truncated?: unknown }) {
   if (!result || Array.isArray(result) ||
     typeof result.content !== "string" || typeof result.revision !== "string" ||
@@ -405,7 +407,9 @@ export default function EditorPanel({
         const disk = diskRead(result);
         const buffer = buffers.get(id);
         if (!active || !buffer || !ownsBuffer() ||
-          !canPublishEditorChange(captured, capture()) || buffer.revision === disk.revision) return;
+          !canPublishEditorChange(captured, capture())) return;
+        setNotice(previous => previous === DISK_CHECK_FAILURE_NOTICE ? "" : previous);
+        if (buffer.revision === disk.revision) return;
         if (
           buffer.content === buffer.saved &&
           preferences["editor.autoReload"]
@@ -420,7 +424,7 @@ export default function EditorPanel({
         } else setExternal(disk);
       } catch (e) {
         if (active && ownsBuffer() && canPublishEditorChange(captured, capture()))
-          setNotice("Could not check disk changes. Your edits are preserved. HRig will check again on focus or at the next disk check.");
+          setNotice(DISK_CHECK_FAILURE_NOTICE);
       } finally {
         checking = false;
       }
