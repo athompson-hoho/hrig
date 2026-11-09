@@ -1,6 +1,6 @@
 # HRig privacy statement
 
-Updated: 2026-11-08
+Updated: 2026-11-09
 
 HRig is a desktop workspace for OpenRig. It does not operate a hosted project-storage service, include advertising, or automatically upload product analytics or crash reports to the maintainer. It stores workspace data locally and communicates with hosts, services and agents selected by the operator.
 
@@ -42,6 +42,18 @@ The bundle includes only recognized numeric versions of the local HRig applicati
 The export omits check details, terminal text/recordings, arbitrary logs, environment values, workspace history, connection/account/project/pairing identities, credentials, budgets and free-form settings such as paths, fonts or commands. It constructs only the selected fixed fields; it does not scrub arbitrary logs or certify arbitrary content as secret-free. Export adds no diagnosis, host/network collection, polling, terminal reads/input, agent lifecycle action or upload. Opening Doctor and explicitly selecting Run checks retain their separate existing diagnosis behavior.
 
 The native Save dialog chooses the destination. Choose a new file name: existing files are never replaced. Canceling saves no file. A failed write, existing destination or unsupported filesystem produces a generic error without a path or raw error; explicitly retry with a new name in a writable folder. Saved is reported only after the completed new file is published. Permission behavior, hard-link support and crash durability depend on the platform/filesystem and remain unverified on a real desktop; synthetic filesystem checks do not establish universal confidentiality or durability. HRig does not upload or automatically delete the saved bundle.
+
+## Desktop notifications
+
+Seat needs-input notifications require the explicit, reversible `notifications.desktop` preference, default `false`, with effective project overrides taking precedence over user settings. Earlier explicit opt-in is preserved when migrating a workspace without newer preferences. Settings and Attention center edit that same preference; enabling it does not certify native permission or delivery.
+
+For these seat alerts, HRig supplies only the exact accepted seat name as the native title and requests `silent: true`. It supplies no body, subtitle, generated suffix, host, rig, path, prompt, terminal text, activity, error detail or other metadata. Accepted names are nonblank, at most 150 Unicode code points and contain no control, format or line/paragraph separator characters; accepted text is preserved exactly. Invalid names, conflicting duplicate representations, malformed requests, extra fields or extra arguments are refused without substituting private content. The OS may add application identity, truncate the title or suppress delivery according to support, permissions and notification settings. The seat name itself will be visible if the OS displays the notification; choose names accordingly.
+
+Only later observed needs-input transitions in verified, healthy inventory for the current connection are eligible, deduplicated by seat identity. Enable/re-enable, owner replacement/repointing and gap recovery begin silently. Disabled, missing, foreign, unverified or stale/unhealthy snapshots cannot emit; explicit errors and quiet poll failures disarm state. The next healthy current-owner snapshot silently seeds the baseline, so needs-input arising during failure or at recovery may go unannounced. Failed/error status is not a needs-input event. The path retains only current owner/identity membership in memory, not notification content or a notification history. It adds no click action, input, lifecycle control, polling, upload, queued catch-up or delivery retry.
+
+Observation uses the existing inventory cadence on the current connection. Hidden-window inventory polling is suppressed; this feature does not provide continuous background or fleet monitoring. Desktop/native permission, actual display and accessibility, checkbox keyboard/AT, layout/themes and real restart behavior remain unobserved. Status flapping/re-entry, OS suppression and native notification object lifetime/garbage collection do not have an observed delivery guarantee.
+
+Separate terminal bell and quiet alerts require their own opt-ins (both default `false`) as well as `notifications.desktop`. They retain their existing generic notification endpoint and options contract, using seat/shell-label and host metadata without terminal text. The exact seat-name-only boundary for needs-input alerts does not describe all HRig notifications. See [settings](SETTINGS.md#desktop-needs-input-notifications) and [navigation](NAVIGATION.md#desktop-needs-input-notifications) for scope and controls.
 
 ## Optional terminal logs
 

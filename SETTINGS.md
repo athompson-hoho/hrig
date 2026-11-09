@@ -16,7 +16,7 @@ The design follows [VS Code's user/workspace settings](https://code.visualstudio
 | Diff and disk behavior | Inline/side-by-side diffs; optional clean-buffer reload; unsaved-buffer protection stays enabled. |
 | Terminal preferences | Live font, line spacing, cursor, scrollback, independent color theme; local PowerShell or Command Prompt for new shells. |
 | Workspace and rig defaults | Inventory refresh frequency, connection defaults, rig designer runtime and team size. |
-| Notifications | Desktop attention notification preference, migrated from the older attention panel option. |
+| Notifications | Default-off desktop needs-input notifications, preserving earlier explicit opt-in; separate optional terminal alerts. |
 | Transfer and discoverability | Validated preferences-only JSON import/export, per-row and scoped resets, shortcut reference and About. |
 
 ## Scope and persistence
@@ -68,9 +68,23 @@ The Settings JSON view exports preferences only, including any configured defaul
 | `rig.defaultRuntime` | `codex` | Initial runtime when opening a new rig designer. OpenRig manages authentication and launch policy. |
 | `rig.defaultTeamSize` | `2` | Initial recommendation size for new rig designs. Does not resize existing rigs. |
 | `rig.seatSort` | `name` | Seat sort order: `name` (Name), `activity` (Activity (working first)), or `attention-first` (Attention first). Activity uses current normalized status priority, not timestamps or recency; see [navigation](NAVIGATION.md). Unsupported imported values are rejected. |
-| `notifications.desktop` | `false` | Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply. |
+| `notifications.desktop` | `false` | Opt in to seat-name-only notifications for later observed needs-input transitions in verified inventory on the current connection. Enabling starts silently; failures do not notify. Desktop support and OS settings may prevent display. |
 | `notifications.terminalBell` | `false` | Also notify when an unwatched terminal rings the bell (needs `notifications.desktop`). Seat/host name only, no terminal text. |
 | `notifications.terminalQuiet` | `false` | Also notify when an unwatched terminal goes quiet after a burst of output (needs `notifications.desktop`). No terminal text. |
+
+### Desktop needs-input notifications
+
+Use Desktop needs-input notifications in Settings → Notifications, or Desktop notifications when a seat newly needs input in Attention center. Both use the effective `notifications.desktop` preference: a project override wins over the user value. The Attention checkbox updates the project override when that key already exists there; otherwise it updates the user value. Turning it off is reversible. Reset a project row to inherit the user value; reset the user row to restore the default `false`. When migrating a workspace without newer preferences, an earlier explicit desktop-notification opt-in is retained.
+
+Enabling, re-enabling, changing the connection owner (including repointing the same saved connection), or recovering from unavailable inventory starts with a silent healthy baseline. Existing needs-input seats are not announced. Only a later observed transition into normalized `attention` can request a notification, deduplicated by seat identity within that owner. Repeated snapshots or name/activity/error changes while the seat stays in attention do not repeat it. A later observed departure and re-entry can notify again. Failed seats and reported errors are not needs-input events.
+
+Disabled, missing, unverified, foreign or stale/unhealthy inventory cannot emit. Both explicit errors and quiet poll failures disarm the baseline; the next healthy current-owner snapshot silently seeds it again. A seat entering needs-input during failure or at that recovery snapshot may therefore go unannounced. There is no queued catch-up or delivery retry. This uses the existing inventory refresh cadence on the current connection; hidden-window inventory polling is suppressed. It adds no polling and promises no continuous background or fleet monitoring. See [navigation scope](NAVIGATION.md#desktop-needs-input-notifications).
+
+HRig requests a silent notification with only the exact accepted seat name as its title, without a body or generated suffix. Invalid names or extra payload fields/arguments are refused. OS support, permissions, app identity, title truncation and delivery suppression can affect presentation; checked/On records a preference, not permission or confirmed delivery. See [notification privacy](PRIVACY.md#desktop-notifications).
+
+Terminal bell and quiet alerts remain separate opt-ins, each defaulting to `false` and also requiring `notifications.desktop`. They retain the existing generic notification route and seat/shell-label and host metadata, without terminal text. The seat-name-only boundary above applies to needs-input seat alerts, not these terminal alerts.
+
+Actual OS permission/display, keyboard and assistive-technology behavior, narrow/short layouts, themes/density and persistence across a real restart remain unobserved; source and inert tests do not establish those outcomes.
 
 Terminal zoom: Ctrl/Cmd `+`, `-`, `0` and Ctrl+wheel change the font size of one terminal only (8-32 pt, remembered until the app restarts); `terminal.fontSize` stays the default for every terminal.
 
