@@ -2016,6 +2016,10 @@ button:hover {
 .statusbar button {
   padding: 0;
 }
+.statusbar > div:has(.git-info-status) { min-width: 0; }
+.statusbar .git-info-status { max-width: 240px; min-width: 0; flex-shrink: 1; font-weight: 400; line-height: 1.5; }
+.statusbar .git-info-status svg { flex-shrink: 0; }
+.statusbar .git-info-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-anchor {
   position: relative;
 }

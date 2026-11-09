@@ -8,6 +8,7 @@ import {
 import { flushSync } from "react-dom";
 import { attentionScope, attentionJumpEligibility } from "./attention-inbox";
 import AccountStatus from "./AccountStatus";
+import GitInfoStatus from "./GitInfoStatus";
 import UpdateNotice from "./UpdateNotice";
 import {
   Actions,
@@ -2467,15 +2468,12 @@ export default function App() {
                   ? "Local workspace"
                   : `${connection.kind.toUpperCase()}: ${connection.name}`}
               </span>
-              <button
-                onClick={() => {
+              <GitInfoStatus connection={connection} root={root} revision={fileRevision}
+                onOpen={() => {
                   setSection("changes");
                   setSidebar(true);
                 }}
-              >
-                <GitBranch size={11} />
-                Source control
-              </button>
+              />
             </div>
             <div>
               <span>

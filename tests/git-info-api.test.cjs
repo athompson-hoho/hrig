@@ -74,3 +74,46 @@ test('actual core gitInfo returns attached branch and asymmetric immutable compa
 });
 
 module.exports = { metadataCore, ordinaryRead };
+
+test('actual generated Python gitInfo executes bounded canonical metadata reads', () => {
+  const ts = require('typescript');
+  const ast = ts.createSourceFile('core.cjs', fs.readFileSync('electron/core.cjs', 'utf8'), ts.ScriptTarget.Latest, true);
+  let python;
+  function visit(n) {
+    if (ts.isVariableDeclaration(n) && n.name.getText(ast) === 'PYTHON_FILES') python = vm.runInNewContext(n.initializer.getText(ast));
+    ts.forEachChild(n, visit);
+  }
+  visit(ast);
+  const runner = `import sys,json,types,io,contextlib
+source=json.loads(sys.argv[1])
+calls=[]
+fakeos=types.ModuleType('os')
+fakeos.environ={}
+fakeos.path=types.SimpleNamespace(realpath=lambda p:'/canonical/nested project',expanduser=lambda p:p,join=lambda *p:'/joined',commonpath=lambda p:'/canonical/nested project')
+sub=types.ModuleType('subprocess')
+def run(argv,**kw):
+ assert argv[:3]==['git','-C','/canonical/nested project']
+ assert kw=={'capture_output':True,'env':{'LC_ALL':'C','GIT_OPTIONAL_LOCKS':'0'}}
+ args=argv[3:];calls.append(args)
+ if args==['rev-parse','--is-inside-work-tree']: out=b'true\\n'
+ elif args==['symbolic-ref','--quiet','HEAD']: out=b'refs/heads/topic\\n'
+ elif args==['for-each-ref','--format=%(refname)%00%(objectname)%00%(upstream)','refs/heads/topic']: out=b'refs/heads/topic\\0'+b'a'*40+b'\\0refs/remotes/origin/topic\\n'
+ elif args==['rev-parse','--verify','--quiet','--end-of-options','HEAD^{commit}']: out=b'a'*40+b'\\n'
+ elif args==['rev-parse','--verify','--quiet','--end-of-options','refs/remotes/origin/topic^{commit}']: out=b'b'*40+b'\\n'
+ else:
+  assert args==['rev-list','--left-right','--count','a'*40+'...'+'b'*40]
+  out=b'3\\t1\\n'
+ return types.SimpleNamespace(returncode=0,stdout=out,stderr=b'')
+sub.run=run
+sys.modules['os']=fakeos;sys.modules['subprocess']=sub
+sys.stdin=io.StringIO(json.dumps(dict(op='gitInfo',root='/alias')))
+out=io.StringIO()
+with contextlib.redirect_stdout(out): exec(source,{})
+print(json.dumps(dict(value=json.loads(out.getvalue()),calls=calls)))
+`;
+  const r = require('node:child_process').spawnSync('python3', ['-c', runner, JSON.stringify(python)], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.status, 0, r.stderr);
+  const result = JSON.parse(r.stdout);
+  assert.deepEqual(result.value, { state: 'repository', root: '/canonical/nested project', head: 'attached', branch: 'topic', oid: 'a'.repeat(40), comparison: 'known', upstream: 'refs/remotes/origin/topic', ahead: 3, behind: 1 });
+  assert.equal(result.calls.length, 10);
+});

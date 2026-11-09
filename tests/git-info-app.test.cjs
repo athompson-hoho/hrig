@@ -17,12 +17,16 @@ function mountGitInfoApp(options = {}) {
     ts.forEachChild(n, visit);
   }
   visit(app); assert.equal(matches.length, 1, 'actual conditional footer seam is unique');
-  const events = [], requests = [];
+  const events = [], requests = [], pendingReads = [];
   const connection = options.connection || { id: 'synthetic', kind: 'local', name: 'Synthetic', root: '/synthetic-alias' };
   const view = mountComponent(null, null, {
     connection, root: '/synthetic-alias', fileRevision: 0, visible: options.visible ?? true,
   }, {
-    api: { file(owner, request) { requests.push({ owner, request }); return options.file(owner, request); } },
+    api: { file(owner, request) {
+      requests.push({ owner, request });
+      const promise = Promise.resolve(options.file(owner, request));
+      pendingReads.push(promise.catch(() => {})); return promise;
+    } },
     root({ react, load }) {
       const GitInfoStatus = fs.existsSync('src/GitInfoStatus.tsx') ? load('src/GitInfoStatus.tsx').default : undefined;
       return props => {
@@ -41,7 +45,9 @@ function mountGitInfoApp(options = {}) {
       };
     },
   });
+  const settle = view.settle;
   return Object.assign(view, { events, requests, connection,
+    async settle() { await settle(); await Promise.all(pendingReads); await settle(); },
     sourceButton() { return view.nodes().find(n => n.type === 'button' &&
       (view.text(n).includes('Source control') || n.props['aria-label']?.startsWith('Open source control.'))); },
   });
@@ -51,7 +57,8 @@ module.exports = { mountGitInfoApp };
 if (require.main === module) {
   const { test } = require('node:test');
   test('actual App existing Source control click opens Changes and shows sidebar', () => {
-    const view = mountGitInfoApp({ file() { assert.fail('ordinary baseline does not need metadata'); } });
+    const h = metadataCore();
+    const view = mountGitInfoApp({ file: (owner, request) => h.core.fileOperation(owner, request) });
     view.event(view.sourceButton(), 'onClick');
     assert.deepEqual(view.events, [['section', 'changes'], ['sidebar', true]]);
     view.unmount();
