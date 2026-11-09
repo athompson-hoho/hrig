@@ -262,6 +262,7 @@ test('aggregate badge accessible cues retain conflict and combined-status meanin
   assert.match(folder.props['aria-label'], /Added; Deleted/);
   const rootCounts = v.nodes().find(n => n.props['aria-label']?.startsWith('Reported descendant statuses:'));
   assert.ok(rootCounts, 'actual root aggregate exists');
+  assert.equal(rootCounts.props.role, 'group', 'descriptive root aggregate is a nameable group');
   assert.match(rootCounts.props['aria-label'], /Conflict: both modified/);
   assert.match(rootCounts.props['aria-label'], /Added; Deleted/);
   assert.match(rootCounts.props['aria-label'], /Git code: AD/);

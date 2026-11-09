@@ -177,7 +177,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       {snapshot?.state === "ready" && <>
         <div>Reported Git status only. Unlisted paths are not confirmed clean; directory contents may not be individually reported.</div>
         {!!gitRecords.length && <>
-          <div aria-label={`Reported descendant statuses: ${gitCounts(gitRecords).map(c => `${c.letter} ${c.count}`).join("; ")}. ${gitRecords.map(gitRecordText).join(" ")}`}>{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>
+          <div role="group" aria-label={`Reported descendant statuses: ${gitCounts(gitRecords).map(c => `${c.letter} ${c.count}`).join("; ")}. ${gitRecords.map(gitRecordText).join(" ")}`}>{gitCounts(gitRecords).map(c => <span key={c.letter} className="git-badge">{c.letter} {c.count} </span>)}</div>
           <details key={gitSignature} open={gitDetails === gitToken} onToggle={e => {
             if (gitCurrent()) setGitDetails(e.currentTarget.open ? gitToken : null);
           }}>
