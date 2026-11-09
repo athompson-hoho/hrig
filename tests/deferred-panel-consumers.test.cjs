@@ -54,7 +54,7 @@ function harness(selected, options = {}) {
   const json = fixture(selected);
   options.configure?.(json);
   let model = layout.restoreModel(json);
-  let React, DeferredPanel, buffers;
+  let React, DeferredPanel, PanelBoundary, buffers;
   const mounts = [], cleanups = [];
   const ui = mountComponent(null, null, { content: [] }, {
     actualComponents: true,
@@ -83,6 +83,8 @@ function harness(selected, options = {}) {
     root(env) {
       React = env.react;
       DeferredPanel = env.load('src/DeferredPanel.tsx').default;
+      // Inert stand-in: the real class boundary is covered by panel-boundary.test.cjs.
+      PanelBoundary = props => props.children;
       buffers = env.load('src/editor-buffers.ts').buffers;
       return props => props.content;
     },
@@ -110,7 +112,7 @@ function harness(selected, options = {}) {
   };
   const factory = expression(app, factoryNode.initializer, scope);
   const wrapper = unique(app, n => ts.isJsxAttribute(n) && n.name.getText(app) === 'factory');
-  const wrappedFactory = expression(app, wrapper.initializer.expression, { React, factory });
+  const wrappedFactory = expression(app, wrapper.initializer.expression, { React, factory, PanelBoundary });
   const installed = parse('node_modules/flexlayout-react/dist/index.js', ts.ScriptKind.JS);
   const renderer = unique(installed, n => ts.isVariableDeclaration(n) && n.name.getText(installed) === 'TabContentRenderer');
   const jsx = (type, props, key) => ({ type, props, key });

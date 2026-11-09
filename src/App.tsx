@@ -136,6 +136,7 @@ import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
 import DeferredPanel from "./DeferredPanel";
+import PanelBoundary from "./PanelBoundary";
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
   DoctorPanel,
@@ -2435,7 +2436,7 @@ export default function App() {
                     data-panel-id={node.getId()}
                     tabIndex={-1}
                   >
-                    {factory(node)}
+                    <PanelBoundary label={node.getName?.()}>{factory(node)}</PanelBoundary>
                   </div>
                 )}
                 onModelChange={modelChanged}

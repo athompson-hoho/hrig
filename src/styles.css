@@ -4616,3 +4616,5 @@ button:hover {
 .editor-breadcrumbs .crumb-current { font-weight: 600; }
 .settings-import-report { margin: 8px 0; font-size: 12px; }
 .settings-import-report ul { margin: 4px 0 4px 18px; padding: 0; }
+.panel-error { padding: 16px; display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.panel-error .panel-error-text { white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; font-size: 11px; }
