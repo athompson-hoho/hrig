@@ -2,22 +2,33 @@ import { useEffect, useState } from "react";
 import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
+import {
+  MAX_FILTER_TEXT,
+  TASK_STATES,
+  applyFilters,
+  emptyFilters,
+  normalizeFilters,
+  tagOptions,
+  type TaskFilters,
+} from "./task-filters";
 export default function TaskBoard({
   connection,
   rigName,
   seats,
   onSeat,
+  savedFilters,
+  onFilters,
 }: {
   connection: Connection;
   rigName?: string;
   seats: Seat[];
   onSeat: (seat: Seat) => void;
+  savedFilters?: TaskFilters;
+  onFilters?: (filters: TaskFilters) => void;
 }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("");
-  const [owner, setOwner] = useState("");
-  const [stateFilter, setStateFilter] = useState("");
+  const [filters, setFilters] = useState(() => normalizeFilters(savedFilters));
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<any>(null);
@@ -93,12 +104,18 @@ export default function TaskBoard({
       setBusy(false);
     }
   };
-  const visible = (items || []).filter(
-    (i) =>
-      (!stateFilter || i.status === stateFilter) &&
-      (!owner || i.destination === owner) &&
-      (!filter || String(i.title).toLowerCase().includes(filter.toLowerCase())),
-  );
+  const visible = applyFilters(items || [], filters);
+  const tags = tagOptions(items || []);
+  const update = (patch: Partial<TaskFilters>) => {
+    const next = normalizeFilters({ ...filters, ...patch });
+    setFilters(next);
+    // The text box is a quick search typed key by key: only seat, state and tag are remembered.
+    if (patch.text === undefined) onFilters?.(next);
+  };
+  const clearFilters = () => {
+    setFilters(emptyFilters());
+    onFilters?.(emptyFilters());
+  };
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -140,13 +157,14 @@ export default function TaskBoard({
         <input
           aria-label="Filter tasks"
           placeholder="Filter tasks…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          maxLength={MAX_FILTER_TEXT}
+          value={filters.text}
+          onChange={(e) => update({ text: e.target.value })}
         />
         <select
           aria-label="Filter task owner"
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
+          value={filters.seat}
+          onChange={(e) => update({ seat: e.target.value })}
         >
           <option value="">All owners</option>
           {addresses.map((a) => (
@@ -155,12 +173,22 @@ export default function TaskBoard({
         </select>
         <select
           aria-label="Filter task state"
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
+          value={filters.state}
+          onChange={(e) => update({ state: e.target.value })}
         >
           <option value="">All states</option>
-          {["pending", "in-progress", "blocked", "failed"].map((s) => (
+          {TASK_STATES.map((s) => (
             <option key={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter task tag"
+          value={filters.tag}
+          onChange={(e) => update({ tag: e.target.value })}
+        >
+          <option value="">All tags</option>
+          {tags.map((t) => (
+            <option key={t}>{t}</option>
           ))}
         </select>
       </div>
@@ -178,15 +206,11 @@ export default function TaskBoard({
             <div className="panel-empty" role="status">
               <ListTodo size={28} />
               <h3>No tasks match these filters</h3>
-              <p>Clear the filter, owner or state to see all {items.length} active items.</p>
-              <button
-                className="small-button"
-                onClick={() => {
-                  setFilter("");
-                  setOwner("");
-                  setStateFilter("");
-                }}
-              >
+              <p>
+                Clear the filter, owner, state or tag to see all {items.length}{" "}
+                active items.
+              </p>
+              <button className="small-button" onClick={clearFilters}>
                 Clear filters
               </button>
             </div>

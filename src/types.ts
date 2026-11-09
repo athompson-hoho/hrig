@@ -74,6 +74,7 @@ export interface WorkspaceState {
   recentFiles?: import("./recent-files").RecentFiles;
   sidebarWidth?: number;
   hostTints?: import("./host-tint").HostTints;
+  taskFilters?: import("./task-filters").SavedTaskFilters;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;
   windowBounds?: { x: number; y: number; width: number; height: number };

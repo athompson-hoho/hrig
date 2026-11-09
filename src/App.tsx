@@ -85,6 +85,7 @@ import { SettingsContext } from "./SettingsContext";
 import { HostTintContext } from "./HostTint";
 import HostTintDialog from "./HostTintDialog";
 import { normalizeHostTints } from "./host-tint";
+import { resolveTaskFilters, saveTaskFilters } from "./task-filters";
 import {
   safeOverrides,
   validateOverrides,
@@ -1789,6 +1790,20 @@ export default function App() {
             rigName={config.mode}
             seats={freshSeats(config.connection)}
             onSeat={openSeat}
+            savedFilters={resolveTaskFilters(
+              state.taskFilters,
+              config.connection.id,
+            )}
+            onFilters={(next) =>
+              setState((s) => ({
+                ...s,
+                taskFilters: saveTaskFilters(
+                  s.taskFilters,
+                  config.connection.id,
+                  next,
+                ),
+              }))
+            }
           />
         );
       case "messages":
