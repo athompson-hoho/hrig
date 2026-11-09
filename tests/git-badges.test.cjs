@@ -121,3 +121,19 @@ test('pure root and ancestor sets use M A D ? order and one winning count per re
   assert.equal(gitRecordText(result.records[3]), 'src/d — Renamed; destination only; Modified (Git code: RM).');
   assert.deepEqual(plain(gitCounts([])), []);
 });
+
+// L-01 explicitly changes the former all-or-nothing individual-record policy.
+test('partial Git projection preserves the exact review probe and counts only the unsafe entry', t => {
+  const ordinary = projectGitStatus(snapshot([{ path: 'proj/a.txt', status: 'M' }], 'proj/'));
+  assert.equal(ordinary.state, 'ready');
+  assert.equal(ordinary.records[0].path, 'a.txt');
+  assert.equal(ordinary.records[0].letter, 'M');
+  t.diagnostic('Positive setup: the actual mapper projects the ordinary current-project modified record.');
+  const result = projectGitStatus(snapshot([
+    { path: 'proj/a.txt', status: 'M' },
+    { path: 'other/x:y.txt', status: '??' },
+  ], 'proj/'));
+  assert.equal(result.state, 'ready', 'one unsafe outside-project record must not disable the usable snapshot');
+  assert.deepEqual(plain(result.records), plain(ordinary.records));
+  assert.equal(result.omittedPaths, 1, 'the refused path remains disclosed even outside the project');
+});

@@ -269,3 +269,58 @@ test('aggregate badge accessible cues retain conflict and combined-status meanin
   assert.equal(v.gitRequests.length, 1);
   assertSafe(v);
 });
+
+const { localGit } = require('./git-badges-api.test.cjs');
+
+// L-01: exercise the actual shared service response through the actual Files
+// consumer. The backend accepts this raw stream; the current mapper loses it.
+test('partial Git Files preserves a valid badge when an unsafe outside-project path is omitted', async t => {
+  const ordinary = await localGit({ raw: ' M proj/src/needle.ts\0', prefix: 'proj/\n' })
+    .core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias');
+  const positive = mount({ handleGit: () => ordinary });
+  await positive.settle(); positive.event(row(positive, 'src'), 'onClick'); await positive.settle();
+  assert.ok(badge(positive, leaf.path, 'M'), 'ordinary actual-core result reaches a real current file badge');
+  assertSafe(positive); positive.unmount();
+  t.diagnostic('Positive setup: actual shared core result rendered a modified badge with no forbidden effects.');
+  const partial = await localGit({ raw: ' M proj/src/needle.ts\0?? other/x:y.txt\0', prefix: 'proj/\n' })
+    .core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias');
+  const v = mount({ handleGit: () => partial }); t.after(() => v.unmount());
+  await v.settle(); v.event(row(v, 'src'), 'onClick'); await v.settle();
+  assert.ok(badge(v, leaf.path, 'M'), 'an unsafe outside-project record must not remove the valid current badge');
+  assert.match(text(v), /1 paths not shown/);
+  assert.doesNotMatch(text(v), /Git status is unavailable/);
+  assert.equal(v.gitRequests.length, 1); assertSafe(v);
+});
+
+// This independently supplied partial-response metadata isolates each real UI
+// consumer from the parser RED, so absence of count rendering is observable too.
+for (const section of ['files', 'changes']) {
+  test(`partial Git ${section} discloses an empty shown result without claiming clean`, async t => {
+    const ordinary = await localGit({ raw: '', prefix: '' }).core.gitStatus(
+      { id: 'synthetic', kind: 'local' }, '/synthetic-alias');
+    assert.equal(ordinary.isRepository, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(ordinary.entries)), []);
+    const calls = [], actions = [], forbidden = [];
+    const props = {
+      section, connection: { ...base }, root: '/project', inventory: null, inventoryError: '', busy: false,
+      selectedRig: '', fileRevision: 0, pinnedSeats: [], pinsAvailable: true, collapsedPods: [], podsAvailable: true,
+      ...Object.fromEntries(['onRig', 'onRefresh', 'onProject', 'onConnect', 'onManageRigs', 'onSeat',
+        'onSeatBeside', 'onRelaunch', 'onDrag', 'onFile', 'onDiff', 'onTogglePod', 'onToggleSeatPin']
+        .map(name => [name, (...args) => actions.push([name, ...args])])),
+    };
+    const api = new Proxy({ platform: 'linux',
+      git(owner, root) { calls.push({ owner, root }); return Promise.resolve({ ...ordinary, omittedPaths: 1 }); },
+      file(_owner, request) { assert.equal(request.op, 'list'); return Promise.resolve([]); },
+    }, { get: (target, key) => key in target ? target[key] : (...args) => { forbidden.push([key, ...args]); return Promise.resolve(); } });
+    const v = mountComponent('src/Sidebar.tsx', 'default', props, { actualComponents: true, api,
+      settings: { effective: { 'rig.seatSort': 'name', 'appearance.density': 'compact' }, project: {}, update() { forbidden.push(['settings']); } },
+    });
+    t.after(() => v.unmount()); await v.settle();
+    assert.equal(calls.length, 1, 'actual Sidebar branch reads the supplied shared Git response');
+    assert.deepEqual(actions, []); assert.deepEqual(forbidden, []);
+    t.diagnostic(`Positive setup: actual ${section} branch completed one synthetic Git read with no actions.`);
+    assert.ok(text(v).includes('1 paths not shown'), 'the omitted count must be visible in this actual consumer');
+    assert.ok(!/Working tree clean|No reported Git changes in this project/.test(text(v)),
+      'an empty partial response cannot establish cleanliness');
+  });
+}

@@ -1,4 +1,6 @@
-const { test } = require('node:test');
+// The actual-core inert fixture is also consumed by the real UI integration tests.
+// Importing it must not register this file's unrelated TAP targets.
+const test = require.main === module ? require('node:test').test : () => {};
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -174,3 +176,32 @@ test('actual Git status suppresses optional index writes for every read', async 
   assert.ok(h.calls.every(call => call.options.env.GIT_OPTIONAL_LOCKS === '0'),
     'all Git reads must set GIT_OPTIONAL_LOCKS=0');
 });
+
+// L-03, lead qitem-20261109074420-981c5b52d1b2b947 supersedes the
+// earlier whole-snapshot refusal for an unsupported individual porcelain row.
+test('partial Git status keeps recognized rows and counts an unsupported individual row', async t => {
+  await ordinaryStatus(localGit(), t);
+  const h = localGit({ raw: ' M nested project/needle.ts\0ZZ unsupported.ts\0 A nested project/added.ts\0' });
+  const outcome = await h.core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias')
+    .then(value => ({ value }), error => ({ error: error.message }));
+  assert.equal(outcome.error, undefined, 'an unsupported individual row must not discard recognized Git status');
+  const result = outcome.value;
+  assert.deepEqual(JSON.parse(JSON.stringify(result.entries)), [
+    { path: 'nested project/needle.ts', status: 'M' },
+    { path: 'nested project/added.ts', status: 'A' },
+  ]);
+  assert.equal(result.omittedPaths, 1, 'the actual shared API carries the exact omitted-row count');
+});
+
+test('partial Git status counts an all-unsupported stream instead of treating it as clean', async t => {
+  await ordinaryStatus(localGit(), t);
+  const h = localGit({ raw: 'ZZ unsupported.ts\0' });
+  const outcome = await h.core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias')
+    .then(value => ({ value }), error => ({ error: error.message }));
+  assert.equal(outcome.error, undefined, 'individual unsupported rows produce partial status, not an overall error');
+  const result = outcome.value;
+  assert.deepEqual(JSON.parse(JSON.stringify(result.entries)), []);
+  assert.equal(result.omittedPaths, 1, 'an empty partial snapshot retains its uncertainty count');
+});
+
+module.exports = { localGit };
