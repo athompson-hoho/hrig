@@ -1724,6 +1724,147 @@ test("workspace.hideStoppedSeats is an off-by-default Workspace boolean listed o
     1,
   );
 });
+test("notifications.seatNeedsInputSound is an off-by-default Notifications boolean, separate from the desktop notification setting, listed once right after the queue item setting, validated as a boolean, resolved user then project, and documented in SETTINGS.md", () => {
+  const key = "notifications.seatNeedsInputSound";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "notifications.humanItems");
+  assert.equal(keys[keys.indexOf(key) + 1], "shortcuts.overrides");
+  assert.equal(keys[keys.length - 1], "shortcuts.overrides");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Notifications");
+  assert.equal(row.label, "Sound when a seat needs input");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  for (const part of [
+    "Play one short, soft tone when a seat newly needs input",
+    "Off by default and separate from Desktop attention notifications",
+    "this setting alone is the opt-in",
+    "whether or not HRig is in front",
+    "(no audio file)",
+    "lasts under a second",
+    "at most once every 10 seconds",
+    "already waiting when you turn it on, when HRig starts or when you switch connection",
+    "a seat whose session failed with an error",
+    "a person's own seat",
+    "shows and sends no text and never sends anything to a seat or shell",
+  ])
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  // Separate from the desktop attention notifications: neither implies the other.
+  const only = settings.resolveSettings({ [key]: true });
+  assert.equal(only["notifications.desktop"], false);
+  assert.equal(
+    settings.resolveSettings({ "notifications.desktop": true })[key],
+    false,
+  );
+
+  // The numbers the documents give are the code's.
+  const pure = fs.readFileSync(
+    path.join(root, "src/seat-attention.ts"),
+    "utf8",
+  );
+  const tone = fs.readFileSync(
+    path.join(root, "src/useSeatNeedsInputSound.ts"),
+    "utf8",
+  );
+  const number = (text, name) =>
+    Number(new RegExp("export const " + name + " = ([0-9.]+);").exec(text)[1]);
+  const pause = number(pure, "SOUND_COOLDOWN_MS") / 1000;
+  const hz = number(tone, "TONE_HZ");
+  const seconds = number(tone, "TONE_SECONDS");
+  const gain = number(tone, "TONE_GAIN");
+  assert.deepEqual([pause, hz, seconds, gain], [10, 880, 0.15, 0.1]);
+
+  const text = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  assert.ok(!/[^\n -~]/.test(text), "SETTINGS.md is plain ASCII");
+  const lines = text.split("\n");
+  const rows = lines.filter((line) => line.startsWith("| `" + key + "` |"));
+  assert.equal(rows.length, 1);
+  const at = lines.indexOf(rows[0]);
+  assert.ok(rows[0].startsWith("| `" + key + "` | `false` |"));
+  // The row follows the Desktop attention notifications row: tests pin the shortcut overrides row directly after the queue item row.
+  assert.ok(lines[at - 1].startsWith("| `notifications.desktop` | `false` |"));
+  assert.ok(lines[at + 1].startsWith("| `notifications.terminalBell` |"));
+  for (const part of [
+    "Play one short, soft tone when a seat newly needs input",
+    "Off by default, and separate from `notifications.desktop`: this setting alone is the opt-in",
+    "whether or not HRig is in front",
+    "(no audio file)",
+    "lasts under a second",
+    "plays at most once every " + pause + " seconds",
+    "already waiting when you turn the setting on, when HRig starts or when you switch connection",
+    "a seat whose session failed with an error",
+    "a person's own seat",
+    "never sends anything to a seat or shell",
+    "See Seat sound below.",
+  ])
+    assert.ok(rows[0].includes(part), "SETTINGS.md row says: " + part);
+  // One note paragraph, with the other setting notes: after the window title note, directly before the Reopen last project note.
+  const parts = text.split("\n\n");
+  const notes = parts.filter((part) =>
+    part.startsWith("Seat sound: `notifications.seatNeedsInputSound`"),
+  );
+  assert.equal(notes.length, 1);
+  const note = notes[0];
+  assert.ok(!note.includes("\n"), "one line");
+  for (const part of [
+    "is off by default, and then HRig makes no sound",
+    "one short, soft tone when a seat newly needs input",
+    "independent of them: either can be on without the other",
+    "the attention status, the one the sidebar shows with a seat's status dot",
+    "a seat whose startup failed or needs attention, so such a seat can sound too",
+    "a session that failed while running (status failed) does not",
+    "is only taken in, so seats that are already waiting never sound",
+    "a seat that stops waiting and then waits again sounds again",
+    "One tone covers any number of seats that change at once",
+    "tones are at least " + pause + " seconds apart",
+    "sounds at the first refresh after it, if it is still waiting",
+    "A person's own seat never sounds",
+    "no sound is made while a refresh is failing",
+    "one sine tone of " +
+      hz +
+      " Hz that lasts " +
+      seconds +
+      " seconds, at a tenth of full volume",
+    "there is no audio file and nothing is downloaded",
+    "the Activity log says so once",
+    "whether or not HRig is in front, as Desktop attention notifications do",
+    "so no extra read is made",
+    "nothing goes to a seat or shell",
+    "User and Project scopes",
+  ])
+    assert.ok(note.includes(part), "SETTINGS.md says: " + part);
+  assert.equal(gain, 0.1, "a tenth of full volume is the gain");
+  const place = parts.indexOf(note);
+  assert.ok(parts[place - 1].startsWith("Window title: "));
+  assert.ok(parts[place + 1].startsWith("Reopen last project: "));
+  assert.ok(
+    place < parts.findIndex((part) => part.startsWith("Seat badges: ")),
+    "with the other setting notes",
+  );
+});
 test("terminal.pasteHistory is an off-by-default Terminal boolean listed once right after the multi-line paste confirmation, resolved user then project, and documented in SETTINGS.md", () => {
   const key = "terminal.pasteHistory";
   const root = path.join(srcDir, "..");
