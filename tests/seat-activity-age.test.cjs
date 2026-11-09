@@ -63,7 +63,8 @@ test('wording is terminal activity, never working/status duration', () => {
 
 test('Sidebar consumer: no new timer, current-owner gating, raw field only', () => {
   const src = fs.readFileSync('src/Sidebar.tsx', 'utf8');
-  assert.equal((src.match(/setInterval/g) || []).length, 1, 'only the pre-existing InventoryAge timer');
+  assert.equal((src.match(/setInterval/g) || []).length, 0, 'no raw timer in the Sidebar');
+  assert.equal((src.match(/visibleInterval\(/g) || []).length, 1, 'only the pre-existing InventoryAge timer, now paused while hidden');
   assert.match(src, /ageCurrent = !inventoryError && pinsAvailable/);
   assert.match(src, /seatActivityAge\(s\.lastActivityAt, activityClock, ageCurrent\)/);
   assert.doesNotMatch(src, /seatActivityAge\([^)]*sampledAt/);

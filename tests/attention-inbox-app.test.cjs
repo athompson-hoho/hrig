@@ -50,7 +50,13 @@ function harness(authority = {}) {
   const panel = find(panels, n => ts.isFunctionDeclaration(n) && n.name?.text === "AttentionPanel");
   const effects = [];
   const states = []; let cursor = 0; let pendingEffect; let cleanup; let deps;
-  const component = evaluate(panel, panels, { React, ...helpers, ...authority,
+  // The real visibleInterval wraps the authority's timer functions, so the
+  // tests keep observing every interval the panel registers.
+  const visibleInterval = (fn, ms) => {
+    const id = authority.setInterval ? authority.setInterval(fn, ms) : undefined;
+    return () => authority.clearInterval?.(id);
+  };
+  const component = evaluate(panel, panels, { React, ...helpers, ...authority, visibleInterval,
     useId: () => panelId,
     useState: value => { const i = cursor++; if (!(i in states)) states[i] = value; return [states[i], v => { states[i] = v; }]; },
     useEffect: (fn, next) => { if (JSON.stringify(deps) !== JSON.stringify(next)) { deps = next; pendingEffect = fn; } },
