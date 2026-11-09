@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld("hrig", {
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
   seatPrompt: invoke("seat:prompt"),
+  inventoryCache: invoke("inventory:cache"),
+  seatTranscript: invoke("seat:transcript"),
   seatMessage: invoke("seat:message"),
   designRig: invoke("rig:design"),
   assessTeam: invoke("rig:assess"),

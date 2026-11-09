@@ -4,7 +4,7 @@ const MAX_LINES = 40;
 const MAX_CHARS = 8000;
 
 /** Strip terminal escapes and control characters; keep the last lines, bounded. */
-function cleanPromptText(raw) {
+function cleanTerminalText(raw, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {}) {
   let text = String(raw ?? "")
     .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, "")
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
@@ -15,17 +15,19 @@ function cleanPromptText(raw) {
   while (lines.length && !lines[0].trim()) lines.shift();
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
   let truncated = false;
-  if (lines.length > MAX_LINES) {
-    lines = lines.slice(-MAX_LINES);
+  if (lines.length > maxLines) {
+    lines = lines.slice(-maxLines);
     truncated = true;
   }
   text = lines.join("\n");
-  if (text.length > MAX_CHARS) {
-    text = text.slice(-MAX_CHARS);
+  if (text.length > maxChars) {
+    text = text.slice(-maxChars);
     truncated = true;
   }
   return { text, truncated };
 }
+
+const cleanPromptText = (raw) => cleanTerminalText(raw);
 
 function createSeatPrompt({ inventory, runRig, now = Date.now }) {
   async function read(connection, id) {
@@ -59,4 +61,4 @@ function createSeatPrompt({ inventory, runRig, now = Date.now }) {
   }
   return { read };
 }
-module.exports = { cleanPromptText, createSeatPrompt, MAX_LINES, MAX_CHARS };
+module.exports = { cleanTerminalText, cleanPromptText, createSeatPrompt, MAX_LINES, MAX_CHARS };

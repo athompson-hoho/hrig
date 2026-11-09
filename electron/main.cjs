@@ -310,6 +310,19 @@ handle("seat:message", (_event, connection, request) => {
     throw new Error("Select a WSL or SSH connection.");
   return seatMessage.operation(connection, request);
 });
+const seatTranscript = require("./seat-transcript.cjs").createSeatTranscript({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 20000),
+});
+handle("seat:transcript", (_event, connection, id) => {
+  core.validateConnection(connection);
+  return seatTranscript.read(connection, id);
+});
+const inventoryCache = require("./inventory-cache.cjs").createInventoryCache({
+  file: path.join(app.getPath("userData"), "inventory-cache.json"),
+  fs: fsSync,
+});
+handle("inventory:cache", (_event, request) => inventoryCache.operation(request));
 handle("seat:prompt", (_event, connection, id) => {
   core.validateConnection(connection);
   return seatPrompt.read(connection, id);

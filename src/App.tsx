@@ -105,6 +105,8 @@ import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import RelaunchSession from "./RelaunchSession";
 import SeatPrompt from "./SeatPrompt";
 import SeatMessage from "./SeatMessage";
+import SeatTranscript from "./SeatTranscript";
+import { planPodGrid, describePodGrid } from "./pod-grid";
 import RigHealthStatus from "./RigHealthStatus";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
@@ -224,6 +226,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
+  const [transcriptView, setTranscriptView] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [quickMessage, setQuickMessage] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [promptView, setPromptView] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
@@ -238,6 +241,7 @@ export default function App() {
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const cacheInventoryPref = useRef(false);
   const attentionContext = useRef<any>(null);
   const inventoryHealth = useRef<{
     key: string;
@@ -476,9 +480,18 @@ export default function App() {
       return;
     }
     Promise.all([window.hrig.loadState(), window.hrig.detectConnections()])
-      .then(([saved, found]) => {
+      .then(async ([saved, found]) => {
         setDetected(found);
         const base = saved?.version === 1 ? saved : defaultState;
+        // Opt-in cached inventory: seed the unverified-snapshot cache so the
+        // sidebar is instant; the existing guard keeps actions off until a
+        // live poll succeeds.
+        if (base.preferences?.["rig.cacheInventory"] === true) {
+          try {
+            const { entries } = await window.hrig.inventoryCache({ op: "load" });
+            for (const entry of entries) inventoryCache.current.set(entry.key, entry.inventory);
+          } catch {}
+        }
         const connections = [...base.connections];
         for (const c of found)
           if (!connections.some((x) => x.id === c.id)) connections.push(c);
@@ -544,6 +557,12 @@ export default function App() {
   }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
     inventoryHealth.current.key, inventoryHealth.current.verified,
     inventoryHealth.current.failures]);
+  cacheInventoryPref.current = preferences["rig.cacheInventory"] === true;
+  useEffect(() => {
+    // Turning the option off removes the stored copy (also on every start while off).
+    if (loaded && !preferences["rig.cacheInventory"])
+      void window.hrig.inventoryCache({ op: "clear" }).catch(() => {});
+  }, [loaded, preferences["rig.cacheInventory"]]);
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(
@@ -610,6 +629,8 @@ export default function App() {
           health.verified = true;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
+          if (cacheInventoryPref.current)
+            void window.hrig.inventoryCache({ op: "save", key: inventoryKey, inventory: result }).catch(() => {});
           setInventoryError("");
         }
       } catch (e) {
@@ -1198,6 +1219,30 @@ export default function App() {
     setModel(next);
     modelChanged(next);
     notify("Rig sessions arranged");
+  };
+  // Pod grid: same undoable Team arrangement as openAll, limited to one pod's
+  // seats. Opening only attaches terminals; nothing is sent to any session.
+  const openPodGrid = (podSeats: Seat[]) => {
+    const plan = planPodGrid(podSeats, !inventoryError && sameConnection(connection));
+    if (!plan.blocked) {
+      remember();
+      const existing = allTabs().filter((t) => t.component !== "welcome");
+      for (const seat of plan.seats) {
+        const id = `seat:${connection.id}:${seat.id}`;
+        if (!existing.some((t) => t.id === id))
+          existing.push({
+            type: "tab",
+            id,
+            name: seat.name,
+            component: "terminal",
+            config: { connection: { ...connection }, root, seat, terminalId: id },
+          });
+      }
+      const next = arrangement(existing, "Team");
+      setModel(next);
+      modelChanged(next);
+    }
+    notify(describePodGrid(plan));
   };
   const closeTab = (id: string) => {
     history.current = { past: [], future: [] };
@@ -1964,6 +2009,7 @@ export default function App() {
   return (
     <SettingsContext.Provider value={settingsContext}>
       <div className="app" inert={updateRestarting || undefined}>
+        {transcriptView && <SeatTranscript key={transcriptView.connection.id + transcriptView.seat.id} connection={transcriptView.connection} seat={transcriptView.seat} onClose={() => setTranscriptView(null)} />}
         {quickMessage && <SeatMessage key={quickMessage.connection.id + quickMessage.seat.id} connection={quickMessage.connection} seat={quickMessage.seat} onClose={() => setQuickMessage(null)} onSent={(m) => { setQuickMessage(null); notify(m); }} />}
         {promptView && <SeatPrompt key={promptView.connection.id + promptView.seat.id} connection={promptView.connection} seat={promptView.seat} onClose={() => setPromptView(null)} />}
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
@@ -2143,6 +2189,8 @@ export default function App() {
                 onSeat={openSeat}
                 onSeatBeside={openSeatBeside}
                 onSeatPrompt={(seat) => setPromptView({seat, connection})}
+                onSeatTranscript={(seat) => setTranscriptView({seat, connection})}
+                onPodGrid={(podSeats) => openPodGrid(podSeats)}
                 onSeatMessage={(seat) => setQuickMessage({seat, connection})}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}

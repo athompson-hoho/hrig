@@ -187,6 +187,13 @@ export interface HrigAPI {
     connection: Connection,
     request: { op: "prepare"; id: string; message: string } | { op: "send"; id: string; token: string },
   ): Promise<any>;
+  seatTranscript(
+    connection: Connection,
+    id: string,
+  ): Promise<{ seatName: string; text: string; truncated: boolean; capturedAt: string }>;
+  inventoryCache(
+    request: { op: "load" } | { op: "clear" } | { op: "save"; key: string; inventory: Inventory },
+  ): Promise<any>;
   seatPrompt(
     connection: Connection,
     id: string,

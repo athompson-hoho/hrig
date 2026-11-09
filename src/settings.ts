@@ -35,6 +35,8 @@ export const defaults = {
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
   "rig.seatSort": "name" as SeatSort,
+  "rig.seatClick": "open" as "open" | "select",
+  "rig.cacheInventory": false,
   "rig.defaultTeamSize": 2,
   "rig.claudePlanMonthlyUsd": 200,
   "rig.codexPlanMonthlyUsd": 100,
@@ -78,6 +80,24 @@ export const schema: Setting[] = [
       { value: "activity", label: "Activity (working first)" },
       { value: "attention-first", label: "Attention first" },
     ],
+  },
+  {
+    key: "rig.seatClick",
+    category: "Connections & rigs",
+    label: "Clicking a session",
+    description:
+      "Open its terminal (default), or only select the row. Selecting never opens or sends input to a terminal; use the row's Open terminal button instead.",
+    options: [
+      { value: "open", label: "Open its terminal" },
+      { value: "select", label: "Select only" },
+    ],
+  },
+  {
+    key: "rig.cacheInventory",
+    category: "Connections & rigs",
+    label: "Remember the last session list",
+    description:
+      "Keep a copy of the last verified session list on this computer so the sidebar can show it right after a restart. It is marked as the last known snapshot and actions stay disabled until the connection is verified. Turning this off deletes the stored copy.",
   },
   {
     key: "rig.claudePlanMonthlyUsd",

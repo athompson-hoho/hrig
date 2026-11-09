@@ -4568,3 +4568,8 @@ button:hover {
 .statusbar .rig-health-status { max-width: 280px; min-width: 0; flex-shrink: 1; font-weight: 400; line-height: 1.5; }
 .statusbar .rig-health-status svg { flex-shrink: 0; }
 .statusbar .rig-health-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pod-group { display: flex; align-items: center; }
+.pod-group > .pod-disclosure { flex: 1; min-width: 0; width: auto; }
+.pod-group > .pod-grid-open { flex-shrink: 0; margin-right: 8px; color: var(--color-707b8e); }
+.pod-group > .pod-grid-open:hover, .pod-group > .pod-grid-open:focus-visible { color: var(--color-c8cfdd); }
+.seat-row.selected { background: var(--color-272c34); box-shadow: inset 2px 0 0 var(--color-86cdb0); }

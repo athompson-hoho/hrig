@@ -57,6 +57,8 @@ export default function Sidebar({
   onSeat,
   onSeatBeside,
   onSeatPrompt,
+  onSeatTranscript,
+  onPodGrid,
   onSeatMessage,
   onRelaunch,
   onDrag,
@@ -86,6 +88,8 @@ export default function Sidebar({
   onSeat: (seat: Seat) => void;
   onSeatBeside?: (seat: Seat) => void;
   onSeatPrompt?: (seat: Seat) => void;
+  onSeatTranscript?: (seat: Seat) => void;
+  onPodGrid?: (seats: Seat[]) => void;
   onSeatMessage?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
@@ -97,6 +101,7 @@ export default function Sidebar({
   const podNamespace = useId();
   const podTokens = useRef(new Map<string, number>());
   const [query, setQuery] = useState("");
+  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
   const { effective, project, update } = useSettings();
   const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
   const [changes, setChanges] = useState<GitEntry[]>([]);
@@ -146,6 +151,7 @@ export default function Sidebar({
   const favorites = seats.filter(s => pins.has(seatPinIdentity(connection, s.id)));
   const groups = groupSeatPods(seats.filter(s => !pins.has(seatPinIdentity(connection, s.id))), connection);
   const collapsed = new Set(podsAvailable ? normalizeCollapsedPods(collapsedPods) : []);
+  const selectOnly = effective["rig.seatClick"] === "select";
   const activityClock = Date.now(); // reader clock; refreshed by existing inventory rerenders, no timer
   const ageCurrent = !inventoryError && pinsAvailable;
   const renderSeat = (s: Seat) => {
@@ -157,8 +163,9 @@ export default function Sidebar({
         disabled={!!inventoryError}
         draggable={!inventoryError}
         onDragStart={(event) => onDrag(event, s)}
-        onClick={() => onSeat(s)}
-        className="seat-row"
+        onClick={() => { if (selectOnly) setSelectedSeat(s.id); else onSeat(s); }}
+        aria-pressed={selectOnly ? selectedSeat === s.id : undefined}
+        className={`seat-row${selectOnly && selectedSeat === s.id ? " selected" : ""}`}
         key={s.id}
         title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"} · ${age.tooltip} ${work.tooltip}`}
       >
@@ -193,9 +200,15 @@ export default function Sidebar({
       >
         <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
       </button>
+      {selectOnly && (
+        <IconButton title={`Open terminal for ${s.name}`} disabled={!!inventoryError || !s.session} onClick={() => onSeat(s)}><span aria-hidden="true">▶</span></IconButton>
+      )}
       {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
       {onSeatPrompt && s.status === "attention" && (
         <IconButton title={`View pending prompt for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatPrompt(s)}><span aria-hidden="true">?</span></IconButton>
+      )}
+      {onSeatTranscript && (
+        <IconButton title={`View recent transcript for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatTranscript(s)}><span aria-hidden="true">≡</span></IconButton>
       )}
       {onSeatMessage && (
         <IconButton title={`Message ${s.name} (reviewed before sending)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatMessage(s)}><span aria-hidden="true">✉</span></IconButton>
@@ -239,6 +252,16 @@ export default function Sidebar({
           <span className="count">{group.seats.length}</span>
           {!expanded && attention > 0 && <span className="pod-attention"><span className="status-dot attention" aria-hidden="true" />{attention} need input</span>}
         </button>
+        {onPodGrid && (
+          <IconButton
+            className="pod-grid-open"
+            title={`Open the ${group.seats.length} matching ${group.seats.length === 1 ? "session" : "sessions"} of pod ${group.podLabel} as a grid`}
+            disabled={!!inventoryError || !podsAvailable}
+            onClick={() => onPodGrid(group.seats)}
+          >
+            <PanelsTopLeft size={13} aria-hidden="true" />
+          </IconButton>
+        )}
         <span className="sr-only" id={`${id}-description`}>
           {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
           {!expanded && attention > 0 && ` ${attention} need input.`}
@@ -444,7 +467,8 @@ export default function Sidebar({
           <div className="sidebar-scroll sidebar-session-container">
             {inventoryError === CHECKING_SNAPSHOT && inventory && (
               <div className="sidebar-empty" role="status">
-                Refreshing · showing the last known snapshot…
+                Refreshing · showing the last known snapshot… Last updated{" "}
+                <InventoryAge sampledAt={inventory.sampledAt} />.
               </div>
             )}
             {inventoryError && inventoryError !== CHECKING_SNAPSHOT && inventory && (
