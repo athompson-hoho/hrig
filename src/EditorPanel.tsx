@@ -22,7 +22,7 @@ import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
 import { breadcrumbs } from "./breadcrumb";
 import { motionReduced } from "./reduced-motion";
-import { shouldFormatOnSave } from "./format-on-save";
+import { shouldFormatOnSave, FORMAT_TIMEOUT_MS } from "./format-on-save";
 import { editorTheme, themeId } from "./themes";
 import { editorModelPath } from "./editor-uri";
 import {
@@ -280,7 +280,10 @@ export default function EditorPanel({
     if (!action?.isSupported()) return null;
     formatting.current = true;
     const before = model.getValue();
-    return Promise.resolve(action.run())
+    // A formatter that never settles (worker error or hang) must not block
+    // Save: after a few seconds the file is saved as written.
+    const limit = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), FORMAT_TIMEOUT_MS));
+    return Promise.race([Promise.resolve(action.run()), limit])
       .then(() => {
         if (model.getValue() !== before) setNotice("Formatted on save");
       })
@@ -292,7 +295,10 @@ export default function EditorPanel({
       });
   };
   const save = () => {
-    if (formatting.current) return;
+    if (formatting.current) {
+      setNotice("Still formatting; Save will continue when it finishes.");
+      return;
+    }
     const pending = formatBeforeSave();
     return pending ? pending.then(saveNow) : saveNow();
   };

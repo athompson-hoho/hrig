@@ -41,3 +41,13 @@ test('wiring: the page uses the report, docs describe migration notes', () => {
   assert.match(p, /analyzeSettingsImport\(json, own\)/); assert.match(p, /context\.replace\(scope, report\.valid\)/);
   assert.match(fs.readFileSync('SETTINGS.md', 'utf8'), /Migration notes/);
 });
+
+test('an invalid imported value for a known key keeps the current value instead of removing it', () => {
+  const r = a(file({ 'editor.largeFileWarnKb': 99999, 'editor.minimap': true, 'terminal.fontSize': 'big' }), { 'editor.largeFileWarnKb': 500, 'editor.bracketPairs': false });
+  assert.equal(r.valid['editor.largeFileWarnKb'], 500);
+  assert.equal(r.valid['terminal.fontSize'], undefined, 'no current value, nothing to keep');
+  assert.match(r.skipped.find(s => s.key === 'editor.largeFileWarnKb').reason, /current value is kept/);
+  assert.doesNotMatch(r.skipped.find(s => s.key === 'terminal.fontSize').reason, /kept/);
+  assert.ok(r.unchanged.includes('editor.largeFileWarnKb')); assert.deepEqual(r.removed, ['editor.bracketPairs']);
+  assert.equal(a(file({ 'editor.nope': 1 }), { 'editor.nope': 1 }).valid['editor.nope'], undefined, 'unknown keys are never kept');
+});
