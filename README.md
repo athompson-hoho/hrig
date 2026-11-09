@@ -80,7 +80,7 @@ Download the matching build from the [latest HRig release](https://github.com/at
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
-3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group.
+3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group. Two optional settings show each seat's runtime and model as small badges and hide stopped seats from the list; both are off by default.
 4. Use **Arrange** for Team, Focus, and Review presets, or save your own named layout.
 
 The **Explorer** opens editable project files. **Source control** shows changed files with side-by-side diffs against HEAD. **New panel** adds shells, task queues, messages, and an activity view.

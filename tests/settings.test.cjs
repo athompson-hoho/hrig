@@ -1531,6 +1531,199 @@ test("workspace.restoreLastProject is an off-by-default Workspace boolean listed
   ])
     assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
 });
+test("appearance.seatBadges is an off-by-default Appearance boolean listed once right after the window title setting, validated as a boolean, resolved user then project, and documented in SETTINGS.md and the README", () => {
+  const key = "appearance.seatBadges";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "appearance.windowTitleDetails");
+  assert.equal(keys[keys.indexOf(key) + 1], "editor.fontSize");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Appearance");
+  assert.equal(row.label, "Show runtime and model badges on sessions");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  const claims = [
+    "its runtime (Claude, Codex or the name the inventory gives) and its model",
+    "Off by default, so the list looks exactly as before",
+    "cleaned of control and direction characters",
+    "cut to 16 characters for the runtime and 24 for the model",
+    "the tooltip keeps up to 80",
+    "shows no badge for it",
+    "Display only: nothing is sent to the shell or the seat, and nothing is saved",
+  ];
+  for (const part of claims)
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+
+  const text = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  assert.ok(!/[^\n -~]/.test(text), "SETTINGS.md is plain ASCII");
+  const lines = text.split("\n");
+  const rows = lines.filter((line) => line.startsWith("| `" + key + "` |"));
+  assert.equal(rows.length, 1);
+  const at = lines.indexOf(rows[0]);
+  assert.ok(rows[0].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at - 1].startsWith("| `appearance.windowTitleDetails` |"));
+  assert.ok(lines[at + 1].startsWith("| `editor.fontSize` |"));
+  for (const part of [
+    "its runtime (`Claude` or `Codex` for those two, otherwise the name the inventory gives, cut to 16 characters)",
+    "its model (cut to 24 characters, with up to 80 in the tooltip)",
+    "Off (the default) keeps the list exactly as it was",
+    "cleaned of control and direction characters first",
+    "only the generic `agent` runtime, shows no badge for it",
+    "Display only: nothing is sent to the shell or the seat, and nothing is saved",
+  ])
+    assert.ok(rows[0].includes(part), "SETTINGS.md row says: " + part);
+  // One note paragraph, with the other setting notes: after the Reopen note, directly before the Hide stopped sessions note, before the Terminal bell note.
+  const parts = text.split("\n\n");
+  const notes = parts.filter((part) =>
+    part.startsWith("Seat badges: `appearance.seatBadges`"),
+  );
+  assert.equal(notes.length, 1);
+  const note = notes[0];
+  for (const part of [
+    "is off by default, and then the sidebar's session list looks exactly as before",
+    "up to two small badges: the runtime and the model",
+    "`claude-code` is shown as Claude and `codex` as Codex",
+    "cut to 16 characters",
+    "the generic `agent` runtime, which the inventory fills in when the CLI names none, and an empty model show no badge",
+    "The model is cut to 24 characters, and the tooltip of each badge keeps up to 80",
+    "it is treated as untrusted",
+    "control, zero-width and direction characters are dropped",
+    "a very long value is only read in part",
+    "drawn as plain text, never as markup",
+    "The row's own text (the rig name and the runtime) is unchanged",
+    "nothing is sent to the shell or the seat, nothing is saved",
+    "User and Project scopes",
+  ])
+    assert.ok(note.includes(part), "SETTINGS.md says: " + part);
+  const place = parts.indexOf(note);
+  assert.ok(parts[place - 1].startsWith("Reopen last project: "));
+  assert.ok(parts[place + 1].startsWith("Hide stopped sessions: "));
+  assert.ok(parts[place + 2].startsWith("Terminal bell: "));
+  // The README says it in one clause, and still names TASKS.md once.
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+  assert.equal(
+    readme.split("show each seat's runtime and model as small badges").length -
+      1,
+    1,
+  );
+  assert.equal(readme.split("TASKS.md").length - 1, 1);
+});
+test("workspace.hideStoppedSeats is an off-by-default Workspace boolean listed once right after the reopen setting, validated as a boolean, read from the user scope, and documented in SETTINGS.md and the README", () => {
+  const key = "workspace.hideStoppedSeats";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  assert.equal(settings.resolveSettings()[key], false);
+  const keys = settings.schema.map((row) => row.key);
+  assert.equal(keys.filter((k) => k === key).length, 1);
+  assert.equal(keys[keys.indexOf(key) - 1], "workspace.restoreLastProject");
+  assert.equal(keys[keys.indexOf(key) + 1], "connections.defaultKind");
+  assert.equal(keys[keys.length - 1], "shortcuts.overrides");
+  const row = settings.schema[keys.indexOf(key)];
+  assert.equal(row.category, "Workspace");
+  assert.equal(row.label, "Hide stopped sessions in the sidebar");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  const claims = [
+    "sessions that have stopped or exited, and the sessions of a rig the inventory calls archived",
+    "Off by default, so every session is listed as before",
+    "A failed session or one that needs input is never hidden",
+    "the count beside SESSIONS reads shown of total",
+    "an empty list says how many are hidden, with a button to show them",
+    "open panels, the command center, drag and drop and relaunch are as they were",
+    "nothing is started, stopped or sent to a seat",
+    "Read from your user settings only: a project override has no effect",
+  ];
+  for (const part of claims)
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+
+  const text = fs.readFileSync(path.join(root, "SETTINGS.md"), "utf8");
+  const lines = text.split("\n");
+  const rows = lines.filter((line) => line.startsWith("| `" + key + "` |"));
+  assert.equal(rows.length, 1);
+  const at = lines.indexOf(rows[0]);
+  assert.ok(rows[0].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at - 1].startsWith("| `workspace.restoreLastProject` |"));
+  assert.ok(lines[at + 1].startsWith("| `connections.defaultKind` |"));
+  for (const part of [
+    "sessions that have stopped or exited, and the sessions of a rig the inventory calls archived",
+    "Off (the default) lists every session as before",
+    "A failed session or one that needs input is never hidden",
+    "the count beside SESSIONS reads shown of total",
+    "has a Show stopped sessions button",
+    "open panels, the command center, drag and drop and relaunch are as they were",
+    "nothing is started, stopped or sent to a seat",
+    "Read from the User scope only; a project override has no effect",
+  ])
+    assert.ok(rows[0].includes(part), "SETTINGS.md row says: " + part);
+  const parts = text.split("\n\n");
+  const notes = parts.filter((part) =>
+    part.startsWith("Hide stopped sessions: `workspace.hideStoppedSeats`"),
+  );
+  assert.equal(notes.length, 1);
+  const note = notes[0];
+  for (const part of [
+    "is off by default, and then every session is listed as before",
+    "The eye button beside SESSIONS in the sidebar turns it on",
+    "the same setting is in Settings under Workspace",
+    "a session whose status is stopped or exited",
+    "a session of a rig the inventory calls archived",
+    "a failed session and one that needs input are never hidden",
+    "for example 3 of 5, counted after the rig and the Find a session filter",
+    "the list says how many are hidden and has a Show stopped sessions button instead of the empty message",
+    "the rig and the filter text stay as they were",
+    "panels that are open, the command center, drag and drop and relaunch are as they were",
+    "nothing is started, stopped or sent to a seat",
+    "the button writes there and a project override has no effect",
+  ])
+    assert.ok(note.includes(part), "SETTINGS.md says: " + part);
+  const place = parts.indexOf(note);
+  assert.ok(parts[place - 1].startsWith("Seat badges: "));
+  assert.ok(parts[place + 1].startsWith("Terminal bell: "));
+  assert.ok(
+    place > parts.findIndex((part) => part.startsWith("Window title: ")),
+    "after the window title note",
+  );
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+  assert.equal(
+    readme.split(
+      "and hide stopped seats from the list; both are off by default",
+    ).length - 1,
+    1,
+  );
+});
 test("terminal.pasteHistory is an off-by-default Terminal boolean listed once right after the multi-line paste confirmation, resolved user then project, and documented in SETTINGS.md", () => {
   const key = "terminal.pasteHistory";
   const root = path.join(srcDir, "..");
