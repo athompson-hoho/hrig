@@ -958,3 +958,324 @@ test("terminal-paste-history picker: the dialog lists previews only, starts with
   // An empty list still renders, with no entry to choose.
   assert.equal(renderPicker({ ...props, entries: [] }).buttons.length, 0);
 });
+
+// ---- wiring and docs ----
+
+const stripComments = (text) =>
+  text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+const tight = (text) => text.replace(/\s+/g, " ");
+const count = (text, pattern) =>
+  typeof pattern === "string"
+    ? text.split(pattern).length - 1
+    : (text.match(pattern) || []).length;
+const srcFiles = fs
+  .readdirSync(path.join(root, "src"))
+  .filter((f) => /\.tsx?$/.test(f));
+const filesWith = (re) =>
+  srcFiles.filter((f) => re.test(stripComments(read("src/" + f)))).sort();
+
+test("terminal-paste-history wiring: the module is pure, only the terminal tools and the picker know it, the one store lives in TerminalTools, a pasted text is remembered in one place, and nothing is saved, logged, exported or sent", () => {
+  // The pure module: one import, no page, storage, clock or network, the exact exports, a doc comment on each.
+  const moduleSource = read("src/terminal-paste-history.ts");
+  const code = stripComments(moduleSource);
+  assert.deepEqual(
+    [...moduleSource.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./terminal-paste"],
+  );
+  for (const word of [
+    "window",
+    "document",
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "navigator",
+    "clipboard",
+    "fetch",
+    "console",
+    "process",
+    "require",
+    "Date",
+    "setTimeout",
+    "setInterval",
+    "innerHTML",
+    "class",
+  ])
+    assert.ok(
+      !new RegExp("\\b" + word + "\\b").test(code),
+      "the module uses " + word,
+    );
+  assert.ok(!code.includes("Math.random"));
+  assert.deepEqual(Object.keys(pure).sort(), [
+    "MAX_PASTE_CHARS",
+    "MAX_PASTE_HISTORY",
+    "MAX_PREVIEW_CHARS",
+    "clearPastes",
+    "previewOf",
+    "pushPaste",
+  ]);
+  const lines = moduleSource.split("\n");
+  for (const [index, line] of lines.entries())
+    if (/^export /.test(line))
+      assert.ok(lines[index - 1].startsWith("/** "), "doc comment: " + line);
+  for (const file of [
+    "src/terminal-paste-history.ts",
+    "src/TerminalPasteHistory.tsx",
+    "tests/terminal-paste-history.test.cjs",
+  ])
+    assert.ok(!/[^\n -~]/.test(read(file)), file + " is printable ASCII");
+
+  // Only the terminal tools and the picker know the module; nothing else in the app or the main process does.
+  assert.deepEqual(filesWith(/terminal-paste-history/), [
+    "TerminalPasteHistory.tsx",
+    "TerminalTools.tsx",
+  ]);
+  assert.deepEqual(filesWith(/TerminalPasteHistory/), [
+    "TerminalPasteHistory.tsx",
+    "TerminalTools.tsx",
+  ]);
+  assert.deepEqual(filesWith(/pasteHistories/), ["TerminalTools.tsx"]);
+  assert.deepEqual(filesWith(/"terminal\.pasteHistory"/), [
+    "TerminalTools.tsx",
+    "settings.ts",
+  ]);
+  assert.deepEqual(filesWith(/paste.?histor/i), [
+    "TerminalPasteHistory.tsx",
+    "TerminalTools.tsx",
+    "settings.ts",
+    "terminal-paste-history.ts",
+  ]);
+  for (const file of fs
+    .readdirSync(path.join(root, "electron"))
+    .filter((f) => /\.(cjs|mjs|js)$/.test(f)))
+    assert.ok(
+      !/paste.?histor/i.test(read("electron/" + file)),
+      "electron/" + file + " does not know the history",
+    );
+  assert.ok(
+    !/paste.?histor/i.test(read("src/styles.css")),
+    "no new style rule",
+  );
+  assert.ok(
+    !/paste.?histor/i.test(read("src/terminal-paste.ts")),
+    "the paste route itself is unchanged",
+  );
+
+  // The terminal tools: one module-level store, one place that writes a list, one place that remembers a paste.
+  const tools = tight(stripComments(read("src/TerminalTools.tsx")));
+  assert.equal(
+    count(tools, 'import TerminalPasteHistory from "./TerminalPasteHistory";'),
+    1,
+  );
+  assert.equal(
+    count(
+      tools,
+      'import { clearPastes, pushPaste } from "./terminal-paste-history";',
+    ),
+    1,
+  );
+  const component = tools.indexOf("export default function TerminalTools(");
+  assert.ok(component > 0);
+  assert.equal(
+    count(
+      tools,
+      "const pasteHistories = new Map<string, readonly string[]>();",
+    ),
+    1,
+  );
+  assert.ok(
+    tools.indexOf("const pasteHistories = ") < component,
+    "one module-level store, not state per render",
+  );
+  assert.equal(count(tools, "pasteHistories.set(terminalId, list)"), 1);
+  assert.equal(count(tools, "pasteHistories.delete(terminalId)"), 1);
+  assert.equal(count(tools, "pasteHistories.get(terminalId)"), 3);
+  assert.equal(count(tools, /pasteHistories\./g), 5);
+  assert.equal(count(tools, "pushPaste("), 1);
+  assert.equal(count(tools, "rememberPaste(text)"), 1);
+  assert.equal(
+    count(
+      tools,
+      "if (terminal.current === target) { target?.paste(text); rememberPaste(text); }",
+    ),
+    1,
+  );
+  assert.equal(count(tools, "target?.paste(text)"), 1);
+  assert.equal(count(tools, "terminal.current?.paste(text)"), 1);
+  assert.equal(
+    count(tools, "readClipboardText()"),
+    1,
+    "the clipboard is read only by the normal paste",
+  );
+  assert.equal(
+    count(tools, "pasteClipboard({"),
+    1,
+    "one paste route for the clipboard and for an entry",
+  );
+  assert.equal(count(tools, 'effective["terminal.pasteHistory"]'), 1);
+  assert.equal(count(tools, "historyRef.current"), 2);
+  for (const word of [
+    "localStorage",
+    "sessionStorage",
+    "indexedDB",
+    "saveState",
+    "flushState",
+  ])
+    assert.equal(count(tools, word), 0, word);
+
+  // The store code only keeps, forgets and opens: no write, log, notice of text, selection or bridge call.
+  const region = tools.slice(
+    tools.indexOf("const historyOn ="),
+    tools.indexOf("const [pasteAsk, setPasteAsk]"),
+  );
+  assert.ok(region.length > 300, "the store region was found");
+  assert.ok(
+    !/localStorage|sessionStorage|indexedDB|saveState|writeTerminal|writeText|getSelection|navigator|readClipboard|console|notify|log\(|rigAction|sendMessage|exportTerminal|fetch/.test(
+      region,
+    ),
+  );
+  assert.equal(count(region, "setNotice("), 1);
+  assert.equal(count(region, 'setNotice("Paste history cleared.")'), 1);
+
+  // The menu: one conditional item right after Paste, one clamp term as tall as one menu item, and only while it shows.
+  assert.equal(
+    count(
+      tools,
+      "const historyItem = menu !== null && historyOn && (pasteHistories.get(terminalId)?.length ?? 0) > 0;",
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      tools,
+      "window.innerHeight - 223 - (menuLink ? LINK_ITEMS_HEIGHT : 0) - (historyItem ? HISTORY_ITEM_HEIGHT : 0)",
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      tools,
+      '{historyItem && ( <button role="menuitem" onClick={choose(() => setHistoryOpen(true))}> <span>Paste from history' +
+        char(8230) +
+        "</span> </button> )}",
+    ),
+    1,
+  );
+  assert.equal(count(tools, "Paste from history"), 1);
+  assert.ok(
+    tools.indexOf("choose(paste)") < tools.indexOf("setHistoryOpen(true)"),
+  );
+  assert.ok(
+    tools.indexOf("setHistoryOpen(true)") < tools.indexOf("choose(pasteImage)"),
+  );
+  const css = read("src/styles.css");
+  const at = css.indexOf("\n.dropdown > button {");
+  assert.ok(at >= 0);
+  const height = css
+    .slice(at, css.indexOf("}", at))
+    .match(/min-height: (\d+)px/);
+  assert.ok(
+    height &&
+      Number(height[1]) === 33 &&
+      count(tools, "const HISTORY_ITEM_HEIGHT = 33;") === 1,
+    "the clamp term is the height of one menu item",
+  );
+
+  // The picker: three imports, text only through React, no page, bridge, storage, paste or tooltip of its own.
+  const pickerSource = read("src/TerminalPasteHistory.tsx");
+  assert.deepEqual(
+    [...pickerSource.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["react", "./components", "./terminal-paste-history"],
+  );
+  const picker = tight(stripComments(pickerSource));
+  for (const word of [
+    "window",
+    "document",
+    "navigator",
+    "localStorage",
+    "sessionStorage",
+    "console",
+    "hrig",
+    ".paste(",
+    "writeTerminal",
+    "readClipboard",
+    "innerHTML",
+    "dangerouslySetInnerHTML",
+    "aria-label={",
+  ])
+    assert.ok(!picker.includes(word), "the picker uses " + word);
+  for (const label of [
+    "Clear history",
+    "Close",
+    "Paste from history",
+    "Nothing is sent to the terminal until you choose an entry.",
+  ])
+    assert.ok(picker.includes(label), "the picker says " + label);
+});
+
+test("terminal-paste-history docs: TERMINALS.md has one paragraph, right before the multi-line paste confirmation, that says what is remembered, that it is per terminal and in memory only, the secrets warning and how to clear it", () => {
+  const lines = read("TERMINALS.md").split("\n");
+  const at = lines.findIndex((line) =>
+    line.startsWith("The terminal.pasteHistory setting is off by default"),
+  );
+  assert.ok(at > 0, "TERMINALS.md has the paragraph");
+  assert.equal(
+    lines.filter((line) => line.startsWith("The terminal.pasteHistory")).length,
+    1,
+    "exactly one such paragraph",
+  );
+  assert.ok(
+    lines[at - 1] === "" && lines[at + 1] === "",
+    "blank lines around the paragraph",
+  );
+  assert.ok(
+    lines[at - 2].startsWith(
+      "The terminal.copyOnSelect setting is off by default",
+    ),
+    "right after the copy on select paragraph",
+  );
+  assert.ok(
+    lines[at + 2].startsWith(
+      "The terminal.confirmMultilinePaste setting is off by default",
+    ),
+    "right before the paste confirmation paragraph",
+  );
+  assert.ok(!/[^ -~]/.test(lines[at]), "the paragraph is printable ASCII");
+  for (const part of [
+    "off by default, and with it off nothing is remembered and the right-click menu has no history item",
+    "Ctrl+V or Cmd+V, Ctrl+Shift+V on Windows and Linux, and the context-menu Paste",
+    "for a multi-line paste only after you chose Paste in the confirmation",
+    "Text typed or pasted any other way (the terminal's own paste, snippets, dropped paths, image paste) is not remembered, and the system clipboard is never read to build the list",
+    "choose Paste from history...",
+    "newest first",
+    "cut to 80 characters, with control and invisible characters left out",
+    "only while the setting is on and this terminal has at least one remembered paste",
+    "pastes it exactly as it was pasted, through the terminal's normal paste",
+    "a multi-line entry still asks first when terminal.confirmMultilinePaste is on, and no Enter is added",
+    "Nothing is pasted when the list opens",
+    "the focus starts on the list rather than on the newest entry",
+    "Escape, the Close button, the close icon and clicking outside the dialog paste nothing",
+    "Clear history in the list forgets this terminal's entries at once",
+    "last " + pure.MAX_PASTE_HISTORY + " pastes",
+    "an identical paste moves to the top instead of repeating",
+    "empty, only spaces or longer than " +
+      pure.MAX_PASTE_CHARS.toLocaleString("en-US") +
+      " characters is not remembered",
+    "in memory only and belongs to that one terminal",
+    "never saved to the workspace or the settings, never exported, never logged, never shown in the Activity log or in a notification, and never shared with another terminal",
+    "gone when you close the terminal's panel, when you turn the setting off, and when HRig is closed or reloaded",
+    "can contain a secret",
+    "leave the setting off on a shared computer",
+  ])
+    assert.ok(lines[at].includes(part), "TERMINALS.md must say: " + part);
+
+  // The words are the ones the product uses.
+  const tools = tight(stripComments(read("src/TerminalTools.tsx")));
+  assert.ok(
+    tools.includes("<span>Paste from history" + char(8230) + "</span>"),
+  );
+  assert.ok(tools.includes('"Paste history cleared."'));
+  assert.ok(
+    tight(read("src/TerminalPasteHistory.tsx")).includes("Clear history"),
+  );
+  assert.equal(count(read("SETTINGS.md"), "| `terminal.pasteHistory` |"), 1);
+});
