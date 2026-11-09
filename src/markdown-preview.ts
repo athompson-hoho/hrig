@@ -36,7 +36,7 @@ function pushText(out: Inline[], text: string) {
 // Every lazy span is bounded (400 chars) so an unclosed opener can never scan the
 // rest of a paragraph: inline work stays linear in the input size.
 const INLINE =
-  /\\([\\`*_{}\[\]()#+\-.!|>~<])|(`+)([\s\S]{0,400}?[^`])\2(?!`)|(\*\*|__)(?=\S)([\s\S]{0,400}?\S)\4|(\*|_)(?=\S)([\s\S]{0,400}?\S)\6|(!?)\[([^\]]*)\]\(\s*([^)\s]*)(?:\s+"[^"]*")?\s*\)|<((?:https?:\/\/|mailto:)[^>\s]+)>/g;
+  /\\([\\`*_{}\[\]()#+\-.!|>~<])|(`+)([\s\S]{0,400}?[^`])\2(?!`)|(\*\*|__)(?=\S)([\s\S]{0,400}?\S)\4|(\*|_)(?=\S)([\s\S]{0,400}?\S)\6|(!?)\[([^\]]{0,400})\]\([ \t]{0,20}([^)\s]{0,2000})(?:\s{1,20}"[^"]{0,400}")?[ \t]{0,20}\)|<((?:https?:\/\/|mailto:)[^>\s]{1,2000})>/g;
 
 export function parseInline(source: string, depth = 0): Inline[] {
   const out: Inline[] = [];
