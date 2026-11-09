@@ -1956,7 +1956,7 @@ export default function App() {
   const sidebarFileOwner = fileTreeOwner(connection, root);
   const activeFile = (() => {
     const selected = model.getActiveTabset()?.getSelectedNode();
-    if (!selected || !["editor", "diff"].includes(selected.getComponent())) return null;
+    if (!selected || !["editor", "diff"].includes(selected.getComponent() ?? "")) return null;
     const config = selected.getConfig() as PanelConfig;
     return config?.connection && typeof config.root === "string" && typeof config.path === "string"
       ? config as PanelConfig & { path: string } : null;
