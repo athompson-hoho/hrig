@@ -116,6 +116,7 @@ const loadFactory = compile(
     "log",
     "normalizeSidebarWidth",
     "normalizeReviewChecks",
+    "normalizeSeatNotes",
   ],
   "load",
 );
@@ -131,6 +132,7 @@ function loadWith(saved, found = []) {
     },
     (text) => out.logs.push(text),
     normalizeSidebarWidth,
+    (value) => value,
     (value) => value,
   );
   run([saved, found]);

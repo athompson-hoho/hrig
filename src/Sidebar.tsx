@@ -19,6 +19,8 @@ import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { HiddenSeatsNotice, HideStoppedButton } from "./HiddenSeats";
 import { SeatBadgeRow } from "./SeatBadgeRow";
+import SeatNote from "./SeatNotes";
+import type { SeatNotes } from "./seat-notes";
 import { hiddenCount, seatCountText, visibleSeats } from "./seat-visibility";
 import { useSettings } from "./SettingsContext";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
@@ -171,6 +173,8 @@ export default function Sidebar({
   onFile,
   onDiff,
   fileRevision,
+  notes,
+  onNote,
 }: {
   section: string;
   connection: Connection;
@@ -191,6 +195,8 @@ export default function Sidebar({
   onFile: (path: string) => void;
   onDiff: (path: string) => void;
   fileRevision: number;
+  notes?: SeatNotes;
+  onNote?: (seat: Seat, text: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [changes, setChanges] = useState<GitEntry[]>([]);
@@ -469,6 +475,14 @@ export default function Sidebar({
                   >
                     <RotateCw size={13} />
                   </IconButton>
+                  {onNote && (
+                    <SeatNote
+                      seat={s}
+                      connectionId={connection.id}
+                      notes={notes}
+                      onNote={onNote}
+                    />
+                  )}
                 </div>
               ))
             ) : hiddenSeats ? (
