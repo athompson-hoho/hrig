@@ -4,7 +4,13 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from "react";
-import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
+import {
+  ListTodo,
+  Plus,
+  RefreshCw,
+  ArrowUpRight,
+  Download,
+} from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
 import TaskDetailBody from "./TaskDetailBody";
@@ -14,6 +20,7 @@ import {
   applyFilters,
   emptyFilters,
   hasFilters,
+  itemTags,
   normalizeFilters,
   staleFilters,
   staleNote,
@@ -22,6 +29,7 @@ import {
 } from "./task-filters";
 import { reasonOf } from "./task-reason";
 import { ageBadge, isStuck } from "./task-age";
+import { ageOf } from "./task-age";
 import {
   boardColumns,
   cellAtIndex,
@@ -31,6 +39,14 @@ import {
   tabCell,
   type Stop,
 } from "./task-board-nav";
+import {
+  exportButton,
+  exportFile,
+  exportNotice,
+  exportRows,
+  type ExportFormat,
+} from "./task-export";
+import { downloadText } from "./download-text";
 export default function TaskBoard({
   connection,
   rigName,
@@ -139,8 +155,25 @@ export default function TaskBoard({
       setBusy(false);
     }
   };
+  // Saves the tasks the board shows and nothing else: one row per shown task in the fixed export columns, never a whole task or its body (see task-export.ts). It only reads the list; nothing is sent and no task changes.
+  const exportShown = (format: ExportFormat, list: any[], at: number) => {
+    try {
+      const set = exportRows(list, at, {
+        tags: itemTags,
+        age: ageOf,
+        reason: reasonOf,
+      });
+      const file = exportFile(format, set.rows, at);
+      downloadText(file.name, file.text, file.type);
+      setNotice(exportNotice(format, set.rows.length, set.total));
+    } catch (e) {
+      setError("Could not export: " + (e as Error).message);
+    }
+  };
   const visible = applyFilters(items || [], filters);
   const columns = boardColumns(visible);
+  const shown = columns.reduce((n, c) => n + c.items.length, 0);
+  const exportCsv = exportButton("csv", shown);
   const tab = tabCell(columns, stop);
   const tags = tagOptions(items || []);
   const stale = staleFilters(
@@ -219,6 +252,15 @@ export default function TaskBoard({
         >
           <RefreshCw size={13} />
           Refresh
+        </button>
+        <button
+          className="small-button"
+          onClick={() => exportShown("csv", visible, now)}
+          disabled={!shown}
+          title={exportCsv.title}
+        >
+          <Download size={13} />
+          {exportCsv.text}
         </button>
         <button
           className="primary-button"
