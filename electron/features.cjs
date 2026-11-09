@@ -199,7 +199,9 @@ print(json.dumps({'checks':out,'healthy':all(i['ok'] for i in out)}))`;
   }
 }
 const EDIT_PY = `import os,sys,json,base64,hashlib,re,subprocess
-a=json.load(sys.stdin);root=os.path.realpath(os.path.expanduser(a['root']))
+a=json.load(sys.stdin)
+if not isinstance(a.get('root'),str) or not a['root']: raise Exception('Invalid project path')
+root=os.path.realpath(os.path.expanduser(a['root']))
 target=os.path.realpath(os.path.join(root,a.get('path','')))
 if os.path.commonpath([root,target])!=root: raise Exception('The file is outside the project folder')
 op=a['op']
@@ -208,7 +210,14 @@ def read(p):
  data=open(p,'rb').read()
  if b'\\0' in data: raise Exception('Binary files cannot be edited')
  return {'content':data.decode('utf-8'),'revision':hashlib.sha256(data).hexdigest()}
-if op=='read': print(json.dumps(read(target)))
+if op=='read':
+ if not os.path.isdir(root): raise Exception('Project folder does not exist')
+ if not os.path.isdir(os.path.dirname(target)): raise Exception('Parent folder does not exist')
+ try: result=read(target)
+ except FileNotFoundError:
+  if a.get('allowMissing') is not True: raise
+  result={'missing':True}
+ print(json.dumps(result))
 elif op=='save':
  current=read(target)
  if current['revision']!=a['revision']: raise Exception('CONFLICT: File changed on disk. Reload or compare before saving.')
@@ -265,12 +274,19 @@ async function edit(connection, a) {
   const target = await core.localPath(
     a.root,
     a.path,
-    ["create"].includes(a.op),
+    ["create"].includes(a.op) || (a.op === "read" && a.allowMissing === true),
   );
   if (a.op === "read") {
-    const stat = await fs.stat(target);
-    if (stat.size > 2000000) throw new Error("File exceeds 2 MB");
-    const data = await fs.readFile(target);
+    let data;
+    try {
+      const stat = await fs.stat(target);
+      if (stat.size > 2000000) throw new Error("File exceeds 2 MB");
+      data = await fs.readFile(target);
+    } catch (error) {
+      if (a.allowMissing === true && error.code === "ENOENT")
+        return { missing: true };
+      throw error;
+    }
     if (data.includes(0)) throw new Error("Binary files cannot be edited");
     return { content: data.toString("utf8"), revision: revision(data) };
   }

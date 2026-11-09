@@ -99,8 +99,11 @@ function useEditorState<T>(generation: { active: boolean }, initial: T | (() => 
   return [value, update] as const;
 }
 
-function diskRead(result: { content?: unknown; revision?: unknown }) {
-  if (!result || typeof result.content !== "string" || typeof result.revision !== "string")
+function diskRead(result: { content?: unknown; revision?: unknown; truncated?: unknown }) {
+  if (!result || Array.isArray(result) ||
+    typeof result.content !== "string" || typeof result.revision !== "string" ||
+    (result.truncated !== undefined && result.truncated !== false) ||
+    Object.keys(result).some(key => !["content", "revision", "truncated"].includes(key)))
     throw new Error("Could not read a complete disk version.");
   return { content: result.content, revision: result.revision };
 }
@@ -305,6 +308,7 @@ export default function EditorPanel({
       op: "read",
       root: config.root,
       path: config.path,
+      ...(diff ? { allowMissing: true } : {}),
     });
     (diff
       ? Promise.all([
@@ -322,16 +326,22 @@ export default function EditorPanel({
           editorChangeOwner(id, config, diff) !== owner ||
           (!diff && !ownsBuffer()) ||
           !canPublishEditorChange(opening, capture())) return;
-        const disk = diskRead(result);
+        // Only an explicit diff opening accepts the closed missing-file marker.
+        // It supplies comparison text only, never an editable buffer or revision.
+        const missing = diff && result && !Array.isArray(result) && result.missing === true &&
+          Object.keys(result).length === 1;
+        const disk = missing ? { content: "" } : diskRead(result);
         if (diff) {
-          if (!base || typeof base.content !== "string")
+          if (!base || Array.isArray(base) || typeof base.content !== "string" ||
+            (base.truncated !== undefined && base.truncated !== false) ||
+            Object.keys(base).some(key => !["content", "truncated"].includes(key)))
             throw new Error("Could not read the original file version.");
           setOriginal(base.content);
         } else if (!buffers.has(id)) {
           buffers.set(id, {
             content: disk.content,
             saved: disk.content,
-            revision: disk.revision,
+            revision: diskRead(result).revision,
           });
           generation.buffer = buffers.get(id);
         }
@@ -548,7 +558,7 @@ export default function EditorPanel({
         <div className="external-change" role="status">
           <span>
             {acknowledged === external.revision
-              ? "Keeping your text. Save remains blocked while the disk version conflicts. Compare or reload to review the disk changes."
+              ? "Keeping your text. Saving still checks for conflicts. Compare or reload to review the disk changes."
               : "This file changed outside HRig. Your edits are preserved; saving is protected."}
           </span>
           <button
