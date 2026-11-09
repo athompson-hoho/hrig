@@ -1067,7 +1067,7 @@ test("seat-notes docs: README and PRIVACY.md say the note is private, kept only 
     "3. Existing rigs and seats appear in the sidebar.",
     "Each session row also has a Notes button, shown when you point at the row or focus it and always on a seat that has a note, for a private note of up to 2000 characters about that seat.",
     "A note is kept only in HRig's workspace file on this computer, as plain text (keep secrets out of it);",
-    "it is never sent to the seat, a terminal, the task queue or another machine, and it stays until you clear it, even if the seat is gone.",
+    "it is never sent to the seat, a terminal, the task queue or another machine, and it stays until you clear it. HRig keeps at most 200 notes and drops the oldest first, and a note belongs to one seat on one connection, so recreating a rig or renaming a seat leaves its old note behind.",
     "panel layouts, seat metadata and any private seat notes you write (plain text, so keep secrets out of them), not passwords or terminal transcripts.",
   ])
     assert.equal(count(readme, part), 1, part);
