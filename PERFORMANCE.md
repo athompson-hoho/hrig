@@ -23,3 +23,37 @@ Each case starts a fresh application process with disposable local shells and a 
 | linux arm64 | 24 | 1221 | 1283 | 554 | 586 | 75 | 0 |
 
 Compare future measurements on equivalent hardware before setting budgets. The Intel macOS runner has the slowest readiness/editor timings in this sample; repeat and profile that workload before treating the difference as a runtime limitation.
+
+## Controlled renderer reproduction
+
+From the repository root, after a fresh build of the exact candidate and with the existing Playwright-managed Chromium executable available, use:
+
+```sh
+node scripts/benchmark.mjs --controlled-renderer --samples=5
+```
+
+The explicit `--controlled-renderer` flag selects this mode before packaged release metadata access. The original packaged benchmark remains available through its existing invocation and retains its 0/12/24-terminal scenarios; it is a separate workload. Do not use the default invocation as an availability probe. Controlled mode needs existing project dependencies, readable candidate Git metadata, fresh `dist/index.html` and `dist/assets/` output, and an already installed compatible runtime. It does not build or install prerequisites. Coordinate fresh builds with the shared build owner; an old or missing `dist` cannot establish current-candidate results.
+
+The default is five samples **per scenario** (ten total), with a fresh browser context per sample, one headless browser process and shared OS cache. `--samples=N` accepts integers from 1 through 20. These scenarios use zero terminals and a before-script, in-memory fake preload:
+
+- `welcome-only`: synthetic workspace with the welcome tab selected; explicitly open the synthetic file through Explorer, then Settings, then revisit the editor.
+- `restored-hidden`: welcome selected with saved unopened editor/diff/Settings tabs and saved global/tab render-on-demand flags false; select the editor, open Settings, then revisit the editor. Diff stays unopened and is not a separately timed activation.
+
+Only fixed synthetic connection/workspace/inventory/file responses and inert persistence/subscriptions are supplied. The harness never loads production preload or Electron main. Unknown capabilities and host actions are denied; networking is confined to GET requests for `/index.html` and allowlisted `/assets/` filenames at the synthetic origin, with service workers, websockets and unexpected requests blocked. Candidate assets reject symlinks and unexpected entries. No authenticated host, PTY, shell, owner workspace or host input belongs to this workload.
+
+All four elapsed values use one monotonic orchestration `performance.now()` clock, in **milliseconds**:
+
+| Field | Observed interval |
+|---|---|
+| `workspaceReadyMs` | Before navigation through the actual committed Layout model-ready selector |
+| `editorOpenMs` | Explicit first editor activation through visible Monaco view-lines readiness |
+| `settingsOpenMs` | Explicit Settings activation through its heading readiness |
+| `revisitMs` | Editor tab selection through visible Monaco readiness after Settings |
+
+Readiness includes automation, navigation, asset routing and selector-observation overhead. The model marker checks the committed model's ownership; it is not the earlier loaded log. Fixed editor/Settings chunk-request keys are recorded before and after activation; optional requests before activation fail the run. Component readiness and resource requests do not prove module evaluation, paint or native retention.
+
+The JSON report reconstructs allowlisted fields: candidate commit/dirty boolean, SHA-256 artifact fingerprint, platform/architecture, Node/browser versions, method, sample count, individual scenario samples and metric summaries. The artifact hash covers sorted asset names and bytes separated by NULs; it identifies the assets actually loaded, without certifying their freshness. Summaries provide min/max/arithmetic mean/median for each field across **both scenarios combined**; compare individual scenario samples separately when interpreting them. Invalid/nonfinite/regressing clock observations and duplicate completion are rejected. Failures use fixed labels, without raw errors, private identities, paths or environment dumps.
+
+Missing runtime or assets returns unavailable with zero samples and `metrics: null`; failed runs likewise supply no measured values. Exit zero alone is insufficient: inspect JSON `status`, `reason`, candidate/artifact and samples. A candidate-metadata subprocess restriction can instead produce `failed / controlled-run-failed` before the availability branch; retain that result separately from a read-only executable check. Do not interpret null metrics as numeric zero. Pure clock tests, Node loader duration, TAP execution time and bundle sizes are not startup measurements.
+
+These observations exclude renderer-entry evaluation as a separately timed interval, first paint, Electron/OS launch, backend/PTY readiness and cold-cache startup. The synthetic backend, headless browser, shared caches and automation differ from a native application. The packaged baseline above remains historical and is not a comparable before/after pair. No performance improvement follows without equivalent conditions and actual samples. Native focus, AT, layout, popout, restart, ReactDOM retention and report judgment require their own evidence.
