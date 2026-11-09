@@ -4564,3 +4564,7 @@ button:hover {
   text-align: center;
   opacity: 0.85;
 }
+.statusbar > div:has(.rig-health-status) { min-width: 0; }
+.statusbar .rig-health-status { max-width: 280px; min-width: 0; flex-shrink: 1; font-weight: 400; line-height: 1.5; }
+.statusbar .rig-health-status svg { flex-shrink: 0; }
+.statusbar .rig-health-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

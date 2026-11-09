@@ -105,6 +105,7 @@ import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import RelaunchSession from "./RelaunchSession";
 import SeatPrompt from "./SeatPrompt";
 import SeatMessage from "./SeatMessage";
+import RigHealthStatus from "./RigHealthStatus";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
 import PanelNavigator, { type NavigablePanel } from "./PanelNavigator";
@@ -2473,6 +2474,14 @@ export default function App() {
               <GitInfoStatus connection={connection} root={root} revision={fileRevision}
                 onOpen={() => {
                   setSection("changes");
+                  setSidebar(true);
+                }}
+              />
+              <RigHealthStatus
+                scope={attentionScope(connection, connection, inventory, inventoryHealth.current, inventoryError)}
+                rigId={state.activeRig}
+                onOpen={() => {
+                  setSection("sessions");
                   setSidebar(true);
                 }}
               />

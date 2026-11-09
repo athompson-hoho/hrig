@@ -34,6 +34,10 @@ function mountGitInfoApp(options = {}) {
           ...props, preferences: { 'appearance.statusBar': props.visible },
           AccountStatus: 'account-status', Network: 'network-icon', GitBranch: 'git-icon',
           Check: 'check-icon', Activity: 'activity-icon', tabCount: 2,
+          // Inert stand-ins for the rig-health status element (not under test here).
+          RigHealthStatus: () => null, attentionScope: () => ({ inventory: null, ready: false }),
+          inventory: null, inventoryHealth: { current: { key: '', verified: false } },
+          inventoryError: '', state: { activeRig: '' },
           setSection: value => events.push(['section', value]),
           setSidebar: value => events.push(['sidebar', value]),
           addPanel: (...args) => events.push(['panel', ...args]),
