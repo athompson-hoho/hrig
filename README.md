@@ -129,7 +129,7 @@ Open **Tools** in the top toolbar, or use **Ctrl K** to find a tool.
 | Arrange workspace | See a layout thumbnail, choose a panel and destination group, split or group without dragging, equalize sizes, undo/redo arrangement changes, and save role-based templates. |
 | Connection doctor | Check the real Node, OpenRig, tmux, Python and daemon environment. Connection/authentication failures include their cause. |
 | Attention center | See served attention/startup problems and blocked tasks; click a seat to focus it. Windows notifications are off by default and deduplicated when enabled. |
-| Task board | Filter by owner, text and state; inspect full task details; create work assigned to a seat. Handoffs are requested from the owning seat rather than impersonating it. |
+| Task board | Filter by owner, state, tag and text (owner, state and tag are remembered per connection, see [Task board filters](TASKS.md#task-board-filters)); inspect full task details; create work assigned to a seat. Handoffs are requested from the owning seat rather than impersonating it. |
 | Review workspace | Select a feedback recipient, open a changed file beside sessions, collect file/line notes, and explicitly send feedback through OpenRig. Git changes belong to the project; HRig does not infer which agent authored them. |
 | Project tools | Search text, create new text files and rename entries within the project. Save and close editors for a path before renaming it. |
 | Problems | Inspect Monaco diagnostics from opened files and jump to their lines. |

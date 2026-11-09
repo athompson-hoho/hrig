@@ -7,7 +7,10 @@ import {
   TASK_STATES,
   applyFilters,
   emptyFilters,
+  hasFilters,
   normalizeFilters,
+  staleFilters,
+  staleNote,
   tagOptions,
   type TaskFilters,
 } from "./task-filters";
@@ -106,6 +109,11 @@ export default function TaskBoard({
   };
   const visible = applyFilters(items || [], filters);
   const tags = tagOptions(items || []);
+  const stale = staleFilters(
+    filters,
+    addresses.map((a) => a.address),
+    items,
+  );
   const update = (patch: Partial<TaskFilters>) => {
     const next = normalizeFilters({ ...filters, ...patch });
     setFilters(next);
@@ -167,6 +175,10 @@ export default function TaskBoard({
           onChange={(e) => update({ seat: e.target.value })}
         >
           <option value="">All owners</option>
+          {filters.seat !== "" &&
+            !addresses.some((a) => a.address === filters.seat) && (
+              <option value={filters.seat}>{filters.seat}</option>
+            )}
           {addresses.map((a) => (
             <option key={a.address}>{a.address}</option>
           ))}
@@ -187,6 +199,9 @@ export default function TaskBoard({
           onChange={(e) => update({ tag: e.target.value })}
         >
           <option value="">All tags</option>
+          {filters.tag !== "" && !tags.includes(filters.tag) && (
+            <option value={filters.tag}>{filters.tag}</option>
+          )}
           {tags.map((t) => (
             <option key={t}>{t}</option>
           ))}
@@ -206,6 +221,7 @@ export default function TaskBoard({
             <div className="panel-empty" role="status">
               <ListTodo size={28} />
               <h3>No tasks match these filters</h3>
+              {staleNote(stale) && <p>{staleNote(stale)}</p>}
               <p>
                 Clear the filter, owner, state or tag to see all {items.length}{" "}
                 active items.
@@ -214,6 +230,14 @@ export default function TaskBoard({
                 Clear filters
               </button>
             </div>
+          )}
+          {hasFilters(filters) && visible.length > 0 && (
+            <p className="field-note" role="status">
+              Showing {visible.length} of {items.length} tasks.{" "}
+              <button className="small-button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </p>
           )}
         <div className="task-board">
           {["pending", "in-progress", "blocked", "other"].map((state) => (

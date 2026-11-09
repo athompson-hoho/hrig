@@ -1160,3 +1160,317 @@ test("task-filters wiring: one pure module, a board that only filters what it al
   ])
     assert.ok(!/taskFilters|task-filters/.test(read(file)), file);
 });
+
+test("task-filters stale: a remembered owner or tag that nothing offers any more stays visible in its box with a no-match note and Clear filters, and nothing is judged stale while the seats or tasks are still loading", async () => {
+  // The real board. Both a stale owner and a stale tag were saved in an earlier session.
+  let board = boardHarness({
+    saved: { seat: "dev-z@gone", state: "", tag: "slice:gone", text: "" },
+  });
+  try {
+    assert.equal(board.empty(), undefined, "loading shows no empty state");
+    assert.deepEqual(board.options("Filter task owner"), [
+      "",
+      "dev-z@gone",
+      "dev-a@hrig",
+      "dev-b@hrig",
+    ]);
+    assert.deepEqual(board.options("Filter task tag"), ["", "slice:gone"]);
+    assert.equal(board.value("Filter task owner"), "dev-z@gone");
+    assert.equal(board.value("Filter task tag"), "slice:gone");
+    await board.flush();
+    assert.deepEqual(board.titles(), []);
+    assert.deepEqual(board.options("Filter task tag"), [
+      "",
+      "slice:gone",
+      "gate:qa",
+      "mission:alpha",
+      "qa",
+      "slice:w2-asset-writes",
+    ]);
+    const empty = board.text(board.empty());
+    assert.ok(empty.includes("No tasks match these filters"));
+    assert.ok(
+      empty.includes(
+        "No seat or task matches the saved owner dev-z@gone. No task has the saved tag slice:gone.",
+      ),
+    );
+    assert.ok(
+      empty.includes(
+        "Clear the filter, owner, state or tag to see all 6 active items.",
+      ),
+    );
+    assert.equal(board.calls.filters.length, 0, "restoring saves nothing");
+    board.button("Clear filters").props.onClick();
+    assert.equal(board.titles().length, 6);
+    assert.deepEqual(board.options("Filter task owner"), [
+      "",
+      "dev-a@hrig",
+      "dev-b@hrig",
+    ]);
+    assert.deepEqual(board.options("Filter task tag"), [
+      "",
+      "gate:qa",
+      "mission:alpha",
+      "qa",
+      "slice:w2-asset-writes",
+    ]);
+    assert.equal(board.value("Filter task owner"), "");
+    assert.deepEqual(board.calls.filters, [
+      { seat: "", state: "", tag: "", text: "" },
+    ]);
+    assert.equal(board.empty(), undefined);
+  } finally {
+    board.unmount();
+  }
+
+  // One stale part gets its own sentence only.
+  board = boardHarness({
+    saved: { seat: "", state: "pending", tag: "slice:gone", text: "" },
+  });
+  try {
+    await board.flush();
+    const empty = board.text(board.empty());
+    assert.ok(empty.includes("No task has the saved tag slice:gone."));
+    assert.ok(!empty.includes("saved owner"));
+  } finally {
+    board.unmount();
+  }
+
+  // An owner no seat lists but a task still has is a real filter, not a stale one.
+  board = boardHarness({
+    saved: { seat: "dev-c@other", state: "", tag: "", text: "" },
+  });
+  try {
+    await board.flush();
+    assert.deepEqual(board.titles(), ["Other rig task"]);
+    assert.equal(board.empty(), undefined);
+    assert.deepEqual(board.options("Filter task owner"), [
+      "",
+      "dev-c@other",
+      "dev-a@hrig",
+      "dev-b@hrig",
+    ]);
+    assert.equal(
+      board.text(board.note()),
+      "Showing 1 of 6 tasks. Clear filters",
+    );
+  } finally {
+    board.unmount();
+  }
+
+  // Seats that have not loaded yet judge nothing: the saved owner is simply a filter with no match.
+  board = boardHarness({
+    saved: { seat: "dev-a@hrig", state: "", tag: "", text: "" },
+    seats: [],
+  });
+  try {
+    await board.flush();
+    assert.deepEqual(board.titles(), [
+      "Fix the login redirect",
+      "Write the docs",
+      "Odd job",
+    ]);
+    assert.equal(board.empty(), undefined);
+  } finally {
+    board.unmount();
+  }
+});
+
+test("task-filters board: with a filter set a line says how many tasks show and clears all four, with none set the board is today's board, and the markup keeps the same classes, controls and cards", async () => {
+  const board = boardHarness();
+  try {
+    await board.flush();
+    assert.equal(board.note(), undefined, "no filter, no line");
+    assert.equal(board.empty(), undefined);
+    board.pick("Filter task state", "pending");
+    assert.equal(
+      board.text(board.note()),
+      "Showing 3 of 6 tasks. Clear filters",
+    );
+    board.pick("Filter task state", "");
+    assert.equal(
+      board.note(),
+      undefined,
+      "clearing a box by hand removes the line",
+    );
+    board.pick("Filter tasks", "login");
+    assert.equal(
+      board.text(board.note()),
+      "Showing 2 of 6 tasks. Clear filters",
+      "text alone shows the line",
+    );
+    board.pick("Filter tasks", "zzz");
+    assert.equal(
+      board.note(),
+      undefined,
+      "with nothing showing the empty state speaks instead",
+    );
+    assert.ok(board.empty());
+    assert.equal(
+      board
+        .all()
+        .filter((n) => n.type === "button" && board.text(n) === "Clear filters")
+        .length,
+      1,
+      "one Clear filters at a time",
+    );
+    board.pick("Filter tasks", "login");
+    board.pick("Filter task tag", "slice:w2-asset-writes");
+    board.pick("Filter task owner", "dev-b@hrig");
+    board.pick("Filter task state", "pending");
+    assert.equal(
+      board.text(board.note()),
+      "Showing 1 of 6 tasks. Clear filters",
+    );
+    board.button("Clear filters").props.onClick();
+    assert.equal(board.titles().length, 6);
+    assert.equal(board.note(), undefined);
+    for (const label of [
+      "Filter tasks",
+      "Filter task owner",
+      "Filter task state",
+      "Filter task tag",
+    ])
+      assert.equal(board.value(label), "", label);
+    assert.deepEqual(board.calls.filters.slice(-1), [
+      { seat: "", state: "", tag: "", text: "" },
+    ]);
+    assert.equal(
+      board.calls.rigAction.length + board.calls.sendMessage.length,
+      0,
+    );
+
+    // Today's layout: the same grid now holds four controls in a fixed order; cards and columns are unchanged.
+    const grid = board.byClass("form-grid")[0];
+    assert.deepEqual(
+      grid.props.children.map((c) => c.props["aria-label"]),
+      [
+        "Filter tasks",
+        "Filter task owner",
+        "Filter task state",
+        "Filter task tag",
+      ],
+    );
+    const card = board.byClass("task-card")[0];
+    assert.deepEqual(
+      board
+        .all()
+        .filter((n) => card.props.children.includes(n))
+        .map((n) => [n.type, board.text(n)]),
+      [
+        ["strong", "Fix the login redirect"],
+        ["span", "dev-a@hrig"],
+        ["small", "pending"],
+      ],
+    );
+    assert.equal(board.byClass("task-column").length, 4);
+  } finally {
+    board.unmount();
+  }
+  const source = read("src/TaskBoard.tsx");
+  const classes = [
+    ...new Set([...source.matchAll(/className="([^"]+)"/g)].map((m) => m[1])),
+  ].sort();
+  assert.deepEqual(classes, [
+    "badge",
+    "field-label",
+    "field-note",
+    "form-grid",
+    "json-result",
+    "modal-actions",
+    "panel-empty",
+    "primary-button",
+    "secondary-button",
+    "small-button",
+    "success-note",
+    "task-board",
+    "task-card",
+    "task-column",
+    "tool-panel",
+    "tool-panel-heading",
+  ]);
+  assert.equal(count(source, "style="), 0, "no inline style");
+  assert.equal(count(source, "className={"), 0, "no computed class");
+});
+
+test("task-filters docs: TASKS.md says what the four filters do, where the tags come from, what is remembered and what is not, that nothing is sent, and README links to it", () => {
+  const doc = read("TASKS.md");
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, "\n## Task board filters\n"), 1);
+  const section = doc.slice(doc.indexOf("## Task board filters"));
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 4);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line per paragraph");
+  const say = (paragraph, parts) => {
+    const flat = collapse(paragraph);
+    for (const part of parts) assert.ok(flat.includes(part), "says: " + part);
+  };
+  say(paragraphs[0], [
+    "Four filters narrow the board",
+    "text in the task title, ignoring case",
+    "the owner (the seat a task is assigned to)",
+    "the state (pending, in-progress, blocked or failed)",
+    "the tag",
+    "passes every filter that is set",
+    "with no filter set every task shows",
+  ]);
+  say(paragraphs[1], [
+    "the tags found on the tasks that are loaded",
+    "up to the 100 most used, sorted",
+    "tags field as OpenRig reports it",
+    "a list of names, or comma separated text",
+    "without case or surrounding spaces",
+    "A task without tags never matches a tag filter",
+  ]);
+  say(paragraphs[2], [
+    "owner, state and tag you pick are remembered for each connection",
+    "workspace file",
+    "come back after a restart or reload",
+    "text box is a quick search and is not remembered",
+    "This is not a setting",
+    "nothing is sent to OpenRig",
+    "no task or seat is touched",
+  ]);
+  say(paragraphs[3], [
+    "says how many tasks show",
+    "Clear filters, which empties all four filters",
+    "no longer exists",
+    "the filter stays visible in its box",
+    "instead of dropping it silently",
+  ]);
+  const intro = collapse(doc.slice(0, doc.indexOf("## Task board filters")));
+  assert.ok(intro.includes("HRig reads the queue to show it"));
+  assert.ok(
+    intro.includes(
+      "assigning work and requesting a handoff are separate, explicit actions",
+    ),
+  );
+
+  const readme = read("README.md");
+  const rows = readme
+    .split("\n")
+    .filter((line) => line.startsWith("| Task board |"));
+  assert.equal(rows.length, 1);
+  assert.ok(rows[0].includes("Filter by owner, state, tag and text"));
+  assert.ok(rows[0].includes("remembered per connection"));
+  assert.equal(
+    count(rows[0], "[Task board filters](TASKS.md#task-board-filters)"),
+    1,
+  );
+  assert.ok(
+    rows[0].includes(
+      "Handoffs are requested from the owning seat rather than impersonating it.",
+    ),
+  );
+  assert.ok(
+    !rows[0].includes("owner, text and state"),
+    "the old wording is gone",
+  );
+  assert.equal(
+    count(readme, "TASKS.md"),
+    1,
+    "one link, from the Task board row",
+  );
+});
