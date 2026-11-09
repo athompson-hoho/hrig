@@ -9,6 +9,7 @@ const {
   Notification,
   safeStorage,
   shell,
+  clipboard,
 } = require("electron");
 const path = require("node:path");
 if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').homedir(),'.local','bin'),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH || '/usr/bin:/bin'].join(path.delimiter);
@@ -38,7 +39,39 @@ function handle(channel, fn) {
   });
 }
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
-require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs});
+require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
+require('./window-title.cjs').registerWindowTitle({handle,getWindow:()=>mainWindow});
+const terminalLogs = require('./terminal-logging.cjs').createTerminalLogs({notify: state => {
+  if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal:log-state', state);
+}});
+const logRequests = new Set();
+handle('terminal:log', async (_event, request) => {
+  const {id, op} = request || {};
+  if (typeof id !== 'string') throw Error('Invalid terminal.');
+  if (op === 'status') return terminalLogs.state(id);
+  if (op === 'stop') return terminalLogs.stop(id);
+  if (op !== 'start') throw Error('Invalid logging operation.');
+  const item = terminals.get(id);
+  if (!item) throw Error('Connect this terminal before starting a log.');
+  if (logRequests.has(id)) throw Error('A log file choice is already pending.');
+  logRequests.add(id);
+  try {
+    const chosen = await dialog.showSaveDialog(mainWindow, {title:'Start terminal log (append to file)', defaultPath:'terminal-session.log', filters:[{name:'Plain text log',extensions:['log','txt']}]});
+    if (chosen.canceled || !chosen.filePath) return terminalLogs.state(id);
+    if (terminals.get(id) !== item) throw Error('Terminal changed while choosing a log file. Start logging again.');
+    const state = await terminalLogs.start(id, chosen.filePath);
+    if (terminals.get(id) !== item) { await terminalLogs.forget(id); throw Error('Terminal disconnected before logging started.'); }
+    return state;
+  } finally { logRequests.delete(id); }
+});
+let logShutdown = false;
+app.on('before-quit', event => {
+  if (logShutdown) return;
+  event.preventDefault();
+  let timer;
+  Promise.race([terminalLogs.stopAll(),new Promise(resolve=>{timer=setTimeout(resolve,4000);})]).finally(() => {clearTimeout(timer);logShutdown = true; app.quit();});
+});
+
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
@@ -391,6 +424,20 @@ handle("files:operation", (_event, connection, request) =>
 handle("files:git", (_event, connection, root) =>
   backend.git(connection, root),
 );
+const terminalImages=require('./terminal-images.cjs');
+handle('terminal:clipboard-image', () => !clipboard.readImage().isEmpty());
+handle('terminal:paste-image', async (_event,id) => {
+ const item=terminals.get(id);if(!item)throw Error('Connect the terminal before pasting an image.');
+ const image=clipboard.readImage();if(image.isEmpty())throw Error('Clipboard does not contain an image.');
+ const png=image.toPNG();terminalImages.validateImage(png);
+ const target=terminalImages.imageDestination(item.connection);
+ const choice=await dialog.showMessageBox(mainWindow,{type:'question',title:'Paste image into terminal',message:`Copy clipboard image to ${item.connection.name} (${item.connection.host || item.connection.distro || "local desktop"})?`,detail:`${target}\n${png.length} bytes. The path will be inserted without Enter.`,buttons:['Cancel','Copy image'],defaultId:0,cancelId:0,noLink:true});
+ if(choice.response!==1)return null;
+ if(terminals.get(id)!==item)throw Error('Terminal changed while confirming image paste.');
+ await terminalImages.saveImage(item.connection,target,png);
+ if(terminals.get(id)!==item)throw Error('Terminal disconnected. Image was saved but no path was inserted.');
+ return terminalImages.quotedImagePath(target,item.connection.kind==='local'&&process.platform==='win32' ? (item.localShell==='cmd'?'cmd':'powershell') : 'posix');
+});
 handle("terminal:create", async (event, options) => {
   const { id, connection, root } = options;
   let session = options.session;
@@ -456,10 +503,11 @@ handle("terminal:create", async (event, options) => {
     env,
     useConpty: true,
   });
-  const item = { terminal, buffer: "", sender: event.sender };
+  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell };
   terminals.set(id, item);
   terminal.onData((data) => {
     if (terminals.get(id) !== item) return;
+    terminalLogs.append(id, data);
     item.buffer = (item.buffer + data).slice(-300000);
     if (!item.sender.isDestroyed())
       item.sender.send("terminal:data", { id, data });
@@ -468,6 +516,7 @@ handle("terminal:create", async (event, options) => {
     if (terminals.get(id) !== item) return;
     if (!item.sender.isDestroyed())
       item.sender.send("terminal:data", { id, exitCode });
+    void terminalLogs.forget(id);
     terminals.delete(id);
   });
   return { id, buffer: "" };
@@ -476,6 +525,7 @@ handle("terminal:close", (_event, id) => {
   const item = terminals.get(id);
   if (item) {
     item.terminal.kill();
+    void terminalLogs.forget(id);
     terminals.delete(id);
   }
 });

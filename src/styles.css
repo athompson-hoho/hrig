@@ -864,24 +864,65 @@
   align-self: flex-start;
   font-size: 8px;
 }
+/* Task cards: stuck highlight */
+.task-card[data-stuck="true"] {
+  border-color: var(--color-75613f);
+}
+.task-card .badge[data-stuck="true"] {
+  background: var(--color-382e22);
+  border-color: var(--color-75613f);
+  color: var(--color-d9c393);
+}
+/* end of Task cards: stuck highlight */
 .review-changes {
   margin: 20px 0;
   max-height: 300px;
   overflow: auto;
 }
-.review-changes > button {
+.review-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--color-a1b5c7);
+}
+.review-progress .checkbox-label {
+  margin: 0;
+}
+.review-file-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 7px;
+  border-bottom: 1px solid var(--color-303d4b);
+}
+.review-file-row > input {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--color-9cdbb7);
+}
+.review-file-row > button {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  width: 100%;
+  flex: 1;
   padding: 11px 7px;
   text-align: left;
-  border-bottom: 1px solid var(--color-303d4b);
   color: var(--color-9bb2cb);
 }
-.review-changes > button > span {
+.review-file-row > button > span {
   flex: 1;
+}
+.review-file-row > small {
+  flex: none;
+  padding-right: 7px;
+  font-size: 10px;
 }
 .review-changes small {
   color: var(--color-d5bd86);
@@ -977,7 +1018,10 @@ button {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible,
+:where([tabindex="0"], [role="button"]):focus-visible {
   outline: 2px solid var(--color-86cdb0);
   outline-offset: 2px;
 }
@@ -1351,6 +1395,11 @@ button:hover {
 .sidebar-search input:focus {
   outline: 0;
 }
+/* The input draws no ring of its own, so the box around it shows focus (not in High Contrast, whose white ring already reaches the input). */
+:root:not([data-theme="high-contrast"]) .sidebar-search:focus-within {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
+}
 .sidebar-search kbd {
   font-size: 9px;
   color: var(--color-565f70);
@@ -1373,6 +1422,14 @@ button:hover {
   display: flex;
   padding: 0;
   color: var(--color-7e8798);
+}
+.section-label .section-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-label button[aria-pressed="true"] {
+  color: var(--color-86cdb0);
 }
 .count {
   background: var(--color-2b2e38);
@@ -1477,6 +1534,25 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.seat-details .seat-badges {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+.seat-details .badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 1px 5px;
+  line-height: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seat-details .badge[data-kind="runtime"] {
+  flex-shrink: 0;
 }
 .seat-row .grip {
   color: var(--color-4a5363);
@@ -2451,6 +2527,36 @@ button:hover {
   width: 22px;
   height: 22px;
 }
+.session-toolbar.host-tinted {
+  box-shadow: inset 0 2px 0 0 var(--host-tint);
+}
+.host-tint-rows {
+  display: grid;
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.host-tint-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 110px;
+  gap: 8px;
+  align-items: center;
+}
+.host-tint-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.host-tint-label {
+  max-width: 120px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  color: var(--host-tint, var(--color-697a92));
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .terminal-context {
   display: flex;
   align-items: center;
@@ -2470,6 +2576,10 @@ button:hover {
 }
 .terminal-host .xterm {
   height: 100%;
+}
+.terminal-host.file-drop-active {
+  outline: 2px dashed var(--color-86cdb0);
+  outline-offset: -3px;
 }
 .terminal-ended {
   padding: 10px 14px;
@@ -2958,6 +3068,11 @@ button:hover {
 }
 .palette-input input:focus-visible {
   outline: 0;
+}
+/* Same for the command center search box. */
+:root:not([data-theme="high-contrast"]) .palette-input:focus-within {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
 }
 .command-list {
   margin-top: 15px;
@@ -3861,6 +3976,13 @@ button:hover {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+/* Search highlight in the settings list: the searched words in a row's name and description. */
+.setting-copy mark {
+  background: var(--surface);
+  color: var(--mint);
+  border-radius: 2px;
+  padding: 0 1px;
+}
 .setting-badge {
   font-size: 8px;
   color: var(--mint);
@@ -4148,6 +4270,17 @@ button:hover {
   outline: 2px solid #ffffff;
   outline-offset: 2px;
 }
+/* High Contrast: the two borders whose color is also a background elsewhere, and the text on the two light highlights. */
+:root[data-theme="high-contrast"] kbd,
+:root[data-theme="high-contrast"] .sidebar-footer {
+  border-color: var(--line);
+}
+:root[data-theme="high-contrast"] ::selection {
+  color: #000000;
+}
+:root[data-theme="high-contrast"] .window-controls button:last-child:hover {
+  color: #000000;
+}
 
 .theme-collection h4 {
   font-size: 10px;
@@ -4227,3 +4360,234 @@ button:hover {
 .session-row:hover > .icon-button, .session-row:focus-within > .icon-button { color: var(--color-c8cfdd); }
 .relaunch-target { display: flex; align-items: center; gap: 12px; margin: 18px 0; }
 .relaunch-target p { margin: 4px 0 0; color: var(--color-707b8e); font-size: 12px; }
+
+.terminal-seat-activity { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-6e7e95); white-space: nowrap; }
+.terminal-panel {
+  position: relative;
+}
+.terminal-status-overlay {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-status-overlay small {
+  color: var(--color-7f8ca2);
+}
+.terminal-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.terminal-overlay {
+  position: absolute;
+  right: 18px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+.terminal-overlay > * {
+  pointer-events: auto;
+}
+.terminal-jump,
+.terminal-overlay-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+}
+.terminal-jump:hover {
+  background: var(--color-303944);
+}
+.terminal-overlay-notice {
+  max-width: 320px;
+  color: var(--color-dfc28e, var(--color-c3ccda));
+}
+.terminal-overlay-notice button {
+  color: inherit;
+  display: inline-flex;
+}
+.terminal-context-menu {
+  position: fixed;
+  min-width: 160px;
+  z-index: 200;
+}
+/* Floats top-center inside the stage so it never resizes the PTY and stays clear of the reconnect notice (top-right) and Jump to latest (bottom-right); the global reduced-motion rules remove the fade-in. */
+.terminal-size {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--color-c3ccda);
+  background: var(--color-22252e);
+  border: 1px solid var(--color-3b414e);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px var(--color-0007);
+  pointer-events: none;
+  user-select: none;
+  z-index: 4;
+  animation: terminal-size-in 0.12s ease-out;
+}
+.terminal-size:empty {
+  display: none;
+}
+@keyframes terminal-size-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Floats over the whole stage (absolute, so no layout shift and no PTY resize), takes no clicks, and fades out in the time the component keeps it mounted; the global reduced-motion rules remove the fade, leaving a short static outline. */
+.terminal-bell-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  box-shadow:
+    inset 0 0 0 2px var(--mint),
+    inset 0 0 18px var(--mint);
+  animation: terminal-bell-flash 0.16s ease-out forwards;
+}
+@keyframes terminal-bell-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* Task details: rendered markdown body */
+.task-markdown {
+  margin: 10px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-c8d7e3);
+}
+.task-markdown:focus-visible {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
+}
+.task-markdown > :last-child {
+  margin-bottom: 0;
+}
+.task-markdown p {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+.task-markdown h3,
+.task-markdown h4,
+.task-markdown h5 {
+  margin: 14px 0 6px;
+  font-weight: 500;
+  color: var(--color-dce4ef);
+}
+.task-markdown > :first-child {
+  margin-top: 0;
+}
+.task-markdown h3 {
+  font-size: 15px;
+}
+.task-markdown h4 {
+  font-size: 13px;
+}
+.task-markdown h5 {
+  font-size: 12px;
+}
+.task-markdown pre {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--color-12171e);
+  border: 1px solid var(--color-313b49);
+  border-radius: 6px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--color-8c9eb5);
+}
+.task-markdown ul,
+.task-markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.task-markdown li {
+  white-space: pre-wrap;
+}
+.task-markdown blockquote {
+  margin: 0 0 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--color-3b4b5e);
+  color: var(--color-a1b5c7);
+  white-space: pre-wrap;
+}
+.task-markdown hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--color-303a48);
+}
+.task-markdown .md-code {
+  padding: 1px 4px;
+  background: var(--color-12171e);
+  border: 1px solid var(--color-313b49);
+  border-radius: 4px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+}
+.task-markdown .md-url {
+  color: var(--color-889db6);
+}
+/* end of Task details */
+/* Task details: the files a task mentions, in the look of the other small buttons */
+.task-file-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.task-file-refs .small-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+/* Output counter (opt-in diagnostics): keeps the .terminal-size look but stays on, at the top left of the stage, clear of the size readout (top center), the reconnect notice (top right) and Jump to latest (bottom right); it floats, so it never resizes the PTY, and it takes no clicks. */
+.terminal-size.terminal-output-counter {
+  left: 12px;
+  transform: none;
+  animation: none;
+}

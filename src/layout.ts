@@ -1,4 +1,6 @@
 import { Model, type IJsonModel, type IJsonTabNode } from "flexlayout-react";
+import { withoutMaximized } from "./panel-maximize";
+import { normalizeTabTitles } from "./panel-title";
 export const globalLayout = {
   tabEnableRename: true,
   tabEnableFloat: true,
@@ -28,11 +30,14 @@ export function initialModel() {
     },
   });
 }
-export function restoreModel(json?: IJsonModel) {
+// A stored layout never reopens maximized: that flag is a session-only view state.
+// Its tab titles are cleaned on the way in; a layout too deep or too large to read is refused like any other unreadable one.
+export function restoreModel(stored?: IJsonModel) {
   try {
+    const json = normalizeTabTitles(stored);
     if (json)
       return Model.fromJson({
-        ...json,
+        ...withoutMaximized(json),
         global: { ...globalLayout, ...json.global },
       });
   } catch {}

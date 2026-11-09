@@ -6,7 +6,7 @@ HRig is a desktop workspace for OpenRig. It does not operate a hosted project-st
 
 ## Local information
 
-Settings, selected connection details, workspace layouts, drafts/recovery copies, integration configuration, mobile pairing records and related local state are stored on the desktop computer. Drafts can contain unsaved source code and review/message text. Credential storage uses Electron's operating-system-backed encryption where the relevant integration supports it; CLI tools also maintain their own authentication stores. HRig's Windows uninstaller preserves application data, so uninstalling is not a credential or draft erasure operation. Use the applicable disconnect, device-revocation and saved-draft controls to remove those records.
+Settings, selected connection details, workspace layouts, per-file review checks, drafts/recovery copies, integration configuration, mobile pairing records and related local state are stored on the desktop computer. Drafts can contain unsaved source code and review/message text. Credential storage uses Electron's operating-system-backed encryption where the relevant integration supports it; CLI tools also maintain their own authentication stores. HRig's Windows uninstaller preserves application data, so uninstalling is not a credential or draft erasure operation. Use the applicable disconnect, device-revocation and saved-draft controls to remove those records.
 
 ## Connections and agents
 
@@ -32,3 +32,11 @@ Community theme palettes are bundled locally. Selecting a bundled theme does not
 ## Support and control
 
 Disable or disconnect optional integrations, close configured connections/panels, and revoke mobile devices when they should no longer exchange information. Agent processes and remote services can continue independently of the HRig window; stop them through their own controls when appropriate. For privacy questions, contact the maintainer through the [project repository](https://github.com/athompson-hoho/hrig). Public issues must not contain credentials, private source code or personal information.
+
+## Optional terminal logs
+
+Continuous terminal recording is off by default. Start log requires choosing a local desktop file and visibly indicates when recording is active. Output from local or remote terminals is appended there until stopped or disconnected, with control sequences stripped and bounded file/queue sizes. Logs may contain sensitive output, including text a program later erases; stripping terminal controls does not redact secrets. HRig does not upload or automatically delete these user-chosen files. Terminal bookmarks remain in memory and expire when their retained output is discarded.
+
+## Snippet export and import
+
+Saved terminal snippets are stored locally in the workspace settings. Export shows them as JSON text with only each snippet's name and text, exactly as saved; HRig does not write that text to a file, copy it or send it anywhere, so where it goes is up to you. Snippet text can contain anything you typed, including secrets, so keep passwords and tokens out of snippets. Import reads only text you paste into the dialog, checks it, shows what it would add and adds nothing until you confirm; it never sends anything to a terminal.

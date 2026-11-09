@@ -1,23 +1,80 @@
-import { useEffect, useState } from "react";
-import { ListTodo, Plus, RefreshCw, ArrowUpRight } from "lucide-react";
+import {
+  useEffect,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+} from "react";
+import {
+  ListTodo,
+  Plus,
+  RefreshCw,
+  ArrowUpRight,
+  Download,
+} from "lucide-react";
 import type { Connection, Seat } from "./types";
 import { ErrorBox, Loading, Modal } from "./components";
+import TaskDetailBody from "./TaskDetailBody";
+import TaskFileReferences from "./TaskFileReferences";
+import { ownerHint, reviewNote, type TaskDraft } from "./task-draft";
+import {
+  MAX_FILTER_TEXT,
+  TASK_STATES,
+  applyFilters,
+  emptyFilters,
+  hasFilters,
+  itemTags,
+  normalizeFilters,
+  staleFilters,
+  staleNote,
+  tagOptions,
+  type TaskFilters,
+} from "./task-filters";
+import { reasonOf } from "./task-reason";
+import { ageBadge, isStuck } from "./task-age";
+import { ageOf } from "./task-age";
+import {
+  boardColumns,
+  cellAtIndex,
+  cellIndex,
+  moveFocus,
+  stopAt,
+  tabCell,
+  type Stop,
+} from "./task-board-nav";
+import {
+  exportButton,
+  exportFile,
+  exportNotice,
+  exportRows,
+  type ExportFormat,
+} from "./task-export";
+import { downloadText } from "./download-text";
 export default function TaskBoard({
   connection,
   rigName,
   seats,
   onSeat,
+  savedFilters,
+  onFilters,
+  draft,
+  onDraftTaken,
+  root,
+  onFile,
 }: {
   connection: Connection;
   rigName?: string;
   seats: Seat[];
   onSeat: (seat: Seat) => void;
+  savedFilters?: TaskFilters;
+  onFilters?: (filters: TaskFilters) => void;
+  draft?: TaskDraft | null;
+  onDraftTaken?: () => void;
+  root?: string;
+  onFile?: (path: string, line?: number) => void;
 }) {
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("");
-  const [owner, setOwner] = useState("");
-  const [stateFilter, setStateFilter] = useState("");
+  const [filters, setFilters] = useState(() => normalizeFilters(savedFilters));
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<any>(null);
@@ -27,6 +84,11 @@ export default function TaskBoard({
   const [body, setBody] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
+  // The draft the open Assign work dialog was prepared from, while that dialog is open.
+  const [prepared, setPrepared] = useState<TaskDraft | null>(null);
+  // The card that last had focus (the board's one tab stop) and, while a refresh lands, the board that had focus.
+  const [stop, setStop] = useState<Stop | null>(null);
+  const [held, setHeld] = useState<Element | null>(null);
   useEffect(() => {
     let active = true;
     const load = () =>
@@ -34,6 +96,11 @@ export default function TaskBoard({
         .queue(connection, rigName)
         .then((r) => {
           if (active) {
+            setHeld(
+              typeof document === "undefined"
+                ? null
+                : document.activeElement?.closest(".task-board") || null,
+            );
             setItems(r);
             setError("");
           }
@@ -48,6 +115,40 @@ export default function TaskBoard({
       clearInterval(timer);
     };
   }, [connection.id, rigName, refresh]);
+  // A refresh that moves the focused card to another column replaces its element. Put focus back on the board's tab stop
+  // only when the board had focus and lost it; focus that is anywhere else is never moved.
+  useEffect(() => {
+    if (!held || typeof document === "undefined") return;
+    if (held.contains(document.activeElement)) return;
+    held.querySelector<HTMLElement>('.task-card[tabindex="0"]')?.focus();
+  }, [items]);
+  // A draft prepared from a terminal selection only fills the Assign work dialog: the owner stays empty, nothing is created until the person presses Create assigned task, and a task already being written is never overwritten.
+  useEffect(() => {
+    if (!draft) return;
+    if (create && (title.trim() || body.trim())) {
+      setError(
+        "The selection was not used because a task is already being written. Finish or close it, then try again.",
+      );
+    } else {
+      setError("");
+      setNotice("");
+      setSelected(null);
+      setDetail(null);
+      setTitle(draft.subject);
+      setBody(draft.body);
+      setDestination("");
+      setCreate(true);
+      setPrepared(draft);
+    }
+    onDraftTaken?.();
+  }, [draft]);
+  // Closing a prepared dialog throws its text away, so a selection never comes back in a later Assign work dialog.
+  useEffect(() => {
+    if (create || !prepared) return;
+    setPrepared(null);
+    setTitle("");
+    setBody("");
+  }, [create, prepared]);
   const addresses = seats.map((s) => ({
     seat: s,
     address: s.name + "@" + s.rigName,
@@ -93,12 +194,88 @@ export default function TaskBoard({
       setBusy(false);
     }
   };
-  const visible = (items || []).filter(
-    (i) =>
-      (!stateFilter || i.status === stateFilter) &&
-      (!owner || i.destination === owner) &&
-      (!filter || String(i.title).toLowerCase().includes(filter.toLowerCase())),
+  // Saves the tasks the board shows and nothing else: one row per shown task in the fixed export columns, never a whole task or its body (see task-export.ts). It only reads the list; nothing is sent and no task changes.
+  const exportShown = (format: ExportFormat, list: any[], at: number) => {
+    try {
+      const set = exportRows(list, at, {
+        tags: itemTags,
+        age: ageOf,
+        reason: reasonOf,
+      });
+      const file = exportFile(format, set.rows, at);
+      downloadText(file.name, file.text, file.type);
+      setNotice(exportNotice(format, set.rows.length, set.total));
+    } catch (e) {
+      setError("Could not export: " + (e as Error).message);
+    }
+  };
+  const visible = applyFilters(items || [], filters);
+  const columns = boardColumns(visible);
+  const shown = columns.reduce((n, c) => n + c.items.length, 0);
+  const exportCsv = exportButton("csv", shown);
+  const exportMarkdown = exportButton("md", shown);
+  const tab = tabCell(columns, stop);
+  const tags = tagOptions(items || []);
+  const stale = staleFilters(
+    filters,
+    addresses.map((a) => a.address),
+    items,
   );
+  const update = (patch: Partial<TaskFilters>) => {
+    const next = normalizeFilters({ ...filters, ...patch });
+    setFilters(next);
+    // The text box is a quick search typed key by key: only seat, state and tag are remembered.
+    if (patch.text === undefined) onFilters?.(next);
+  };
+  const clearFilters = () => {
+    setFilters(emptyFilters());
+    onFilters?.(emptyFilters());
+  };
+  // Only the card that last had focus is a tab stop, so Tab crosses the board in one step.
+  const tabFor = (col: number, row: number) =>
+    tab && tab.col === col && tab.row === row ? 0 : -1;
+  const cardsOf = (board: HTMLElement) =>
+    Array.from(board.querySelectorAll<HTMLElement>(".task-card"));
+  // Arrows, Home and End move focus between cards. Only a key typed on a card is looked at, and only a handled key is consumed.
+  const onBoardKey = (event: KeyboardEvent<HTMLElement>) => {
+    const cards = cardsOf(event.currentTarget);
+    const here = cards.indexOf(event.target as HTMLElement);
+    if (here < 0) return;
+    const to = moveFocus(columns, cellAtIndex(columns, here), event);
+    if (!to) return;
+    event.preventDefault();
+    const next = cards[cellIndex(columns, to)];
+    if (next && next !== event.target) next.focus();
+  };
+  const onBoardFocus = (event: FocusEvent<HTMLElement>) => {
+    const at = cardsOf(event.currentTarget).indexOf(
+      event.target as HTMLElement,
+    );
+    const next = stopAt(columns, cellAtIndex(columns, at));
+    if (next) setStop(next);
+  };
+  const reasonNote = (item: any) => {
+    const reason = reasonOf(item);
+    return reason ? (
+      <span data-reason={reason.kind} title={reason.title}>
+        {reason.line}
+      </span>
+    ) : null;
+  };
+  // Ages are measured at render time; the board renders again on every refresh.
+  const now = Date.now();
+  const ageNote = (item: any) => {
+    const badge = ageBadge(item, now);
+    return badge ? (
+      <small
+        className="badge"
+        data-stuck={badge.stuck ? "true" : undefined}
+        title={badge.title}
+      >
+        {badge.text}
+      </small>
+    ) : null;
+  };
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
@@ -117,6 +294,24 @@ export default function TaskBoard({
           Refresh
         </button>
         <button
+          className="small-button"
+          onClick={() => exportShown("csv", visible, now)}
+          disabled={!shown}
+          title={exportCsv.title}
+        >
+          <Download size={13} />
+          {exportCsv.text}
+        </button>
+        <button
+          className="small-button"
+          onClick={() => exportShown("md", visible, now)}
+          disabled={!shown}
+          title={exportMarkdown.title}
+        >
+          <Download size={13} />
+          {exportMarkdown.text}
+        </button>
+        <button
           className="primary-button"
           onClick={() => {
             setError("");
@@ -124,6 +319,11 @@ export default function TaskBoard({
             setCreate(true);
           }}
           disabled={!addresses.length}
+          title={
+            addresses.length
+              ? undefined
+              : "No seats available to assign work to. Refresh rigs in the sidebar."
+          }
         >
           <Plus size={13} />
           Assign work
@@ -135,27 +335,45 @@ export default function TaskBoard({
         <input
           aria-label="Filter tasks"
           placeholder="Filter tasks…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          maxLength={MAX_FILTER_TEXT}
+          value={filters.text}
+          onChange={(e) => update({ text: e.target.value })}
         />
         <select
           aria-label="Filter task owner"
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
+          value={filters.seat}
+          onChange={(e) => update({ seat: e.target.value })}
         >
           <option value="">All owners</option>
+          {filters.seat !== "" &&
+            !addresses.some((a) => a.address === filters.seat) && (
+              <option value={filters.seat}>{filters.seat}</option>
+            )}
           {addresses.map((a) => (
             <option key={a.address}>{a.address}</option>
           ))}
         </select>
         <select
           aria-label="Filter task state"
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
+          value={filters.state}
+          onChange={(e) => update({ state: e.target.value })}
         >
           <option value="">All states</option>
-          {["pending", "in-progress", "blocked", "failed"].map((s) => (
+          {TASK_STATES.map((s) => (
             <option key={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter task tag"
+          value={filters.tag}
+          onChange={(e) => update({ tag: e.target.value })}
+        >
+          <option value="">All tags</option>
+          {filters.tag !== "" && !tags.includes(filters.tag) && (
+            <option value={filters.tag}>{filters.tag}</option>
+          )}
+          {tags.map((t) => (
+            <option key={t}>{t}</option>
           ))}
         </select>
       </div>
@@ -168,43 +386,70 @@ export default function TaskBoard({
           <p>Assign work to a seat or wait for your team’s tasks.</p>
         </div>
       ) : (
-        <div className="task-board">
-          {["pending", "in-progress", "blocked", "other"].map((state) => (
-            <section className="task-column" key={state}>
+        <>
+          {!visible.length && (
+            <div className="panel-empty" role="status">
+              <ListTodo size={28} />
+              <h3>No tasks match these filters</h3>
+              {staleNote(stale) && <p>{staleNote(stale)}</p>}
+              <p>
+                Clear the filter, owner, state or tag to see all {items.length}{" "}
+                active items.
+              </p>
+              <button className="small-button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </div>
+          )}
+          {hasFilters(filters) && visible.length > 0 && (
+            <p className="field-note" role="status">
+              Showing {visible.length} of {items.length} tasks.{" "}
+              <button className="small-button" onClick={clearFilters}>
+                Clear filters
+              </button>
+            </p>
+          )}
+        <div
+          className="task-board"
+          role="group"
+          aria-label="Tasks by state. Use the arrow keys, Home and End to move between tasks."
+          onKeyDown={onBoardKey}
+          onFocus={onBoardFocus}
+        >
+          {columns.map((column, col) => (
+            <section
+              className="task-column"
+              key={column.state}
+              aria-label={
+                column.label +
+                ", " +
+                column.items.length +
+                (column.items.length === 1 ? " task" : " tasks")
+              }
+            >
               <h4>
-                {state === "other" ? "Other states" : state}
-                <span>
-                  {
-                    visible.filter((i) =>
-                      state === "other"
-                        ? !["pending", "in-progress", "blocked"].includes(
-                            i.status,
-                          )
-                        : i.status === state,
-                    ).length
-                  }
-                </span>
+                {column.label}
+                <span>{column.items.length}</span>
               </h4>
-              {visible
-                .filter((i) =>
-                  state === "other"
-                    ? !["pending", "in-progress", "blocked"].includes(i.status)
-                    : i.status === state,
-                )
-                .map((item) => (
-                  <button
-                    className="task-card"
-                    key={item.id}
-                    onClick={() => inspect(item)}
-                  >
-                    <strong>{item.title}</strong>
-                    <span>{item.destination}</span>
-                    <small className="badge">{item.status}</small>
-                  </button>
-                ))}
+              {column.items.map((item, row) => (
+                <button
+                  className="task-card"
+                  key={item.id}
+                  onClick={() => inspect(item)}
+                  tabIndex={tabFor(col, row)}
+                  data-stuck={isStuck(item, now) ? "true" : undefined}
+                >
+                  <strong>{item.title}</strong>
+                  <span>{item.destination}</span>
+                  {reasonNote(item)}
+                  <small className="badge">{item.status}</small>
+                  {ageNote(item)}
+                </button>
+              ))}
             </section>
           ))}
         </div>
+        </>
       )}
       {(create || selected) && (
         <Modal
@@ -221,6 +466,11 @@ export default function TaskBoard({
           wide
         >
           {error && <ErrorBox error={error} />}{" "}
+          {create && prepared && (
+            <p className="field-note" role="status">
+              {reviewNote(prepared)}
+            </p>
+          )}
           {create ? (
             <>
               <label className="field-label">
@@ -242,9 +492,21 @@ export default function TaskBoard({
               </label>
             </>
           ) : detail ? (
-            <pre className="json-result">{JSON.stringify(detail, null, 2)}</pre>
+            <TaskDetailBody detail={detail}>
+              <pre className="json-result">
+                {JSON.stringify(detail, null, 2)}
+              </pre>
+            </TaskDetailBody>
           ) : (
             <Loading />
+          )}
+          {!create && detail && onFile && root && (
+            <TaskFileReferences
+              detail={detail}
+              connection={connection}
+              root={root}
+              onFile={onFile}
+            />
           )}
           <label className="field-label">
             OWNER
@@ -259,6 +521,9 @@ export default function TaskBoard({
               ))}
             </select>
           </label>
+          {create && prepared && ownerHint(prepared, seats) && (
+            <p className="field-note">{ownerHint(prepared, seats)}</p>
+          )}
           <div className="modal-actions">
             {!create && (
               <button

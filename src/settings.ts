@@ -1,5 +1,7 @@
 import { themes } from "./theme-catalog";
 import { isWindows } from "./platform";
+import { DEFAULT_WORD_SEPARATOR, isValidWordSeparator } from "./terminal-words";
+import { STATUS_ITEMS } from "./status-bar-items";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -7,6 +9,9 @@ export const defaults = {
   "appearance.fontFamily": '"DM Sans", "Segoe UI", sans-serif',
   "appearance.reduceMotion": false,
   "appearance.statusBar": true,
+  "appearance.statusBarHidden": "",
+  "appearance.windowTitleDetails": false,
+  "appearance.seatBadges": false,
   "editor.fontSize": 13,
   "editor.fontFamily": '"Cascadia Code", Consolas, monospace',
   "editor.tabSize": 2,
@@ -29,7 +34,19 @@ export const defaults = {
   "terminal.theme": "inherit",
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
+  "terminal.copyOnSelect": false,
+  "terminal.copyTrimTrailingWhitespace": false,
+  "terminal.confirmMultilinePaste": false,
+  "terminal.pasteHistory": false,
+  "terminal.showSizeOnResize": true,
+  "terminal.showOutputCounter": false,
+  "terminal.bellStyle": "none",
+  "terminal.minimumContrastRatio": 1,
+  "terminal.macOptionIsMeta": false,
+  "terminal.wordSeparator": DEFAULT_WORD_SEPARATOR,
   "workspace.refreshInterval": 15,
+  "workspace.restoreLastProject": false,
+  "workspace.hideStoppedSeats": false,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
@@ -37,6 +54,10 @@ export const defaults = {
   "rig.claudePlanMonthlyUsd": 200,
   "rig.codexPlanMonthlyUsd": 100,
   "notifications.desktop": false,
+  "notifications.terminalBell": false,
+  "notifications.terminalQuiet": false,
+  "notifications.humanItems": false,
+  "shortcuts.overrides": "",
 };
 export type Preferences = typeof defaults;
 export type SettingKey = keyof Preferences;
@@ -135,6 +156,29 @@ export const schema: Setting[] = [
     label: "Show status bar",
     description:
       "Show connection, source control, session count, and layout status at the bottom.",
+  },
+  {
+    key: "appearance.statusBarHidden",
+    category: "Appearance",
+    label: "Hidden status bar items",
+    description:
+      "Status bar items to hide, as ids separated by commas or spaces: " +
+      STATUS_ITEMS.map((item) => item.id).join(", ") +
+      ". Empty (the default) shows every item, and unknown ids are ignored. An empty box is not accepted: use the reset button to show every item again. The reconnect button appears only while terminals are dropped, and the same action stays in the command center. Applies only while Show status bar is on. Display only; nothing is sent to the shell or the seat.",
+  },
+  {
+    key: "appearance.windowTitleDetails",
+    category: "Appearance",
+    label: "Show project and panel in the window title",
+    description:
+      "Show the project folder name and the active panel's name in the window title, as Panel - project - hRig, in the taskbar and the window switcher. Off by default, so the title stays hRig. The names are cleaned of control and direction characters and the whole title is cut to 100 characters; nothing else (no file text, seat output, host or secret) is put in it. Main window only: detached windows keep hRig. The title bar drawn inside HRig does not change.",
+  },
+  {
+    key: "appearance.seatBadges",
+    category: "Appearance",
+    label: "Show runtime and model badges on sessions",
+    description:
+      "Show two small badges under each session's name in the sidebar list: its runtime (Claude, Codex or the name the inventory gives) and its model. Off by default, so the list looks exactly as before. The text comes from the OpenRig inventory and is cleaned of control and direction characters, then cut to 16 characters for the runtime and 24 for the model; the tooltip keeps up to 80. A session whose inventory names no model, or only the generic agent runtime, shows no badge for it. Display only: nothing is sent to the shell or the seat, and nothing is saved.",
   },
   {
     key: "editor.fontSize",
@@ -304,6 +348,80 @@ export const schema: Setting[] = [
       "Retry failed existing seat attachments with bounded backoff, up to six attempts. Never starts another agent.",
   },
   {
+    key: "terminal.copyOnSelect",
+    category: "Terminal",
+    label: "Copy on select",
+    description:
+      "Copy terminal text to the system clipboard shortly after you finish selecting it. Never pastes or sends anything to the shell.",
+  },
+  {
+    key: "terminal.copyTrimTrailingWhitespace",
+    category: "Terminal",
+    label: "Trim trailing spaces on copy",
+    description:
+      "Remove the spaces and tabs at the end of each line of terminal text you copy: the Copy and Copy output buttons, the keyboard and right-click copy, Copy in the macOS Edit menu and Copy on select. Line breaks, leading spaces, blank lines and spaces inside a line are kept. Off by default, so copied text is exactly what the terminal shows; leave it off when trailing blanks matter, such as a Markdown hard line break. Applies at once to every open terminal. Changes only what is placed on the clipboard; nothing is sent to the shell or the seat, and Paste and Export are unchanged.",
+  },
+  {
+    key: "terminal.confirmMultilinePaste",
+    category: "Terminal",
+    label: "Confirm multi-line paste",
+    description:
+      "Ask for confirmation, with the line count, before pasting text that contains a line break into a terminal. Nothing is sent until you confirm.",
+  },
+  {
+    key: "terminal.pasteHistory",
+    category: "Terminal",
+    label: "Paste history",
+    description:
+      "Remember the text you paste into a terminal with HRig, so Paste from history in the terminal's right-click menu can paste it again. Off by default, and then nothing is remembered and the menu item does not exist. Each terminal keeps its own last 10 pastes of up to 10,000 characters, in memory only: never saved, logged or exported, never shared with another terminal, and gone when you close the terminal, turn this off or close HRig. Pasted text can contain secrets. Only text HRig itself pasted is remembered; the clipboard is never read to build the list. Choosing an entry pastes it like a normal paste, so Confirm multi-line paste still asks, and Enter is never pressed. See TERMINALS.md.",
+  },
+  {
+    key: "terminal.showSizeOnResize",
+    category: "Terminal",
+    label: "Show size on resize",
+    description:
+      "Briefly show the terminal size as columns x rows after it is resized. Display only; nothing is sent to the shell or the seat.",
+  },
+  {
+    key: "terminal.showOutputCounter",
+    category: "Terminal",
+    label: "Show output counter",
+    description:
+      "Show a small counter at the top left of each terminal with the lines and bytes of output it has received since it attached or was last cleared, for example 1.2k lines and 3.4 MB. Off by default. Diagnostics only: it keeps two numbers, never the output text, updates at most four times a second, and sends nothing to the shell or the seat.",
+  },
+  {
+    key: "terminal.bellStyle",
+    category: "Terminal",
+    label: "Bell style",
+    description:
+      "What a terminal bell does inside HRig: none (the default) or visual, a brief highlight on the terminal. Desktop notifications for a bell are the separate Terminal bell alerts setting under Notifications; both can apply. No sound is played and nothing is sent to the shell or the seat.",
+    options: options("none", "visual"),
+  },
+  {
+    key: "terminal.minimumContrastRatio",
+    category: "Terminal",
+    label: "Minimum contrast",
+    description:
+      "Lowest contrast ratio allowed between terminal text and its background, from 1 to 21. 1 (the default) draws every color exactly as the program and theme set it. Raise it (4.5 and 7 are the WCAG AA and AAA levels) to lighten or darken only the text that is too hard to read, such as dim ANSI colors. Backgrounds are never changed. Display only; nothing is sent to the shell or the seat.",
+    min: 1,
+    max: 21,
+    step: 0.5,
+  },
+  {
+    key: "terminal.macOptionIsMeta",
+    category: "Terminal",
+    label: "Option as Meta (macOS)",
+    description:
+      "macOS only; no effect on Windows or Linux. Off (the default) keeps Option typing special characters such as accents. On makes Option act as the Meta key in terminals, so Option+B and Option+F move back and forward a word in shells such as zsh and bash, and Option no longer types special characters there. Applies at once to every open terminal. Changes only how your own key presses are encoded; nothing is sent to the shell or the seat unless you press a key.",
+  },
+  {
+    key: "terminal.wordSeparator",
+    category: "Terminal",
+    label: "Word separators",
+    description:
+      "Characters that end a word when you double-click text in a terminal to select it. The default is xterm's own: space, parentheses, square and curly brackets, single and double quotes, comma and backtick, so nothing changes until you edit it. Up to 64 characters, no line breaks or control characters, and not empty. Keep a space in the list unless you want a double-click to run across spaces. Applies at once to every open terminal. Changes only what a double-click selects; nothing is sent to the shell or the seat.",
+  },
+  {
     key: "workspace.refreshInterval",
     category: "Workspace",
     label: "Rig refresh interval",
@@ -311,6 +429,20 @@ export const schema: Setting[] = [
       "Seconds between background rig and seat inventory refreshes on the active connection.",
     min: 5,
     max: 120,
+  },
+  {
+    key: "workspace.restoreLastProject",
+    category: "Workspace",
+    label: "Reopen the last project on launch",
+    description:
+      "When HRig starts, open your most recent project if the project it brought back is a different one, for example because the saved folder or connection is gone. It uses the same Open project check as a project on the Welcome screen: the folder must exist, and a failure shows its message there and changes nothing else. Off by default, so HRig starts exactly as before. It never reaches a host that launch does not already use (a project on another SSH or WSL connection is not reopened for you), never starts or restarts a seat and never sends anything to a terminal. Read from your user settings only: a project override has no effect.",
+  },
+  {
+    key: "workspace.hideStoppedSeats",
+    category: "Workspace",
+    label: "Hide stopped sessions in the sidebar",
+    description:
+      "Leave the sessions that have stopped or exited, and the sessions of a rig the inventory calls archived, out of the sidebar's session list. Off by default, so every session is listed as before. A failed session or one that needs input is never hidden. While this is on, the count beside SESSIONS reads shown of total, and an empty list says how many are hidden, with a button to show them. Only that list changes: open panels, the command center, drag and drop and relaunch are as they were, and nothing is started, stopped or sent to a seat. The eye button beside SESSIONS turns it on and off. Read from your user settings only: a project override has no effect.",
   },
   {
     key: "connections.defaultKind",
@@ -360,6 +492,34 @@ export const schema: Setting[] = [
     description:
       "Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply.",
   },
+  {
+    key: "notifications.terminalBell",
+    category: "Notifications",
+    label: "Terminal bell alerts",
+    description:
+      "Also notify when a terminal you are not looking at rings the bell. Requires desktop notifications. Notifications name the seat and host only, never terminal text.",
+  },
+  {
+    key: "notifications.terminalQuiet",
+    category: "Notifications",
+    label: "Terminal quiet alerts",
+    description:
+      "Also notify when a terminal you are not looking at goes quiet after a burst of output, such as a finished build. Requires desktop notifications. No terminal text is included.",
+  },
+  {
+    key: "notifications.humanItems",
+    category: "Notifications",
+    label: "Notify about queue items for me",
+    description:
+      "Notify when a new Task queue item addressed to a person appears (a human@host, human@kernel or name@external destination). Off by default and separate from Desktop attention notifications: this setting alone is the opt-in. Read only: HRig reads the queue list it already reads, and never claims, answers or changes an item or sends anything to a seat. The notification gives the count and at most the first item's summary, cut to 80 characters, never an item's text, id or address. Items already waiting when you turn it on or switch connection, and quiet updates, do not notify.",
+  },
+  {
+    key: "shortcuts.overrides",
+    category: "Workspace",
+    label: "Shortcut overrides",
+    description:
+      "New keys for the three shortcuts that can be rebound, written as id=keys pairs separated by commas, for example workspace.reopenPanel=Ctrl+Shift+J. Empty (the default) keeps every shortcut as it is. The Keyboard shortcuts sheet (press ?) edits this text, refuses keys the terminal, the editor or another shortcut uses, and has Reset; a clashing or unknown entry written here by hand is ignored. Changes only which keys you press; nothing is sent to the shell or the seat.",
+  },
 ];
 export function validateOverrides(value: unknown): Overrides {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -376,14 +536,18 @@ export function validateOverrides(value: unknown): Overrides {
       (!Number.isFinite(v) ||
         v < (row.min ?? -Infinity) ||
         v > (row.max ?? Infinity) ||
-        (key !== "terminal.lineHeight" && !Number.isInteger(v)))
+        (key !== "terminal.lineHeight" &&
+          key !== "terminal.minimumContrastRatio" &&
+          !Number.isInteger(v)))
     )
       throw new Error("Value out of range for " + key);
     if (row.options && !row.options.some((o) => o.value === String(v)))
       throw new Error("Unsupported option for " + key);
     if (
       typeof v === "string" &&
-      (!v.trim() || v.length > 300 || /[\u0000-\u001f;{}<>]/.test(v))
+      (key === "terminal.wordSeparator"
+        ? !isValidWordSeparator(v)
+        : !v.trim() || v.length > 300 || /[\u0000-\u001f;{}<>]/.test(v))
     )
       throw new Error("Invalid text for " + key);
     result[key] = v;

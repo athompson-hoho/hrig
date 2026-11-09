@@ -16,6 +16,19 @@ import {
 } from "lucide-react";
 import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
+import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
+import { HiddenSeatsNotice, HideStoppedButton } from "./HiddenSeats";
+import { SeatBadgeRow } from "./SeatBadgeRow";
+import { hiddenCount, seatCountText, visibleSeats } from "./seat-visibility";
+import { useSettings } from "./SettingsContext";
+function InventoryAge({ sampledAt }: { sampledAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(timer);
+  }, []);
+  return <>{formatAge(now - Date.parse(sampledAt))}</>;
+}
 function FileTree({
   connection,
   root,
@@ -34,6 +47,8 @@ function FileTree({
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     window.hrig
@@ -42,6 +57,7 @@ function FileTree({
         if (active) {
           setFiles(data);
           setError("");
+          setLoaded(true);
         }
       })
       .catch((e) => {
@@ -50,8 +66,29 @@ function FileTree({
     return () => {
       active = false;
     };
-  }, [connection.id, root, path, refresh]);
-  if (error) return <div className="tree-error">{error}</div>;
+  }, [connection.id, root, path, refresh, attempt]);
+  const indent = { paddingLeft: 14 + depth * 13 };
+  if (error)
+    return (
+      <div className="tree-error" style={depth ? indent : undefined}>
+        {error}{" "}
+        <button
+          className="text-button"
+          onClick={() => {
+            setError("");
+            setAttempt((n) => n + 1);
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  if (!loaded)
+    return (
+      <div className="sidebar-empty" role="status" style={depth ? indent : undefined}>
+        Loading…
+      </div>
+    );
   return (
     <>
       {files.map((file) => (
@@ -103,9 +140,14 @@ function FileTree({
           )}
         </div>
       ))}
-      {!files.length && depth === 0 && (
-        <div className="sidebar-empty">This folder is empty.</div>
-      )}
+      {!files.length &&
+        (depth === 0 ? (
+          <div className="sidebar-empty">This folder is empty.</div>
+        ) : (
+          <div className="sidebar-empty" style={indent}>
+            (empty)
+          </div>
+        ))}
     </>
   );
 }
@@ -123,6 +165,7 @@ export default function Sidebar({
   onConnect,
   onManageRigs,
   onSeat,
+  onSeatBeside,
   onRelaunch,
   onDrag,
   onFile,
@@ -142,6 +185,7 @@ export default function Sidebar({
   onConnect: () => void;
   onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
+  onSeatBeside?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -154,6 +198,7 @@ export default function Sidebar({
   const [isRepository, setIsRepository] = useState(true);
   const [gitLoading, setGitLoading] = useState(false);
   const [gitRevision, setGitRevision] = useState(0);
+  const settings = useSettings();
   useEffect(() => {
     if (section !== "changes") return;
     let active = true;
@@ -188,6 +233,11 @@ export default function Sidebar({
           .toLowerCase()
           .includes(query.toLowerCase())),
   );
+  const hideStopped = settings.user["workspace.hideStoppedSeats"] === true;
+  const shownSeats = visibleSeats(seats, rigs, hideStopped);
+  const hiddenSeats = hideStopped ? hiddenCount(seats, rigs) : 0;
+  const setHideStopped = (value: boolean) =>
+    settings.update("user", "workspace.hideStoppedSeats", value);
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -346,13 +396,26 @@ export default function Sidebar({
           </div>
           <div className="section-label">
             <span>SESSIONS</span>
-            <span className="count">{seats.length}</span>
+            <span className="section-tools">
+              <span className="count">
+                {seatCountText(shownSeats.length, seats.length, hideStopped)}
+              </span>
+              <HideStoppedButton
+                hiding={hideStopped}
+                onToggle={() => setHideStopped(!hideStopped)}
+              />
+            </span>
           </div>
           <div className="sidebar-scroll">
-            {inventoryError && inventory && (
+            {inventoryError === CHECKING_SNAPSHOT && inventory && (
+              <div className="sidebar-empty" role="status">
+                Refreshing · showing the last known snapshot…
+              </div>
+            )}
+            {inventoryError && inventoryError !== CHECKING_SNAPSHOT && inventory && (
               <div className="error-box" role="status">
-                Stale inventory · Last success: {inventory.sampledAt}.{" "}
-                {inventoryError}{" "}
+                Stale inventory · last updated{" "}
+                <InventoryAge sampledAt={inventory.sampledAt} />. {inventoryError}{" "}
                 <button onClick={onRefresh}>Retry connection</button>
               </div>
             )}
@@ -369,8 +432,8 @@ export default function Sidebar({
                   Connection settings
                 </button>
               </div>
-            ) : seats.length ? (
-              seats.map((s) => (
+            ) : shownSeats.length ? (
+              shownSeats.map((s) => (
                 <div className="session-row" key={s.id}>
                   <button
                     disabled={!!inventoryError}
@@ -391,10 +454,14 @@ export default function Sidebar({
                       <small>
                         {s.rigName} · {s.runtime}
                       </small>
+                      {settings.effective["appearance.seatBadges"] && (
+                        <SeatBadgeRow seat={s} />
+                      )}
                     </span>
                     <StatusDot status={s.status} />
                     <GripVertical size={12} className="grip" />
                   </button>
+                  {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
                   <IconButton
                     title={`Relaunch session ${s.name}`}
                     disabled={!!inventoryError || !s.session}
@@ -404,6 +471,11 @@ export default function Sidebar({
                   </IconButton>
                 </div>
               ))
+            ) : hiddenSeats ? (
+              <HiddenSeatsNotice
+                count={hiddenSeats}
+                onShow={() => setHideStopped(false)}
+              />
             ) : (
               <div className="connection-empty">
                 <Bot size={26} />

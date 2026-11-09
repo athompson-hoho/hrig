@@ -13,6 +13,7 @@ import {
   bufferConfigs,
   persistBuffer,
   editorFocusers,
+  editorLineJumpers,
 } from "./editor-buffers";
 import { draftKey, draftOperation, readDraft } from "./drafts";
 import { useSettings } from "./SettingsContext";
@@ -70,6 +71,12 @@ function language(path = "") {
     )[ext || ""] || "plaintext"
   );
 }
+/** Opens Monaco's own go-to-line prompt in this editor, only while its text has focus. */
+function openGoToLine(editor: monaco.editor.ICodeEditor): boolean {
+  if (!editor.hasTextFocus()) return false;
+  editor.trigger("hrig", "editor.action.gotoLine", null);
+  return true;
+}
 export default function EditorPanel({
   id,
   config,
@@ -77,6 +84,7 @@ export default function EditorPanel({
   onDirty,
   onSaved,
   onReady,
+  onLoadFailed,
 }: {
   id: string;
   config: PanelConfig;
@@ -84,6 +92,7 @@ export default function EditorPanel({
   onDirty: (id: string, dirty: boolean) => void;
   onSaved: () => void;
   onReady?: (id: string) => boolean;
+  onLoadFailed?: () => void;
 }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
@@ -165,6 +174,7 @@ export default function EditorPanel({
   const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const focusRef = useRef<(() => void) | null>(null);
+  const jumpRef = useRef<(() => boolean) | null>(null);
   useEffect(() => {
     if (config.line) {
       editorRef.current?.revealLineInCenter(config.line);
@@ -234,12 +244,17 @@ export default function EditorPanel({
         if (!diff) onDirty(id, isDirty);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (!active) return;
+        setError(e.message);
+        // A file that cannot be read drops out of the Quick Open recents.
+        if (!diff) onLoadFailed?.();
       });
     return () => {
       active = false;
       if (editorFocusers.get(id) === focusRef.current)
         editorFocusers.delete(id);
+      if (editorLineJumpers.get(id) === jumpRef.current)
+        editorLineJumpers.delete(id);
       // Detach first: the React Monaco wrapper disposes models before its widget.
       // Newer Monaco diff widgets require the model to be reset before disposal.
       diffRef.current?.setModel(null);
@@ -396,6 +411,11 @@ export default function EditorPanel({
             const focus = () => editor.focus();
             focusRef.current = focus;
             editorFocusers.set(id, focus);
+            const jump = () =>
+              openGoToLine(editor.getModifiedEditor()) ||
+              openGoToLine(editor.getOriginalEditor());
+            jumpRef.current = jump;
+            editorLineJumpers.set(id, jump);
             if (onReady?.(id)) focus();
           }}
           original={compare ? external?.content || "" : original}
@@ -434,6 +454,9 @@ export default function EditorPanel({
             const focus = () => editor.focus();
             focusRef.current = focus;
             editorFocusers.set(id, focus);
+            const jump = () => openGoToLine(editor);
+            jumpRef.current = jump;
+            editorLineJumpers.set(id, jump);
             if (onReady?.(id)) focus();
             if (config.line) {
               editor.revealLineInCenter(config.line);

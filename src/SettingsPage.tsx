@@ -25,6 +25,13 @@ import {
   type SettingsScope,
 } from "./settings";
 import { themes } from "./themes";
+import { overrideNote, summarizeOverrides } from "./settings-overrides";
+import { recentRows } from "./settings-recent";
+import {
+  describeSectionReset,
+  highlightParts,
+  modifiedKeysInCategory,
+} from "./settings-view";
 import { Modal, ErrorBox } from "./components";
 import { version } from "../package.json";
 import UpdateSettings from './UpdateSettings';
@@ -41,7 +48,23 @@ const categories = [
   ['Updates', Download],
   ["About", Info],
 ] as const;
-function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
+// A row's text with the searched words marked: plain text and mark elements, never markup.
+function marked(text: string, query: string) {
+  const parts = highlightParts(text, query);
+  if (!parts.some((part) => part.match)) return text;
+  return parts.map((part, i) =>
+    part.match ? <mark key={i}>{part.text}</mark> : part.text,
+  );
+}
+function Row({
+  row,
+  scope,
+  highlight,
+}: {
+  row: Setting;
+  scope: SettingsScope;
+  highlight: string;
+}) {
   const context = useSettings(),
     own = scope === "user" ? context.user : context.project;
   const value =
@@ -64,18 +87,31 @@ function Row({ row, scope }: { row: Setting; scope: SettingsScope }) {
     }
   };
   const modified = Object.hasOwn(own, row.key);
+  const note =
+    scope === "user" ? overrideNote(row, context.user, context.project) : null;
   return (
     <div
       className={`setting-row ${modified ? "modified" : ""}`}
       data-setting={row.key}
     >
       <div className="setting-copy">
-        <label htmlFor={"setting-" + row.key}>{row.label}</label>
-        <p>{row.description}</p>
+        <label htmlFor={"setting-" + row.key}>
+          {marked(row.label, highlight)}
+        </label>
+        <p>{marked(row.description, highlight)}</p>
         <code>{row.key}</code>
         {modified && (
           <span className="setting-badge">
             {scope === "project" ? "Project override" : "Modified"}
+          </span>
+        )}
+        {note && (
+          <span
+            className="setting-badge"
+            data-override={note.state}
+            title={note.title}
+          >
+            {note.text}
           </span>
         )}
       </div>
@@ -157,21 +193,39 @@ export default function SettingsPage({ project }: { project: string }) {
     [query, setQuery] = useState(""),
     [scope, setScope] = useState<SettingsScope>("user"),
     [modifiedOnly, setModifiedOnly] = useState(false),
+    [recentOnly, setRecentOnly] = useState(false),
     [confirmReset, setConfirmReset] = useState(false),
+    [confirmSection, setConfirmSection] = useState(""),
     [json, setJson] = useState(""),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const file = useRef<HTMLInputElement>(null),
     own = scope === "user" ? context.user : context.project;
+  const summary = summarizeOverrides(context.user, context.project);
   const text = query.trim().toLowerCase();
-  const matches = schema.filter(
+  const recent = recentRows(schema, context.recent, scope);
+  const found = schema.filter(
     (row) =>
       (text
         ? `${row.key} ${row.label} ${row.description} ${row.category} ${row.options?.map((o) => o.label + " " + o.value).join(" ") || ""}`
             .toLowerCase()
             .includes(text)
-        : row.category === category) &&
+        : recentOnly || row.category === category) &&
       (!modifiedOnly || Object.hasOwn(own, row.key)),
+  );
+  const matches = recentOnly
+    ? recent.filter((row) => found.includes(row))
+    : found;
+  const listing = !!query || recentOnly;
+  const sectionKeys = modifiedKeysInCategory(
+    schema,
+    own,
+    confirmSection || category,
+  );
+  const sectionReset = describeSectionReset(
+    scope,
+    confirmSection || category,
+    sectionKeys,
   );
   const value =
     own["appearance.theme"] ??
@@ -195,6 +249,7 @@ export default function SettingsPage({ project }: { project: string }) {
   const openJson = () => {
     setCategory("JSON");
     setQuery("");
+    setRecentOnly(false);
     setError("");
     setJson(JSON.stringify({ version: 1, settings: own }, null, 2));
   };
@@ -235,6 +290,24 @@ export default function SettingsPage({ project }: { project: string }) {
             onChange={(e) => setModifiedOnly(e.target.checked)}
           />{" "}
           Modified only
+        </label>
+        <label
+          className="checkbox-label"
+          title={
+            recent.length || recentOnly
+              ? "Show the settings changed since HRig started, newest first"
+              : "Nothing has changed in the " +
+                scope +
+                " scope since HRig started"
+          }
+        >
+          <input
+            type="checkbox"
+            checked={recentOnly}
+            disabled={!recent.length && !recentOnly}
+            onChange={(e) => setRecentOnly(e.target.checked)}
+          />{" "}
+          Recently changed
         </label>
       </div>
       <div className="settings-scopes" role="group" aria-label="Settings scope">
@@ -278,11 +351,12 @@ export default function SettingsPage({ project }: { project: string }) {
               key={name}
               aria-label={name}
               title={name}
-              className={category === name && !query ? "selected" : ""}
-              aria-current={category === name && !query ? "page" : undefined}
+              className={category === name && !listing ? "selected" : ""}
+              aria-current={category === name && !listing ? "page" : undefined}
               onClick={() => {
                 setCategory(name);
                 setQuery("");
+                setRecentOnly(false);
                 setError("");
               }}
             >
@@ -297,19 +371,44 @@ export default function SettingsPage({ project }: { project: string }) {
               ? "Project overrides are saved locally in HRig for this connection and folder. Reset a row to inherit your user setting."
               : "User settings are saved on this computer. Project overrides take precedence."}
           </p>
+          {summary.text && (
+            <p
+              className="settings-scope-note"
+              data-overrides={summary.count}
+              title={summary.title}
+            >
+              {summary.text}
+            </p>
+          )}
           {notice && (
             <p className="settings-notice" role="status">
               <Check size={13} />
               {notice}
             </p>
           )}
-          {category==='Updates' && !query ? <UpdateSettings /> : category === "Mobile devices" && !query ? <MobileDevices /> : query || schema.some((r) => r.category === category) ? (
+          {category==='Updates' && !listing ? <UpdateSettings /> : category === "Mobile devices" && !listing ? <MobileDevices /> : listing || schema.some((r) => r.category === category) ? (
             <>
               <div className="settings-section-title">
-                <h3>{query ? "Search results" : category}</h3>
+                <h3>
+                  {query
+                    ? "Search results"
+                    : recentOnly
+                      ? "Recently changed"
+                      : category}
+                </h3>
                 <span>{matches.length} settings</span>
+                {!listing && (
+                  <button
+                    className="settings-reset-scope"
+                    disabled={!sectionReset.count}
+                    title={sectionReset.buttonTitle}
+                    onClick={() => setConfirmSection(category)}
+                  >
+                    <RotateCcw size={12} /> {sectionReset.button}
+                  </button>
+                )}
               </div>
-              {!query && category === "Appearance" && !modifiedOnly && (
+              {!listing && category === "Appearance" && !modifiedOnly && (
                 <>
                   {["Built-in", "Community"].map((group) => (
                     <section className="theme-collection" key={group}>
@@ -390,13 +489,21 @@ export default function SettingsPage({ project }: { project: string }) {
                 </>
               )}
               {matches.map((row) => (
-                <Row key={scope + row.key} row={row} scope={scope} />
+                <Row
+                  key={scope + row.key}
+                  row={row}
+                  scope={scope}
+                  highlight={text}
+                />
               ))}
               {!matches.length && (
                 <div className="settings-empty">
                   <Search size={23} />
                   <h3>No matching settings</h3>
-                  <p>Try a different keyword or turn off Modified only.</p>
+                  <p>
+                    Try a different keyword or turn off Modified only or
+                    Recently changed.
+                  </p>
                 </div>
               )}
             </>
@@ -501,12 +608,16 @@ export default function SettingsPage({ project }: { project: string }) {
                 Built-in workspace shortcuts. Terminal and editor applications
                 also handle their own keybindings.
               </p>
+              <p>Press ? outside a text field, the editor or a terminal, or run Open keyboard shortcuts in the command center, for the full list with the keys for your platform.</p>
               {[
                 ["Ctrl ,", "Open settings"],
                 ["Ctrl K", "Open command center"],
                 ["Ctrl O", "Choose project folder"],
+                ["Ctrl P", "Quick Open project file"],
+                ["Ctrl Shift P", "Find open panels"],
                 ["Ctrl B", "Toggle sidebar"],
                 ["Ctrl Shift T", "New shell"],
+                ["Ctrl Shift K", "Clear focused terminal scrollback (Cmd K on macOS)"],
                 ["Ctrl S", "Save editor file"],
               ].map(([key, label]) => (
                 <div key={key}>
@@ -569,6 +680,36 @@ export default function SettingsPage({ project }: { project: string }) {
               }}
             >
               Reset settings
+            </button>
+          </div>
+        </Modal>
+      )}
+      {confirmSection && (
+        <Modal
+          title={sectionReset.title}
+          subtitle={sectionReset.subtitle}
+          onClose={() => setConfirmSection("")}
+        >
+          {sectionReset.detail && (
+            <p className="settings-scope-note">{sectionReset.detail}</p>
+          )}
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() => setConfirmSection("")}
+            >
+              Cancel reset
+            </button>
+            <button
+              className="primary-button"
+              disabled={!sectionReset.count}
+              onClick={() => {
+                for (const key of sectionKeys) context.reset(scope, key);
+                setNotice(sectionReset.notice);
+                setConfirmSection("");
+              }}
+            >
+              {sectionReset.confirm}
             </button>
           </div>
         </Modal>

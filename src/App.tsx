@@ -16,6 +16,7 @@ import {
   Layout,
   Model,
   TabNode,
+  TabSetNode,
   type ILayoutApi,
   type IJsonTabNode,
   type Action,
@@ -50,7 +51,9 @@ import {
   ExternalLink,
   RefreshCw,
   CircleHelp,
+  PanelBottom,
   Keyboard,
+  Focus,
 } from "lucide-react";
 import type {
   Connection,
@@ -80,6 +83,26 @@ import Sidebar from "./Sidebar";
 import SettingsPage from "./SettingsPage";
 import { SettingsContext } from "./SettingsContext";
 import {
+  changedKeys,
+  noteChanges,
+  recentFor,
+  type RecentChange,
+} from "./settings-recent";
+import { HostTintContext } from "./HostTint";
+import HostTintDialog from "./HostTintDialog";
+import { normalizeHostTints } from "./host-tint";
+import { resolveTaskFilters, saveTaskFilters } from "./task-filters";
+import { isVisible, parseHidden, statusDividers } from "./status-bar-items";
+import {
+  markOffer,
+  offerFor,
+  offerValid,
+  toastDelay,
+  UNDO_LABEL,
+  type UndoKind,
+  type UndoNotice,
+} from "./undo-toast";
+import {
   safeOverrides,
   validateOverrides,
   resolveSettings,
@@ -89,7 +112,18 @@ import {
 } from "./settings";
 import { applyTheme } from "./themes";
 import Welcome from "./Welcome";
+import {
+  CHECKING_SNAPSHOT,
+  failureOutcome,
+  pollDelay,
+} from "./inventory-health";
 import TerminalPanel from "./TerminalPanel";
+import TerminalSnippets from "./TerminalSnippets";
+import { snippetContext, type SnippetContext } from "./snippet-vars";
+import { onSnippetDraft, type SnippetDraft } from "./snippet-draft";
+import { onTaskDraft, type TaskDraft } from "./task-draft";
+import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
+import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
@@ -101,8 +135,11 @@ import {
   normalizeHistory,
   projectIdentity,
   visitProject,
+  welcomeRecents,
   type RecentProject,
 } from "./project-history";
+import { planLastProject } from "./last-project";
+import { buildWindowTitle, projectNameOf } from "./window-title";
 import RigControl from "./RigControl";
 import {
   bufferText,
@@ -113,11 +150,62 @@ import {
   bufferConfigs,
   persistBuffer,
   editorFocusers,
+  editorLineJumpers,
 } from "./editor-buffers";
 import SavedDrafts from "./SavedDrafts";
 import WorkItems from "./WorkItems";
 import { isWindows, localShellLabel } from "./platform";
 import { draftOperation } from "./drafts";
+import { useHumanItemNotices } from "./useHumanItemNotices";
+import { clearShortcutLabel, terminalOwnsKey } from "./terminal-keys";
+import ShortcutSheet from "./ShortcutSheet";
+import {
+  hasOpenDialog,
+  isHelpKey,
+  isReopenPanelKey,
+  reopenShortcutHint,
+} from "./shortcuts";
+import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
+import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
+import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";
+import { isPanelCycleKey } from "./shortcuts";
+import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
+import PanelContextMenu, { type PanelMenu } from "./PanelContextMenu";
+import { dirtyPrompt, panelKind } from "./panel-close-targets";
+import {
+  applyCustomTitle,
+  canRename,
+  isRenamed,
+  resetTitle,
+  type TitlePatch,
+} from "./panel-title";
+import { filterCommands, pickFirst } from "./palette";
+import {
+  describeClosedPanel,
+  planReopen,
+  popLatest,
+  pushClosed,
+  type ClosedPanel,
+} from "./closed-panels";
+import { planMaximize, type MaximizeRequest } from "./panel-maximize";
+import {
+  FOCUS_OFF,
+  focusAfterSidebar,
+  showStatusBar,
+  toggleFocus,
+  type FocusState,
+} from "./focus-mode";
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  dragSidebarWidth,
+  normalizeSidebarWidth,
+} from "./sidebar-width";
+import {
+  recentKey,
+  recentsFor,
+  recordRecent,
+  removeRecent,
+} from "./recent-files";
 const EditorPanel = lazy(() => import("./EditorPanel"));
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
@@ -130,6 +218,7 @@ import {
 } from "./WorkbenchPanels";
 import TaskBoard from "./TaskBoard";
 import { ReviewWorkspace, ProblemsPanel } from "./ReviewWorkspace";
+import { normalizeReviewChecks } from "./review-checks";
 import {
   ActivityPanel,
   MessagePanel,
@@ -151,7 +240,7 @@ const defaultState: WorkspaceState = {
   activeRig: "",
   layouts: {},
   savedLayouts: [],
-  sidebarWidth: 264,
+  sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
 };
 type ModalKind =
   | "connect"
@@ -163,6 +252,8 @@ type ModalKind =
   | "palette"
   | "guide"
   | "tools"
+  | "shortcuts"
+  | "hostTint"
   | null;
 type PendingAction = {
   title: string;
@@ -209,6 +300,8 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [section, setSection] = useState("sessions");
   const [sidebar, setSidebar] = useState(true);
+  // Focus mode is a view state of this session: it is never saved and never writes a preference.
+  const [focusMode, setFocusMode] = useState<FocusState>(FOCUS_OFF);
   const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const modalRef = useRef(modal);
@@ -218,15 +311,27 @@ export default function App() {
   const [projectOpening, setProjectOpening] = useState(false);
   const [recentPanels, setRecentPanels] = useState<string[]>([]);
   const modelOwners = useRef(new WeakMap<Model, string>());
+  // In memory only: closed panels are forgotten when the app restarts.
+  const closedPanels = useRef<ClosedPanel[]>([]);
   const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
+  const [tabMenu, setTabMenu] = useState<PanelMenu | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const inventoryHealth = useRef<{
+    key: string;
+    failures: number;
+    lastSuccessAt: number | null;
+    verified: boolean;
+  }>({ key: "", failures: 0, lastSuccessAt: null, verified: false });
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [fileRevision, setFileRevision] = useState(0);
   const [events, setEvents] = useState<ActivityEntry[]>([]);
   const [toast, setToast] = useState("");
+  const [toastUndo, setToastUndo] = useState<UndoNotice | null>(null);
+  const [toastHover, setToastHover] = useState(false);
+  const [droppedTerminals, setDroppedTerminals] = useState<ReadonlySet<string>>(() => new Set());
   const [saveName, setSaveName] = useState("");
   const [search, setSearch] = useState("");
   const [fileMatches, setFileMatches] = useState<FileEntry[]>([]);
@@ -256,6 +361,10 @@ export default function App() {
     () => normalizeHistory(state.projectHistory),
     [state.projectHistory],
   );
+  const hostTints = useMemo(
+    () => normalizeHostTints(state.hostTints),
+    [state.hostTints],
+  );
   const endpoint = connectionIdentity(
     connection,
     window.hrig?.platform || "unknown",
@@ -273,6 +382,17 @@ export default function App() {
     () => resolveSettings(userPreferences, projectPreferences),
     [userPreferences, projectPreferences],
   );
+  const overridesText = preferences["shortcuts.overrides"];
+  const shortcutOverrides = useMemo(
+    () => parseOverrideText(overridesText, window.hrig?.platform || "unknown").map,
+    [overridesText],
+  );
+  const statusHiddenText = preferences["appearance.statusBarHidden"];
+  const hiddenStatusItems = useMemo(
+    () => parseHidden(statusHiddenText),
+    [statusHiddenText],
+  );
+  const statusSeparators = statusDividers(hiddenStatusItems);
   const themeDocuments = useRef(new Set<Document>([document]));
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -304,28 +424,54 @@ export default function App() {
             },
           },
     );
+  // The settings changed since HRig started, newest first: kept in memory only, never saved or exported.
+  const [recentChanges, setRecentChanges] = useState<RecentChange[]>([]);
+  const ownSettings = (scope: SettingsScope) =>
+    scope === "user" ? userPreferences : projectPreferences;
+  const noteRecent = (scope: SettingsScope, after: unknown) => {
+    const keys = changedKeys(ownSettings(scope), after);
+    if (keys.length)
+      setRecentChanges((list) =>
+        noteChanges(list, keys, scope, scope === "project" ? projectId : ""),
+      );
+  };
   const settingsContext = {
     effective: preferences,
     user: userPreferences,
     project: projectPreferences,
+    recent: recentFor(recentChanges, projectId),
     update: (
       scope: SettingsScope,
       key: keyof typeof preferences,
       value: unknown,
-    ) =>
+    ) => {
+      noteRecent(scope, { ...ownSettings(scope), [key]: value });
       changePreferences(scope, (current) => ({
         ...current,
         ...validateOverrides({ [key]: value }),
-      })),
-    replace: (scope: SettingsScope, value: Overrides) =>
-      changePreferences(scope, () => validateOverrides(value)),
-    reset: (scope: SettingsScope, key?: keyof typeof preferences) =>
+      }));
+    },
+    replace: (scope: SettingsScope, value: Overrides) => {
+      noteRecent(scope, value);
+      changePreferences(scope, () => validateOverrides(value));
+    },
+    reset: (scope: SettingsScope, key?: keyof typeof preferences) => {
+      noteRecent(
+        scope,
+        key ? { ...ownSettings(scope), [key]: undefined } : {},
+      );
       changePreferences(scope, (current) => {
         const next = { ...current };
         if (key) delete next[key];
         else return {};
         return next;
-      }),
+      });
+    },
+  };
+  const saveShortcutOverrides = (text: string) => {
+    const scope = Object.hasOwn(projectPreferences, "shortcuts.overrides") ? "project" : "user";
+    if (text === "") settingsContext.reset(scope, "shortcuts.overrides");
+    else settingsContext.update(scope, "shortcuts.overrides", text);
   };
   const workspace = `${connection.id}::${root}::${state.activeRig}`;
   const sameConnection = (c: Connection) =>
@@ -428,18 +574,32 @@ export default function App() {
       ),
     [],
   );
+  const undoOffered = toastUndo !== null && toastUndo.text === toast;
   const notify = useCallback(
     (text: string) => {
       setToast(text);
+      setToastUndo(null);
       log(text, "success");
     },
     [log],
   );
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(""), 4500);
+    const delay = toastDelay(!!toast, undoOffered, toastHover);
+    if (delay === null) return;
+    const timer = setTimeout(() => setToast(""), delay);
     return () => clearTimeout(timer);
-  }, [toast]);
+  }, [toast, toastUndo, undoOffered && toastHover]);
+  // An Undo offer ends with its notice, and when the history or the panels changed since it was made.
+  useEffect(() => {
+    if (!toast) setToastHover(false);
+    if (!toastUndo) return;
+    if (
+      !undoOffered ||
+      !offerValid(toastUndo.mark, history.current, modelRef.current.toJson())
+    )
+      setToastUndo(null);
+  }, [toast, toastUndo, revision]);
+  useEffect(() => onTerminalDropped((id, dropped) => setDroppedTerminals(prev => markDropped(prev, id, dropped))), []);
   useEffect(() => {
     if (!window.hrig) {
       setBootError(
@@ -460,7 +620,10 @@ export default function App() {
             localFound;
         setState({
           ...base,
+          // A hand-edited or damaged saved width is clamped, or replaced by the default.
+          sidebarWidth: normalizeSidebarWidth(base.sidebarWidth),
           projectHistory: normalizeHistory(base.projectHistory),
+          reviewChecks: normalizeReviewChecks(base.reviewChecks),
           connections,
           preferences:
             base.preferences ??
@@ -500,6 +663,21 @@ export default function App() {
     model.addChangeListener(listener);
     return () => model.removeChangeListener(listener);
   }, [model]);
+  // The OS window title: "hRig" unless the setting is on, and then nothing is ever sent. When on, it follows the project and the active panel; the main process cleans the text again.
+  const sentTitle = useRef("hRig");
+  const titleDetails = preferences["appearance.windowTitleDetails"];
+  useEffect(() => {
+    if (!loaded) return;
+    const selected = model.getActiveTabset()?.getSelectedNode();
+    const title = buildWindowTitle({
+      enabled: titleDetails,
+      project: projectNameOf(root),
+      panel: selected instanceof TabNode ? selected.getName() : "",
+    });
+    if (title === sentTitle.current) return;
+    sentTitle.current = title;
+    window.hrig.setWindowTitle(title).catch(() => {});
+  }, [loaded, model, revision, root, titleDetails]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
     if (!inventory || inventoryError || !preferences["notifications.desktop"])
@@ -521,6 +699,13 @@ export default function App() {
     }
     attentionSeen.current = current;
   }, [inventory, preferences["notifications.desktop"], connection.id]);
+  useHumanItemNotices({
+    enabled: loaded && preferences["notifications.humanItems"],
+    connection,
+    intervalSeconds: preferences["workspace.refreshInterval"],
+    refresh,
+    log,
+  });
   useEffect(() => {
     if (!loaded) return;
     const timer = setTimeout(
@@ -545,44 +730,84 @@ export default function App() {
       connection.distro,
       connection.rigBinary,
     ]);
-    setInventory(inventoryCache.current.get(inventoryKey) || null);
-    setInventoryError(
-      inventoryCache.current.has(inventoryKey)
-        ? "Checking the last successful snapshot…"
-        : "",
-    );
+    if (inventoryHealth.current.key !== inventoryKey) {
+      // A switched-to connection shows its cached snapshot, unverified: the
+      // guard stays on (with a gentle "checking" note) until a poll succeeds.
+      const cached = inventoryCache.current.get(inventoryKey);
+      inventoryHealth.current = {
+        key: inventoryKey,
+        failures: 0,
+        lastSuccessAt: cached ? Date.parse(cached.sampledAt) || null : null,
+        verified: false,
+      };
+      setInventory(cached || null);
+      setInventoryError(cached ? CHECKING_SNAPSHOT : "");
+    }
     if (connection.kind === "local" && isWindows) {
       setBusy(false);
       return;
     }
+    const interval = preferences["workspace.refreshInterval"];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (!active) return;
+      timer = setTimeout(
+        load,
+        pollDelay(interval, inventoryHealth.current.failures),
+      );
+    };
     const load = async () => {
+      // Never overlap polls, and don't poll a hidden window; it refreshes the
+      // moment the window is visible again.
       if (inFlight) return;
+      if (document.hidden) return schedule();
       inFlight = true;
       setBusy(true);
+      const health = inventoryHealth.current;
       try {
         const result = await window.hrig.inventory(connection);
         if (active) {
+          health.failures = 0;
+          health.lastSuccessAt = Date.now();
+          health.verified = true;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
           setInventoryError("");
         }
       } catch (e) {
         if (active) {
-          setInventoryError((e as Error).message);
+          health.failures++;
+          const outcome = failureOutcome({
+            verified: health.verified,
+            failures: health.failures,
+            lastSuccessAt: health.lastSuccessAt,
+            now: Date.now(),
+            intervalSeconds: interval,
+          });
+          // "quiet": keep serving the verified snapshot; "checking": leave the
+          // unverified-snapshot guard on without calling it an error.
+          if (outcome === "report") setInventoryError((e as Error).message);
         }
       } finally {
         inFlight = false;
-        if (active) setBusy(false);
+        if (active) {
+          setBusy(false);
+          schedule();
+        }
       }
     };
-    load();
-    const timer = setInterval(
-      load,
-      preferences["workspace.refreshInterval"] * 1000,
-    );
+    const visible = () => {
+      if (!document.hidden && !inFlight) {
+        clearTimeout(timer);
+        void load();
+      }
+    };
+    document.addEventListener("visibilitychange", visible);
+    void load();
     return () => {
       active = false;
-      clearInterval(timer);
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visible);
     };
   }, [
     loaded,
@@ -648,6 +873,32 @@ export default function App() {
     const next = Model.fromJson(json, model);
     setModel(next);
     modelChanged(next);
+  };
+  // The notice for a layout change. It offers Undo only when the layout really changed, and the offer is one step of the same history that Undo arrangement uses.
+  const announceLayout = (kind: UndoKind, label: string, next: Model) => {
+    const past = history.current.past;
+    const after = next.toJson();
+    const offer = offerFor({
+      kind,
+      label,
+      pastLength: past.length,
+      before: past.at(-1),
+      after,
+    });
+    notify(offer.text);
+    if (offer.canUndo)
+      setToastUndo({
+        text: offer.text,
+        mark: markOffer(history.current, after),
+      });
+  };
+  // The Undo button: one step back through travel, and only while the offer still stands. The notice closes either way.
+  const undoFromToast = () => {
+    const offer = toastUndo;
+    setToast("");
+    setToastUndo(null);
+    if (offer && offerValid(offer.mark, history.current, model.toJson()))
+      travel("undo");
   };
   const refreshAll = () => {
     setRefresh((n) => n + 1);
@@ -765,6 +1016,38 @@ export default function App() {
     setProjectOpening(false);
     setModal(null);
   };
+  // Welcome rows open through the project hub's own path: the hub is where the folder check and any error show, and applyProject only proceeds while the hub is the open modal.
+  const openRecentProject = (project: RecentProject) => {
+    const target = availableConnection(
+      project,
+      state.connections,
+      window.hrig.platform,
+    );
+    openProject();
+    if (!target) {
+      setFormError(
+        "This project's connection is unavailable or changed. Open the folder again on the intended host.",
+      );
+      return;
+    }
+    void applyProject(project.root, target, project.rigId, project.rigName);
+  };
+  // Once per launch, after the workspace has loaded, reopen the most recent project when the setting asks for it. It goes through the same path as a Welcome row, so the folder check, the connection check and the error message are the ones that path already has.
+  const restoreChecked = useRef(false);
+  useEffect(() => {
+    if (!loaded || restoreChecked.current) return;
+    restoreChecked.current = true;
+    const plan = planLastProject({
+      enabled: userPreferences["workspace.restoreLastProject"],
+      history: projectHistory,
+      connections: state.connections,
+      platform: window.hrig.platform,
+      active: { connection, root },
+    });
+    if (plan.project) openRecentProject(plan.project);
+    else if (plan.reason === "other-connection")
+      log("Your last project is on another connection, so it was not reopened.");
+  }, [loaded]);
   useEffect(() => {
     if (!loaded) return;
     let cancelled = false;
@@ -891,6 +1174,15 @@ export default function App() {
     const fileConnection = source?.connection || connection;
     const fileRoot = source?.root || root;
     const id = `${diff ? "diff" : "file"}:${fileConnection.id}:${fileRoot}:${path}`;
+    if (!diff)
+      setState((s) => ({
+        ...s,
+        recentFiles: recordRecent(
+          s.recentFiles,
+          recentKey(fileConnection.id, fileRoot),
+          path,
+        ),
+      }));
     pendingFileFocus.current = id;
     const existing = model.getNodeById(id) as TabNode | undefined;
     if (existing && line)
@@ -1036,6 +1328,53 @@ export default function App() {
       (element || panel)?.focus();
     });
   };
+  // Ctrl+Tab order, newest first. Kept apart from the navigator's recent list; frozen while Control is held; selecting never touches terminal input.
+  const panelMru = useRef(emptyMru());
+  useEffect(() => {
+    const note = () => {
+      panelMru.current = noteActive(panelMru.current, model.getActiveTabset()?.getSelectedNode()?.getId() ?? null);
+    };
+    note();
+    const listener = {
+      onAfterAction: (action: Action) => {
+        // A close action names the panel that is gone.
+        const named = action.data?.node;
+        if (typeof named === "string" && !model.getNodeById(named)) panelMru.current = noteClosed(panelMru.current, named);
+        note();
+      },
+    };
+    model.addChangeListener(listener);
+    return () => model.removeChangeListener(listener);
+  }, [model]);
+  useEffect(() => {
+    const end = () => {
+      panelMru.current = endCycle(panelMru.current, modelRef.current.getActiveTabset()?.getSelectedNode()?.getId() ?? null);
+    };
+    const release = (event: KeyboardEvent) => {
+      if (event.key === "Control") end();
+    };
+    window.addEventListener("keyup", release, true);
+    window.addEventListener("blur", end);
+    return () => {
+      window.removeEventListener("keyup", release, true);
+      window.removeEventListener("blur", end);
+    };
+  }, []);
+  const cyclePanel = (direction: 1 | -1, source: EventTarget | null) => {
+    const owner = (source as Node | null)?.ownerDocument;
+    if (owner && owner !== document) return;
+    const step = stepCycle(
+      panelMru.current,
+      model.getActiveTabset()?.getSelectedNode()?.getId() ?? null,
+      direction,
+      (id) => {
+        const node = model.getNodeById(id);
+        return node instanceof TabNode && (!node.getWindow() || node.getWindow() === window);
+      },
+    );
+    panelMru.current = step.state;
+    if (step.target !== null) focusPanel(step.target);
+  };
   const movePanel = (id: string, target: string, direction: string) => {
     const current = modelRef.current;
     if (
@@ -1058,6 +1397,17 @@ export default function App() {
     current.doAction(Actions.moveNode(id, target, location, -1));
     modelChanged(current);
   };
+  const openSeatBeside = (seat: Seat) => {
+    if (inventoryError || !seat.session) {openSeat(seat);return;}
+    const target = model.getActiveTabset() || model.getFirstTabSet();
+    if (!target) {openSeat(seat);return;}
+    const id = `seat:${connection.id}:${seat.id}`;
+    const existing = model.getNodeById(id) as TabNode | undefined;
+    if (existing && existing.getParent() === target && target.getChildren().length === 1) {openSeat(seat);return;}
+    if (existing && ((existing.getWindow() && existing.getWindow() !== window) || existing.getLayoutId() !== Model.MAIN_LAYOUT_ID)) {notify("Use the panel navigator to move this detached seat.");return;}
+    openSeat(seat);
+    if(model.getNodeById(id)) movePanel(id, target.getId(), "right");
+  };
   const dirtyInLayout = () =>
     allTabs().filter((t) => dirtyTabs.current.has(t.id!));
   const protect = (run: () => void, title = "Replace this arrangement?") => {
@@ -1078,7 +1428,7 @@ export default function App() {
     setModel(next);
     modelChanged(next);
     setMenu(null);
-    notify(`${preset} arrangement applied`);
+    announceLayout("preset", preset, next);
   };
   const openAll = () => {
     remember();
@@ -1097,7 +1447,23 @@ export default function App() {
     const next = arrangement(existing, "Team");
     setModel(next);
     modelChanged(next);
-    notify("Rig sessions arranged");
+    announceLayout("sessions", "", next);
+  };
+  // Keeps only the kind and identifiers needed to reopen; call before the delete.
+  const rememberClosed = (id: string) => {
+    const node = model.getNodeById(id);
+    if (!(node instanceof TabNode)) return;
+    closedPanels.current = pushClosed(
+      closedPanels.current,
+      describeClosedPanel(
+        {
+          component: node.getComponent(),
+          name: node.getName(),
+          config: node.getConfig(),
+        },
+        workspace,
+      ),
+    );
   };
   const closeTab = (id: string) => {
     history.current = { past: [], future: [] };
@@ -1106,8 +1472,33 @@ export default function App() {
     if (config?.terminalId) void window.hrig.closeTerminal(config.terminalId);
     clearBuffer(id);
     dirtyTabs.current.delete(id);
+    rememberClosed(id);
     model.doAction(Actions.deleteTab(id));
     modelChanged(model);
+  };
+  // Closes panels one by one through closeTab. A panel with unsaved edits asks first, like its tab button; Cancel stops the run and leaves the rest open.
+  const closePanels = (ids: string[]) => {
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const node = model.getNodeById(id) as TabNode | undefined;
+      if (!node) continue;
+      if (dirtyTabs.current.has(id)) {
+        const rest = ids.slice(i + 1);
+        setPending({
+          title: "Save your changes?",
+          description: dirtyPrompt(node.getName(), rest.length),
+          tabId: id,
+          run: () => {
+            closeTab(id);
+            // Deferred: the dialog clears its own state right after run.
+            setTimeout(() => closePanels(rest), 0);
+          },
+        });
+        setActionError("");
+        return;
+      }
+      closeTab(id);
+    }
   };
   const onAction = (action: Action) => {
     if (
@@ -1138,6 +1529,16 @@ export default function App() {
       const config = node?.getConfig() as PanelConfig | undefined;
       if (config?.terminalId) void window.hrig.closeTerminal(config.terminalId);
       clearBuffer(id);
+      rememberClosed(id);
+    }
+    // A rename typed on the tab itself (double-click or F2) follows the same title rules as the menu for a terminal; other panels keep the built-in rename.
+    if (action.type === Actions.RENAME_TAB) {
+      const tab = titledTab(action.data.node);
+      if (!canRename(tab)) return action;
+      const patch = applyCustomTitle(tab, action.data.text);
+      return patch
+        ? Actions.updateNodeAttributes(action.data.node, patch)
+        : undefined;
     }
     return action;
   };
@@ -1159,6 +1560,27 @@ export default function App() {
       setRevision((n) => n + 1);
     }
   }, []);
+  // The title fields of a tab as the title helpers read them; null when the id is not a tab.
+  const titledTab = (id: string) => {
+    const node = model.getNodeById(id);
+    return node instanceof TabNode
+      ? {
+          component: node.getComponent(),
+          name: node.getName(),
+          config: node.getConfig(),
+        }
+      : null;
+  };
+  // A title change touches only the tab name and the two title keys of its config. The tab id, the terminal id and the seat are never changed, so the session and everything addressed by an id carry on as before.
+  const retitleTab = (id: string, patch: TitlePatch | null) => {
+    if (!patch) return;
+    model.doAction(Actions.updateNodeAttributes(id, patch));
+    modelChanged(model);
+  };
+  const renamePanel = (id: string, text: string) =>
+    retitleTab(id, applyCustomTitle(titledTab(id), text));
+  const resetPanelName = (id: string) =>
+    retitleTab(id, resetTitle(titledTab(id)));
   const savePending = async () => {
     if (!pending) return;
     setActionError("");
@@ -1219,6 +1641,8 @@ export default function App() {
     setModal(null);
     addPanel("settings", "Settings", {}, "settings");
   };
+  // A terminal's Create task from selection arrives as a window event; the draft waits here, addressed to the Task queue tab that opens it, until that board takes it.
+  const [taskDraft, setTaskDraft] = useState<{tabId: string; draft: TaskDraft} | null>(null);
   const factory = (node: TabNode) => {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
@@ -1227,6 +1651,7 @@ export default function App() {
       case "terminal":
         return (
           <TerminalPanel
+            seatActivityAvailable={!!config.seat && freshSeats(config.connection).some((s) => s.id === config.seat?.id)}
             onRelaunch={() => { if (config.seat) setRelaunch({seat: config.seat, connection: config.connection}); }}
             onFile={(path, line) => openFile(path, false, line, config)}
             config={{
@@ -1329,6 +1754,7 @@ export default function App() {
                 );
                 setModel(next);
                 modelChanged(next);
+                announceLayout("role", template.name, next);
               });
             }}
             onDeleteTemplate={(id) =>
@@ -1383,6 +1809,14 @@ export default function App() {
             seats={freshSeats(config.connection).filter(
               (s) => !state.activeRig || s.rigId === state.activeRig,
             )}
+            checks={state.reviewChecks}
+            onChecks={(update) =>
+              setState((s) => {
+                const current = normalizeReviewChecks(s.reviewChecks);
+                const next = update(current);
+                return next === current ? s : { ...s, reviewChecks: next };
+              })
+            }
             onSeat={(seat) => {
               openSeat(seat);
               applyPreset("Review");
@@ -1510,6 +1944,18 @@ export default function App() {
                 setFileRevision((n) => n + 1);
                 notify("File saved");
               }}
+              onLoadFailed={() => {
+                const failed = config.path;
+                if (failed)
+                  setState((s) => ({
+                    ...s,
+                    recentFiles: removeRecent(
+                      s.recentFiles,
+                      recentKey(config.connection.id, config.root),
+                      failed,
+                    ),
+                  }));
+              }}
             />
           </Suspense>
         );
@@ -1520,6 +1966,24 @@ export default function App() {
             rigName={config.mode}
             seats={freshSeats(config.connection)}
             onSeat={openSeat}
+            draft={taskDraft && taskDraft.tabId === node.getId() ? taskDraft.draft : null}
+            onDraftTaken={() => setTaskDraft(null)}
+            root={config.root}
+            onFile={(path, line) => openFile(path, false, line, config)}
+            savedFilters={resolveTaskFilters(
+              state.taskFilters,
+              config.connection.id,
+            )}
+            onFilters={(next) =>
+              setState((s) => ({
+                ...s,
+                taskFilters: saveTaskFilters(
+                  s.taskFilters,
+                  config.connection.id,
+                  next,
+                ),
+              }))
+            }
           />
         );
       case "messages":
@@ -1544,10 +2008,15 @@ export default function App() {
             onGuide={() => setModal("guide")}
             connectionName={connection.name}
             seatCount={seats.filter((s) => s.session).length}
+            recents={welcomeRecents(projectHistory)}
+            connections={state.connections}
+            onOpenRecent={openRecentProject}
           />
         );
     }
   };
+  const [snippetTarget, setSnippetTarget] = useState<{id: string; name: string; connection: string; context: SnippetContext} | null>(null);
+  const [snippetDraft, setSnippetDraft] = useState<SnippetDraft | null>(null);
   const openPalette = () => {
     projectIntent.current++;
     setSearch("");
@@ -1562,6 +2031,147 @@ export default function App() {
     projectIntent.current++;
     window.focus();
     setModal("panels");
+  };
+  const openShortcuts = () => {
+    projectIntent.current++;
+    window.focus();
+    setModal("shortcuts");
+  };
+  const openHostTint = () => {
+    projectIntent.current++;
+    setModal("hostTint");
+  };
+  // Go to line opens Monaco's own prompt in the editor that has text focus once
+  // the command center has handed the focus back; nothing is typed or sent.
+  const goToLine = () => {
+    requestAnimationFrame(() => {
+      const opened = [...editorLineJumpers.values()].some((jump) => jump());
+      if (!opened) setToast("Click an editor first");
+    });
+  };
+  const terminalTabs = allTabs().filter(t => t.component === "terminal" && t.config?.terminalId && !t.config?.rigControlToken);
+  const terminalCommands = terminalTabs.flatMap(t => {
+    const config = t.config as PanelConfig;
+    const target = {id: config.terminalId!, name: t.name || "Terminal", connection: config.connection.name, context: snippetContext(config.connection, config.root, config.seat)};
+    return [
+      ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
+        name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
+        hint: `${target.name} · ${config.connection.name} · ${target.id}` +
+          (command === "clear" ? ` · ${clearShortcutLabel(window.hrig.platform)}` : ""),
+        icon: <Columns2 size={16} />,
+        action: () => {
+          model.doAction(Actions.selectTab(t.id!));
+          requestAnimationFrame(() => sendTerminalCommand(target.id, command));
+        },
+      })),
+      {name: "Terminal: Saved snippets", hint: `${target.name} · ${config.connection.name} · ${target.id}`, icon: <Columns2 size={16} />,
+        action: () => {model.doAction(Actions.selectTab(t.id!));setSnippetTarget(target);}},
+      {name: "Terminal: Create task from selection", hint: `${target.name} · ${config.connection.name} · ${target.id}`, icon: <Columns2 size={16} />,
+        action: () => {model.doAction(Actions.selectTab(t.id!));requestAnimationFrame(() => sendTerminalCommand(target.id, "task-from-selection"));}},
+    ];
+  });
+  // A terminal's Save selection as snippet arrives as a window event; this only opens Saved snippets filled in, and it saves and sends nothing.
+  const openSnippetDraft = useRef<(id: string, draft: SnippetDraft) => void>(() => undefined);
+  openSnippetDraft.current = (id, draft) => {
+    const tab = terminalTabs.find(t => (t.config as PanelConfig).terminalId === id);
+    if (!tab) { notify("Saved snippets are not available in this terminal"); return; }
+    const cfg = tab.config as PanelConfig;
+    setSnippetTarget({id, name: tab.name || "Terminal", connection: cfg.connection.name, context: snippetContext(cfg.connection, cfg.root, cfg.seat)});
+    setSnippetDraft(draft);
+  };
+  useEffect(() => onSnippetDraft((id, draft) => openSnippetDraft.current(id, draft)), []);
+  // A terminal's Create task from selection only opens the Task queue's Assign work dialog filled in (the existing board for that connection, else a new one); it creates and sends nothing. The seat of that terminal travels along as a suggestion only.
+  const openTaskDraft = useRef<(id: string, draft: TaskDraft) => void>(() => undefined);
+  openTaskDraft.current = (id, draft) => {
+    const tab = terminalTabs.find(t => (t.config as PanelConfig).terminalId === id);
+    if (!tab) { notify("Create task from selection is not available in this terminal"); return; }
+    const cfg = tab.config as PanelConfig;
+    const board = allTabs().find(t => t.component === "queue" && (t.config as PanelConfig).connection.id === cfg.connection.id);
+    const tabId = board?.id || uid();
+    if (board) model.doAction(Actions.selectTab(tabId));
+    else addPanel("queue", "Task queue", {connection: cfg.connection, mode: currentRig?.name}, tabId);
+    setTaskDraft({tabId, draft: {...draft, suggested: cfg.seat ? cfg.seat.name + "@" + cfg.seat.rigName : ""}});
+  };
+  useEffect(() => onTaskDraft((id, draft) => openTaskDraft.current(id, draft)), []);
+  const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
+  const reconnectDropped = () => {
+    const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));
+    if (count > 0) notify(reconnectNotice(count));
+  };
+  // Hides the sidebar and the status bar for this session; leaving puts the sidebar back as it was.
+  const toggleFocusMode = () => {
+    const step = toggleFocus(focusMode, {
+      sidebar,
+      statusBar: preferences["appearance.statusBar"],
+    });
+    setFocusMode(step.state);
+    if (step.view) setSidebar(step.view.sidebar);
+  };
+  // Opening the sidebar by any route (Ctrl+B, the palette, the rail, a project) ends focus mode and keeps it open.
+  useEffect(
+    () => setFocusMode((f) => focusAfterSidebar(f, sidebar)),
+    [sidebar],
+  );
+  // Maximize only flips flexlayout's flag on one group: nothing is rebuilt, moved or resized by hand.
+  const toggleMaximize = (
+    request: MaximizeRequest,
+    source: EventTarget | null,
+  ) => {
+    const holder = (source as Element | null)?.closest?.("[data-panel-id]");
+    const panel = holder
+      ? model.getNodeById(holder.getAttribute("data-panel-id") || "")
+      : undefined;
+    let owner = panel ? panel.getParent() : undefined;
+    while (owner && !(owner instanceof TabSetNode)) owner = owner.getParent();
+    const focused =
+      owner instanceof TabSetNode
+        ? owner
+        : model.getActiveTabset() || model.getFirstTabSet();
+    const layoutId = focused ? focused.getLayoutId() : Model.MAIN_LAYOUT_ID;
+    let groups = 0;
+    model.visitNodes((node) => {
+      if (node instanceof TabSetNode && node.getLayoutId() === layoutId)
+        groups++;
+    });
+    const plan = planMaximize(request, {
+      tabsetId: focused ? focused.getId() : null,
+      enabled: !!focused && focused.isEnableMaximize(),
+      groups,
+      maximizedId: model.getMaximizedTabset(layoutId)?.getId() ?? null,
+    });
+    if (plan.action === "none") {
+      setToast(plan.message);
+      return;
+    }
+    remember();
+    model.doAction(Actions.maximizeToggle(plan.tabsetId, layoutId));
+  };
+  // Reopens only through openFile and openSeat, the same paths the sidebar uses.
+  const reopenClosedPanel = () => {
+    const { entry, stack } = popLatest(closedPanels.current, workspace);
+    if (!entry) {
+      setToast("Nothing to reopen");
+      return;
+    }
+    const plan = planReopen(entry, {
+      connectionIds: state.connections.map((c) => c.id),
+      activeConnectionId: connection.id,
+      inventoryReady: !!inventory && !inventoryError,
+      seats: seats.map((s) => ({ id: s.id, session: s.session })),
+    });
+    closedPanels.current =
+      plan.action === "skip" && plan.keep ? pushClosed(stack, entry) : stack;
+    if (plan.action === "openFile") {
+      const target = state.connections.find((c) => c.id === plan.connectionId);
+      if (target)
+        openFile(plan.path, plan.diff, plan.line, {
+          connection: target,
+          root: plan.root,
+        });
+    } else if (plan.action === "openSeat") {
+      const seat = seats.find((s) => s.id === plan.seatId);
+      if (seat) openSeat(seat);
+    } else setToast(plan.message);
   };
   const commands = [
     {
@@ -1594,6 +2204,49 @@ export default function App() {
       hint: "Preferences and themes",
       icon: <Settings2 size={16} />,
       action: openSettings,
+    },
+    {
+      name: "Toggle sidebar",
+      hint: "Ctrl B",
+      icon: <PanelLeft size={16} />,
+      action: () => setSidebar((v) => !v),
+    },
+    {
+      name: "Toggle status bar",
+      hint: "Appearance setting",
+      icon: <PanelBottom size={16} />,
+      action: () =>
+        settingsContext.update(
+          Object.hasOwn(projectPreferences, "appearance.statusBar")
+            ? "project"
+            : "user",
+          "appearance.statusBar",
+          !preferences["appearance.statusBar"],
+        ),
+    },
+    {
+      name: "Toggle focus mode",
+      hint: `Hide the sidebar and status bar · ${focusModeShortcutHint(window.hrig.platform)}`,
+      icon: <Focus size={16} />,
+      action: toggleFocusMode,
+    },
+    {
+      name: "Open welcome guide",
+      hint: "Workspace guide",
+      icon: <CircleHelp size={16} />,
+      action: () => setModal("guide"),
+    },
+    {
+      name: "Open keyboard shortcuts",
+      hint: "?",
+      icon: <Keyboard size={16} />,
+      action: openShortcuts,
+    },
+    {
+      name: "Go to line",
+      hint: "Ctrl G in the editor",
+      icon: <FileCode2 size={16} />,
+      action: goToLine,
     },
     ...[
       ["Visual workspace arranger", "arranger"],
@@ -1632,6 +2285,12 @@ export default function App() {
       action: openConnect,
     },
     {
+      name: "Set host label and tint",
+      hint: "Mark production or development hosts in terminal headers",
+      icon: <Network size={16} />,
+      action: openHostTint,
+    },
+    {
       name: "Open project folder",
       hint: "Ctrl O",
       icon: <FolderOpen size={16} />,
@@ -1644,10 +2303,34 @@ export default function App() {
       action: openShell,
     },
     {
+      name: "Reopen closed panel",
+      hint: `Latest closed file or seat · ${reopenShortcutHint(window.hrig.platform)}`,
+      icon: <PanelTop size={16} />,
+      action: reopenClosedPanel,
+    },
+    {
+      name: "Maximize panel",
+      hint: `Fill the workspace with the focused group · ${maximizeShortcutHint(window.hrig.platform)}`,
+      icon: <Square size={16} />,
+      action: () => toggleMaximize("maximize", null),
+    },
+    {
+      name: "Restore panel layout",
+      hint: `Show every panel group again · ${maximizeShortcutHint(window.hrig.platform)}`,
+      icon: <LayoutGrid size={16} />,
+      action: () => toggleMaximize("restore", null),
+    },
+    {
       name: "Open all rig sessions",
       hint: `${seats.length} seats`,
       icon: <Columns2 size={16} />,
       action: openAll,
+    },
+    {
+      name: "Refresh rigs and workspace",
+      hint: "Seats and project files",
+      icon: <RefreshCw size={16} />,
+      action: refreshAll,
     },
     {
       name: "Arrange: Team",
@@ -1700,10 +2383,68 @@ export default function App() {
       icon: <TerminalSquare size={16} />,
       action: () => openSeat(seat),
     })),
+    ...seats.map(seat => ({name: `Open ${seat.name} beside current`, hint: `${seat.rigName} · ${connection.name}`, icon: <Columns2 size={16}/>, action: () => openSeatBeside(seat)})),
+    ...terminalCommands,
+    ...(droppedNow.length > 0
+      ? [{name: "Terminal: " + droppedLabel(droppedNow.length), hint: "Re-attach ended or errored terminals · others untouched", icon: <RefreshCw size={16} />, action: reconnectDropped}]
+      : []),
   ];
+  const shownCommands = withEffectiveHints(commands, window.hrig.platform, shortcutOverrides);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey) return;
+      // The focused terminal owns its clear shortcut; leave the key untouched.
+      if (terminalOwnsKey(event, window.hrig.platform, event.target)) return;
+      // A bare ? outside fields, the editor and terminals opens the shortcut sheet.
+      if (isHelpKey(event, event.target, modal !== null || hasOpenDialog(event.target))) {
+        event.preventDefault();
+        event.stopPropagation();
+        openShortcuts();
+        return;
+      }
+      // Overridden chords run their shortcut; the old keys of a moved one go back to the terminal.
+      const rebound = routeOverriddenKey(event, window.hrig.platform, shortcutOverrides);
+      if (rebound !== null) {
+        if (rebound.id === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) {
+          if (rebound.id === "workspace.reopenPanel") reopenClosedPanel();
+          else if (rebound.id === "workspace.maximizePanel") toggleMaximize("toggle", event.target);
+          else toggleFocusMode();
+        }
+        return;
+      }
+      // Claimed always so it never reaches a shell; acts only with no dialog open.
+      if (isReopenPanelKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel();
+        return;
+      }
+      // Same rule: claimed so no shell sees it, and Escape never restores.
+      if (isMaximizePanelKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target))
+          toggleMaximize("toggle", event.target);
+        return;
+      }
+      // Same rule: claimed so no shell sees it; focus mode never writes a preference.
+      if (isFocusModeKey(event, window.hrig.platform)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode();
+        return;
+      }
+      // Same rule: claimed (a shell would get a plain Tab), acts once per press and only with no dialog open.
+      if (isPanelCycleKey(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat && modal === null && !hasOpenDialog(event.target))
+          cyclePanel(event.shiftKey ? -1 : 1, event.target);
+        return;
+      }
       if (event.ctrlKey || event.metaKey) {
         if (
           [",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) ||
@@ -1799,14 +2540,11 @@ export default function App() {
   };
   const resizeSidebar = (event: React.PointerEvent) => {
     const startX = event.clientX;
-    const startWidth = state.sidebarWidth || 264;
+    const startWidth = normalizeSidebarWidth(state.sidebarWidth);
     const move = (e: PointerEvent) =>
       setState((s) => ({
         ...s,
-        sidebarWidth: Math.max(
-          210,
-          Math.min(440, startWidth + e.clientX - startX),
-        ),
+        sidebarWidth: dragSidebarWidth(startWidth, startX, e.clientX),
       }));
     const stop = () => {
       document.removeEventListener("pointermove", move);
@@ -1834,6 +2572,7 @@ export default function App() {
   void revision;
   return (
     <SettingsContext.Provider value={settingsContext}>
+      <HostTintContext.Provider value={hostTints}>
       <div className="app" inert={updateRestarting || undefined}>
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
           window.dispatchEvent(new CustomEvent("hrig:session-relaunched", {detail:{connectionId:relaunch.connection.id, seatId:relaunch.seat.id}}));
@@ -1959,7 +2698,7 @@ export default function App() {
           {sidebar && (
             <div
               className="sidebar-container"
-              style={{ width: state.sidebarWidth || 264 }}
+              style={{ width: normalizeSidebarWidth(state.sidebarWidth) }}
             >
               <Sidebar
                 onManageRigs={() =>
@@ -1982,6 +2721,7 @@ export default function App() {
                 onProject={openProject}
                 onConnect={openConnect}
                 onSeat={openSeat}
+                onSeatBeside={openSeatBeside}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
                 onFile={(path) => openFile(path)}
@@ -2047,20 +2787,20 @@ export default function App() {
                   {currentRig?.name || "Workspace"}
                 </span>
                 <span
-                  className={`connection-state ${inventoryError ? "error" : ""}`}
+                  className={`connection-state ${inventoryError && inventoryError !== CHECKING_SNAPSHOT ? "error" : ""}`}
                 >
                   <StatusDot
                     status={
-                      busy
+                      busy && !inventory
                         ? "unknown"
                         : connection.kind === "local" || inventory
                           ? "running"
                           : "unknown"
                     }
                   />
-                  {busy
+                  {busy && !inventory
                     ? "Connecting"
-                    : inventoryError
+                    : inventoryError && inventoryError !== CHECKING_SNAPSHOT
                       ? "Unavailable"
                       : connection.kind === "local"
                         ? "Local"
@@ -2167,6 +2907,13 @@ export default function App() {
                             <span>{saved.name}</span>
                             <span
                               role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.currentTarget.click();
+                                }
+                              }}
                               aria-label={`Delete layout ${saved.name}`}
                               className="delete-layout"
                               onClick={(e) => {
@@ -2210,6 +2957,26 @@ export default function App() {
                 )}
                 onModelChange={modelChanged}
                 onAction={onAction}
+                onContextMenu={(node, event) => {
+                  if (!(node instanceof TabNode)) return;
+                  if (event.currentTarget.ownerDocument !== document) return;
+                  let group = node.getParent();
+                  while (group && group.getType() !== "tabset") group = group.getParent();
+                  if (!(group instanceof TabSetNode)) return;
+                  event.preventDefault();
+                  setTabMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    id: node.getId(),
+                    panels: group.getTabNodes().map((tab) => ({
+                      id: tab.getId(),
+                      name: tab.getName(),
+                      kind: panelKind(tab.getComponent(), tab.getConfig()),
+                      dirty: dirtyTabs.current.has(tab.getId()),
+                      locked: tab.isPinned() || !tab.isCloseable(),
+                    })),
+                  });
+                }}
                 realtimeResize
                 onPopoutOpen={(_layout, _window, doc) => {
                   themeDocuments.current.add(doc);
@@ -2285,46 +3052,84 @@ export default function App() {
             </div>
           </main>
         </div>
-        {preferences["appearance.statusBar"] && (
+        {showStatusBar(focusMode, preferences["appearance.statusBar"]) && (
           <footer className="statusbar">
-            <AccountStatus connection={connection} />
+            {isVisible("accounts", hiddenStatusItems) && (
+              <AccountStatus connection={connection} />
+            )}
             <div>
-              <span className="status-brand">
-                <Network size={11} />
-                {connection.kind === "local"
-                  ? "Local workspace"
-                  : `${connection.kind.toUpperCase()}: ${connection.name}`}
-              </span>
-              <button
-                onClick={() => {
-                  setSection("changes");
-                  setSidebar(true);
-                }}
-              >
-                <GitBranch size={11} />
-                Source control
-              </button>
+              {isVisible("connection", hiddenStatusItems) && (
+                <span className="status-brand">
+                  <Network size={11} />
+                  {connection.kind === "local"
+                    ? "Local workspace"
+                    : `${connection.kind.toUpperCase()}: ${connection.name}`}
+                </span>
+              )}
+              {isVisible("source-control", hiddenStatusItems) && (
+                <button
+                  onClick={() => {
+                    setSection("changes");
+                    setSidebar(true);
+                  }}
+                >
+                  <GitBranch size={11} />
+                  Source control
+                </button>
+              )}
             </div>
             <div>
-              <span>
-                {tabCount} {tabCount === 1 ? "session" : "sessions"} open
-              </span>
-              <span className="status-divider" />
-              <span>
-                <Check size={11} />
-                Layout autosaved
-              </span>
-              <button onClick={() => addPanel("activity", "Activity")}>
-                <Activity size={12} />
-              </button>
+              {droppedNow.length > 0 && isVisible("reconnect", hiddenStatusItems) && (
+                <>
+                  <button
+                    onClick={reconnectDropped}
+                    title="Re-attach every ended or errored terminal. Connected terminals are not touched."
+                  >
+                    <RefreshCw size={11} />
+                    {droppedLabel(droppedNow.length)}
+                  </button>
+                  {statusSeparators.afterReconnect && (
+                    <span className="status-divider" />
+                  )}
+                </>
+              )}
+              {isVisible("sessions", hiddenStatusItems) && (
+                <span>
+                  {tabCount} {tabCount === 1 ? "session" : "sessions"} open
+                </span>
+              )}
+              {statusSeparators.betweenSessionsAndLayout && (
+                <span className="status-divider" />
+              )}
+              {isVisible("layout", hiddenStatusItems) && (
+                <span>
+                  <Check size={11} />
+                  Layout autosaved
+                </span>
+              )}
+              {isVisible("activity", hiddenStatusItems) && (
+                <button onClick={() => addPanel("activity", "Activity")}>
+                  <Activity size={12} />
+                </button>
+              )}
             </div>
           </footer>
         )}
         <UpdateNotice />
         {toast && (
-          <div className="toast" role="status">
+          <div
+            className="toast"
+            role="status"
+            onMouseEnter={() => setToastHover(true)}
+            onMouseLeave={() => setToastHover(false)}
+          >
             <Check size={15} />
             {toast}
+            {undoOffered && (
+              <button className="small-button" onClick={undoFromToast}>
+                {UNDO_LABEL}
+              </button>
+            )}
             <button onClick={() => setToast("")}>
               <X size={13} />
             </button>
@@ -2616,6 +3421,7 @@ export default function App() {
           <QuickOpen
             connection={connection}
             root={root}
+            recent={recentsFor(state.recentFiles, recentKey(connection.id, root))}
             onClose={() => setModal(null)}
             onOpen={(path, line) => {
               setModal(null);
@@ -2790,6 +3596,13 @@ export default function App() {
             </div>
           </Modal>
         )}
+        {snippetTarget && <TerminalSnippets name={snippetTarget.name} connection={snippetTarget.connection} terminalId={snippetTarget.id}
+          snippets={state.terminalSnippets || []}
+          context={snippetTarget.context}
+          draft={snippetDraft}
+          onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
+          onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}
+          onClose={() => {setSnippetTarget(null);setSnippetDraft(null);}} />}
         {modal === "palette" && (
           <Modal title="Command center" onClose={() => setModal(null)} wide>
             <div className="palette-input">
@@ -2801,11 +3614,7 @@ export default function App() {
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
-                    const item = commands.find((c) =>
-                      `${c.name} ${c.hint}`
-                        .toLowerCase()
-                        .includes(search.toLowerCase()),
-                    );
+                    const item = pickFirst(shownCommands, search);
                     if (item) {
                       setModal(null);
                       item.action();
@@ -2819,12 +3628,7 @@ export default function App() {
               <kbd>ESC</kbd>
             </div>
             <div className="command-list">
-              {commands
-                .filter((c) =>
-                  `${c.name} ${c.hint}`
-                    .toLowerCase()
-                    .includes(search.toLowerCase()),
-                )
+              {filterCommands(shownCommands, search)
                 .map((c) => (
                   <button
                     key={c.name + c.hint}
@@ -2859,6 +3663,26 @@ export default function App() {
             </div>
           </Modal>
         )}
+        {modal === "shortcuts" && (
+          <ShortcutSheet
+            platform={window.hrig.platform}
+            overrides={overridesText}
+            onSave={saveShortcutOverrides}
+            onClose={() => setModal(null)}
+          />
+        )}
+        {modal === "hostTint" && (
+          <HostTintDialog
+            connections={state.connections}
+            tints={hostTints}
+            onSave={(next) => {
+              setState((s) => ({ ...s, hostTints: next }));
+              setModal(null);
+              notify("Host labels and tints saved");
+            }}
+            onClose={() => setModal(null)}
+          />
+        )}
         {modal === "guide" && (
           <Modal
             title="A place for every session"
@@ -2890,7 +3714,7 @@ export default function App() {
                 {
                   icon: <Keyboard />,
                   title: "A few useful shortcuts",
-                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl S: save file.",
+                  text: "Ctrl K: command center · Ctrl O: open project · Ctrl P: quick open file · Ctrl Shift P: find panels · Ctrl B: sidebar · Ctrl Shift T: shell · Ctrl Shift K: clear terminal (Cmd K on macOS) · Ctrl S: save file. Press ? for the full list.",
                 },
               ].map((item) => (
                 <div key={item.title}>
@@ -2904,6 +3728,14 @@ export default function App() {
             </div>
           </Modal>
         )}
+        <PanelContextMenu
+          menu={tabMenu}
+          renamed={!!tabMenu && isRenamed(titledTab(tabMenu.id))}
+          onDismiss={() => setTabMenu(null)}
+          onClosePanels={closePanels}
+          onRenamePanel={renamePanel}
+          onResetPanel={resetPanelName}
+        />
         {pending && (
           <Modal
             title={pending.title}
@@ -2957,6 +3789,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </HostTintContext.Provider>
     </SettingsContext.Provider>
   );
 }

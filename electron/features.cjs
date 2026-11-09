@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const teamAssessment = require("./team-assessment.cjs");
+const contentSearch = require("./content-search.cjs");
 
 async function assessTeam(connection, request) {
   core.validateConnection(connection);
@@ -225,27 +226,79 @@ elif op=='rename':
  if os.path.exists(dest): raise Exception('Destination already exists')
  os.rename(target,dest);print(json.dumps({'renamed':True}))
 elif op=='searchText':
- out=[];scanned=0;query=a.get('query','').lower()
+ import time
+ out=[];scanned=0;reason='';query=a.get('query','');o=a.get('options')
  if not query: raise Exception('Enter search text')
+ low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs');cap=(o or {}).get('maxFiles') or 20000
+ if o is not None and (o.get('regex') or o.get('wholeWord')):
+  src=query if o.get('regex') else re.escape(query)
+  if o.get('wholeWord'): src=r'(?<!\\w)(?:'+src+r')(?!\\w)'
+  try: pattern=re.compile(src,re.IGNORECASE)
+  except re.error as e: raise Exception('Invalid regular expression: '+str(e)[:160])
+ inc=(o or {}).get('include') or [];exc=(o or {}).get('exclude') or []
+ import signal
+ st={'late':False,'re':False}
+ class Budget(BaseException): pass
+ def alarm(sig,frm):
+  st['late']=True
+  if st['re']: raise Budget()
+ if budget is not None and hasattr(signal,'setitimer'):
+  signal.signal(signal.SIGALRM,alarm);signal.setitimer(signal.ITIMER_REAL,max(budget,1)/1000.0)
+ def spent(): return budget is not None and (st['late'] or (time.monotonic()-started)*1000>=budget)
+ def nm(pat,name):
+  p=n=0;star=-1;mark=0
+  while n<len(name):
+   if p<len(pat) and pat[p]=='*': star=p;p+=1;mark=n
+   elif p<len(pat) and (pat[p]=='?' or pat[p]==name[n]): p+=1;n+=1
+   elif star>=0: p=star+1;mark+=1;n=mark
+   else: return False
+  while p<len(pat) and pat[p]=='*': p+=1
+  return p==len(pat)
+ def pm(segs,parts):
+  p=n=0;star=-1;mark=0
+  while n<len(parts):
+   if p<len(segs) and segs[p]=='**': star=p;p+=1;mark=n
+   elif p<len(segs) and nm(segs[p],parts[n]): p+=1;n+=1
+   elif star>=0: p=star+1;mark+=1;n=mark
+   else: return False
+  while p<len(segs) and segs[p]=='**': p+=1
+  return p==len(segs)
+ def gh(g,parts):
+  if not g['a']: return any(nm(g['s'][0],x) for x in parts)
+  return any(pm(g['s'],parts[:k]) for k in range(1,len(parts)+1))
+ def allowed(rel):
+  parts=rel.split('/')
+  return (not inc or any(gh(g,parts) for g in inc)) and not any(gh(g,parts) for g in exc)
+ def hit(text):
+  if not pattern: return low in text.lower()
+  st['re']=True
+  try: return bool(pattern.search(text[:1000]))
+  except Budget: return False
+  finally: st['re']=False
  for folder,dirs,files in os.walk(root,followlinks=False):
   dirs[:]=[d for d in dirs if d not in ['.git','node_modules','dist','.venv','.next','release'] and not os.path.islink(os.path.join(folder,d))]
   for name in files:
    scanned+=1;p=os.path.join(folder,name)
+   if spent(): reason='time';break
    if os.path.islink(p): continue
+   rel=os.path.relpath(p,root).replace(os.sep,'/')
    try:
-    content=read(p)['content']
+    content=read(p)['content'] if allowed(rel) else ''
     for line,text in enumerate(content.splitlines(),1):
-     if query in text.lower(): out.append({'path':os.path.relpath(p,root).replace(os.sep,'/'),'line':line,'text':text[:250]})
+     if spent(): reason='time';break
+     if hit(text): out.append({'path':rel,'line':line,'text':text[:250]})
      if len(out)>=200: break
    except (OSError,UnicodeError,Exception): pass
-   if len(out)>=200 or scanned>=20000: break
-  if len(out)>=200 or scanned>=20000: break
- print(json.dumps(out))
+   if reason or len(out)>=200 or scanned>=cap: break
+  if reason or len(out)>=200 or scanned>=cap: break
+ if budget is not None and hasattr(signal,'setitimer'): signal.setitimer(signal.ITIMER_REAL,0)
+ reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=cap else '')
+ print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned}))
 `;
 function revision(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
-async function edit(connection, a) {
+async function edit(connection, a, hooks = {}) {
   if (!a || !["read", "save", "create", "rename", "searchText"].includes(a.op))
     throw new Error("Unsupported editor operation.");
   if (typeof a.root !== "string" || typeof (a.path || "") !== "string")
@@ -261,7 +314,16 @@ async function edit(connection, a) {
     (typeof a.query !== "string" || !a.query || a.query.length > 300)
   )
     throw new Error("Enter search text under 300 characters.");
-  if (connection.kind !== "local") return python(connection, EDIT_PY, a);
+  const search =
+    a.op === "searchText"
+      ? contentSearch.prepare(a, connection.kind !== "local", hooks)
+      : null;
+  if (connection.kind !== "local")
+    return python(
+      connection,
+      EDIT_PY,
+      search && !search.legacy ? { ...a, options: search.options } : a,
+    );
   const target = await core.localPath(
     a.root,
     a.path,
@@ -302,12 +364,22 @@ async function edit(connection, a) {
   }
   if (a.op === "searchText") {
     const results = [];
+    const budget = contentSearch.createBudget(
+      hooks.now || Date.now,
+      search.budgetMs,
+    );
+    const maxFiles = hooks.maxFiles || contentSearch.LIMITS.MAX_FILES;
     let count = 0;
+    let timedOut = false;
     const scan = async (folder, depth = 0) => {
       if (depth > 25) return;
       for (const e of await fs
         .readdir(folder, { withFileTypes: true })
         .catch(() => [])) {
+        if (budget.expired()) {
+          timedOut = true;
+          return;
+        }
         if (
           e.isSymbolicLink() ||
           [
@@ -324,30 +396,61 @@ async function edit(connection, a) {
         if (e.isDirectory()) await scan(full, depth + 1);
         else {
           count++;
+          const rel = path.relative(target, full).replaceAll("\\", "/");
           try {
-            if ((await fs.stat(full)).size <= 2000000) {
+            if (search.allows(rel) && (await fs.stat(full)).size <= 2000000) {
               const data = await fs.readFile(full);
-              if (!data.includes(0))
-                for (const [i, line] of data
-                  .toString("utf8")
-                  .split(/\r?\n/)
-                  .entries()) {
-                  if (line.toLowerCase().includes(a.query.toLowerCase()))
-                    results.push({
-                      path: path.relative(target, full).replaceAll("\\", "/"),
-                      line: i + 1,
-                      text: line.slice(0, 250),
-                    });
-                  if (results.length >= 200) break;
-                }
+              if (!data.includes(0)) {
+                const text = data.toString("utf8");
+                const lines = text.split(/\r?\n/);
+                if (search.scan) {
+                  const hits = search.scan(
+                    text,
+                    200 - results.length,
+                    Math.min(
+                      hooks.fileMs || contentSearch.LIMITS.FILE_MS,
+                      budget.remaining(),
+                    ),
+                  );
+                  if (hits === null) timedOut = true;
+                  else
+                    for (const i of hits)
+                      results.push({
+                        path: rel,
+                        line: i + 1,
+                        text: lines[i].slice(0, 250),
+                      });
+                } else
+                  for (const [i, line] of lines.entries()) {
+                    if (budget.expired()) {
+                      timedOut = true;
+                      break;
+                    }
+                    if (search.test(line))
+                      results.push({
+                        path: rel,
+                        line: i + 1,
+                        text: line.slice(0, 250),
+                      });
+                    if (results.length >= 200) break;
+                  }
+              }
             }
           } catch {}
         }
-        if (count >= 20000 || results.length >= 200) return;
+        if (timedOut || count >= maxFiles || results.length >= 200) return;
       }
     };
     await scan(target);
-    return results;
+    if (search.legacy) return results;
+    const reason = timedOut
+      ? "time"
+      : results.length >= 200
+        ? "matches"
+        : count >= maxFiles
+          ? "files"
+          : "";
+    return { matches: results, truncated: reason !== "", reason, scanned: count };
   }
 }
 const relaunchSession = require("./session-relaunch.cjs").createSessionRelaunch({ inventory: c => core.inventory(c), runRig, parseJson: core.parseJson });
@@ -713,6 +816,7 @@ module.exports = {
   runRig,
   diagnose,
   edit,
+  EDIT_PY,
   rigAction,
   ports,
 };

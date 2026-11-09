@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const invoke =
   (channel) =>
   (...args) =>
@@ -8,8 +8,21 @@ contextBridge.exposeInMainWorld("hrig", {
   updates: invoke('updates:operation'),
   onUpdates: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('updates:state',listener);return ()=>ipcRenderer.removeListener('updates:state',listener); },
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
+  terminalLog: invoke('terminal:log'),
+  onTerminalLog: callback => { const listener = (_event,state) => callback(state); ipcRenderer.on('terminal:log-state',listener); return () => ipcRenderer.removeListener('terminal:log-state',listener); },
   exportTerminal: invoke('terminal:export'),
   openTerminalLink: invoke('terminal:open-link'),
+  clipboardHasImage: invoke('terminal:clipboard-image'),
+  pasteClipboardImage: invoke('terminal:paste-image'),
+  readClipboardText: invoke('terminal:read-clipboard'),
+  pathForFile: (file) => {
+    try {
+      const path = webUtils.getPathForFile(file);
+      return typeof path === "string" ? path : "";
+    } catch {
+      return "";
+    }
+  },
   platform: process.platform,
   mobile: invoke('mobile:operation'),
   integrate: invoke('integrations:operation'),
@@ -51,4 +64,5 @@ contextBridge.exposeInMainWorld("hrig", {
     return () => ipcRenderer.removeListener("terminal:data", listener);
   },
   window: (action) => ipcRenderer.send("window:action", action),
+  setWindowTitle: invoke("window:title"),
 });

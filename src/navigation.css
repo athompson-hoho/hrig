@@ -270,3 +270,16 @@
   font-weight: 400;
   letter-spacing: 0;
 }
+.welcome-recents {
+  margin-top: 28px;
+}
+.welcome-recents .project-hub-list {
+  max-height: none;
+  margin-bottom: 0;
+}
+.welcome-recents .welcome-pin {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+  color: var(--color-98e2c2);
+}

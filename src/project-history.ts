@@ -126,3 +126,15 @@ export function availableConnection(
       connectionIdentity(c, platform) === project.endpoint,
   );
 }
+// Pinned projects first, then the rest, each newest first, at most `limit` rows.
+// normalizeHistory already drops malformed rows and repeated ids; the explicit
+// sorts keep this order independent of its internal caps.
+export function welcomeRecents(history: unknown, limit = 5): RecentProject[] {
+  const rows = normalizeHistory(history);
+  const byNewest = (a: RecentProject, b: RecentProject) =>
+    b.lastOpened - a.lastOpened;
+  const pinned = rows.filter((p) => p.pinned).sort(byNewest);
+  const others = rows.filter((p) => !p.pinned).sort(byNewest);
+  const count = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 5;
+  return [...pinned, ...others].slice(0, count);
+}

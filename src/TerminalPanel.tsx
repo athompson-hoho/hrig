@@ -2,6 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import TerminalTools from "./TerminalTools";
+import TerminalSessionTools from "./TerminalSessionTools";
+import { terminalPathLinks } from "./terminal-path-links";
+import { terminalSeatActivity } from "./terminal-seat-activity";
+import { snippetError } from "./terminal-commands";
+import TerminalReconnect from "./TerminalReconnect";
+import {
+  reconnectReason,
+  restoreLine,
+  retryDelay,
+  scrollOffset,
+} from "./terminal-reconnect";
+import TerminalScrollback from "./TerminalScrollback";
+import TerminalSize from "./TerminalSize";
+import TerminalOutputCounter from "./TerminalOutputCounter";
+import TerminalBell from "./TerminalBell";
+import TerminalAlerts from "./TerminalAlerts";
+import { useTerminalZoom } from "./useTerminalZoom";
+import { effectiveFontSize } from "./terminal-zoom";
+import { normalizeContrastRatio } from "./terminal-contrast";
+import { sanitizeWordSeparator } from "./terminal-words";
 import { FitAddon } from "@xterm/addon-fit";
 import { RotateCcw, RotateCw, Plug, CircleHelp } from "lucide-react";
 import { ErrorBox, IconButton, StatusDot } from "./components";
@@ -9,26 +29,103 @@ import type { PanelConfig } from "./types";
 import { useSettings } from "./SettingsContext";
 import { themeId, terminalTheme } from "./themes";
 import { localShellLabel } from "./platform";
+import { isDropped, publishTerminalDropped } from "./terminal-dropped";
+import { HostTintLabel, hostTintStyle, useHostTint } from "./HostTint";
+import TerminalFileDrop from "./TerminalFileDrop";
+import {
+  isPrimaryActivation,
+  linkHover,
+  type TerminalLinks,
+} from "./terminal-link-at";
 export default function TerminalPanel({
   config,
   onFile,
   onRelaunch,
+  seatActivityAvailable = false,
 }: {
   config: PanelConfig;
+  seatActivityAvailable?: boolean;
   onRelaunch?: () => void;
   onFile: (path: string, line?: number) => void;
 }) {
   const { effective: preferences } = useSettings();
   const colorTheme = themeId(preferences);
+  const hostTint = useHostTint(config.connection);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const localShell = useRef(preferences["terminal.localShell"]).current;
   const host = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const linkRef = useRef<TerminalLinks>({ hovered: null, open: null });
+  const zoom = useTerminalZoom(
+    panel,
+    config.terminalId!,
+    preferences["terminal.fontSize"],
+  );
   const [error, setError] = useState("");
   const [ended, setEnded] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const retries = useRef(0);
+  const [findRequest, setFindRequest] = useState(0);
+  const [taskRequest, setTaskRequest] = useState(0);
+  const [commandNotice, setCommandNotice] = useState("");
+  useEffect(() => { setCommandNotice(""); }, [attempt, ready]);
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const {id, command, text} = (event as CustomEvent).detail;
+      if (id !== config.terminalId || config.rigControlToken) return;
+      if (command === "reconnect-dropped") {
+        // Re-check our own state: a healthy panel keeps its session. No close, no write.
+        if (isDropped({ rigControl: !!config.rigControlToken, ended, error, ready })) {
+          retries.current = 0;
+          setAttempt(n => n + 1);
+        }
+        return;
+      }
+      const term = terminalRef.current;
+      if (!term) return;
+      if (command === "focus") term.focus();
+      if (command === "clear") {term.clear();term.focus();}
+      if (command === "find") setFindRequest(n => n + 1);
+      if (command === "task-from-selection") setTaskRequest(n => n + 1);
+      if (command === "reconnect") {
+        void window.hrig.closeTerminal(id).then(() => {retries.current=0;setAttempt(n=>n+1);}).catch(e=>setError(e.message));
+      }
+      if (command === "insert" || command === "run") {
+        const problem = typeof text === "string" ? snippetError(text) : "Invalid snippet.";
+        if (problem || !ready || ended !== null) {setCommandNotice(problem || "Terminal is not connected. Nothing was sent.");return;}
+        setCommandNotice("");
+        term.paste(text);
+        if (command === "run") window.hrig.writeTerminal(id,"\r");
+        term.focus();
+      }
+    };
+    window.addEventListener("hrig:terminal-command",listener);
+    return () => window.removeEventListener("hrig:terminal-command",listener);
+  }, [config.terminalId,config.rigControlToken,ready,ended,error]);
+  useEffect(() => {
+    if (config.rigControlToken || !config.terminalId) return;
+    publishTerminalDropped(config.terminalId, isDropped({ rigControl: false, ended, error, ready }));
+  }, [config.terminalId,config.rigControlToken,ended,error,ready]);
+  useEffect(() => {
+    const id = config.terminalId;
+    return () => { if (id && !config.rigControlToken) publishTerminalDropped(id, false); };
+  }, [config.terminalId,config.rigControlToken]);
+  const reconnectButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    // The PTY is gone, so keystrokes in this terminal go nowhere. Move focus
+    // from the dead terminal (or nowhere) to Reconnect so Enter/Space works;
+    // leave focus alone if the person is in another panel or field.
+    const active = document.activeElement;
+    if (
+      ended !== null &&
+      (!active ||
+        active === document.body ||
+        host.current?.contains(active))
+    )
+      reconnectButton.current?.focus();
+  }, [ended]);
   useEffect(() => {
     const listener = (event: Event) => {
       const { connectionId, seatId } = (event as CustomEvent).detail;
@@ -43,6 +140,11 @@ export default function TerminalPanel({
   }, [config.connection.id, config.seat?.id]);
   const previousSession = useRef<string | null | undefined>(undefined);
   const [retrying, setRetrying] = useState(false);
+  const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
+  const [inputDropped, setInputDropped] = useState(false);
+  // Distance from the live bottom when the last view was torn down, restored
+  // only if the session replays its retained buffer on re-attach.
+  const savedScroll = useRef(0);
   const [failure, setFailure] = useState(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -63,7 +165,8 @@ export default function TerminalPanel({
       retries.current >= 6
     )
       return;
-    const delay = Math.min(15000, 1000 * 2 ** retries.current++);
+    const delay = retryDelay(retries.current++);
+    setNextRetryAt(Date.now() + delay);
     setRetrying(true);
     const timer = setTimeout(() => {
       retryTimer.current = undefined;
@@ -79,7 +182,8 @@ export default function TerminalPanel({
   useEffect(() => {
     if (!host.current) return;
     let disposed = false,
-      connected = false;
+      connected = false,
+      attached = false;
     let stableTimer: ReturnType<typeof setTimeout> | undefined;
     clearTimeout(retryTimer.current);
     setRetrying(false);
@@ -115,43 +219,44 @@ export default function TerminalPanel({
     terminalRef.current = term;
     fitRef.current = fit;
     term.loadAddon(fit);
+    const openUrl = (uri: string) => {
+      window.hrig.openTerminalLink(uri).catch((e) => setError(e.message));
+    };
+    const openPath = (file: string, line?: number) => {
+      window.hrig
+        .edit(config.connection, {
+          op: "read",
+          root: config.root,
+          path: file,
+        })
+        .then(() => {
+          if (!disposed) onFile(file, line);
+        })
+        .catch((e) => setError(e.message));
+    };
+    // The right-click menu's Open link takes the same two routes a click does. xterm also activates a link when any mouse button is released over it, which would open the link while the menu shows, so only a primary click opens one.
+    linkRef.current.open = (link) =>
+      link.kind === "url" ? openUrl(link.text) : openPath(link.text, link.line);
     term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        window.hrig.openTerminalLink(uri).catch((e) => setError(e.message));
-      }),
+      new WebLinksAddon((event, uri) => {
+        if (isPrimaryActivation(event, window.hrig.platform)) openUrl(uri);
+      }, linkHover(linkRef, "url")),
     );
     term.registerLinkProvider({
       provideLinks(y, callback) {
-        const text =
-          term.buffer.active.getLine(y - 1)?.translateToString(true) || "";
-        const links = [
-          ...text.matchAll(
-            /(?:^|[\s("'])((?:[A-Za-z]:[\\/]|\/|\.\.?[\\/])?[\w@.\-]+(?:[\\/][\w@.\-]+)*\.[A-Za-z0-9]{1,12})(?::(\d+)(?::\d+)?)?/g,
-          ),
-        ].map((match) => {
-          const file = match[1],
-            line = match[2] ? Number(match[2]) : undefined;
-          const start = match.index! + match[0].indexOf(file);
-          return {
-            range: {
-              start: { x: start + 1, y },
-              end: { x: match.index! + match[0].length, y },
-            },
-            text: file,
-            activate: () => {
-              window.hrig
-                .edit(config.connection, {
-                  op: "read",
-                  root: config.root,
-                  path: file,
-                })
-                .then(() => {
-                  if (!disposed) onFile(file, line);
-                })
-                .catch((e) => setError(e.message));
-            },
-          };
-        });
+        const links = terminalPathLinks(term.buffer.active, y).map(
+          ({ file, line, range }) => {
+            return {
+              range,
+              text: file,
+              activate: (event: MouseEvent) => {
+                if (isPrimaryActivation(event, window.hrig.platform))
+                  openPath(file, line);
+              },
+              ...linkHover(linkRef, "path", line),
+            };
+          },
+        );
         callback(links);
       },
     });
@@ -187,7 +292,10 @@ export default function TerminalPanel({
       }
     });
     const input = term.onData((data) => {
+      // Input while disconnected is dropped, never queued: after an uncertain
+      // disconnect, replaying keystrokes could run commands unseen.
       if (connected) window.hrig.writeTerminal(id, data);
+      else setInputDropped(true);
     });
     const start = async () => {
       if (
@@ -214,13 +322,26 @@ export default function TerminalPanel({
       .then((result) => {
         if (disposed || !result) return;
         connected = true;
+        attached = true;
         stableTimer = setTimeout(() => {
           if (!disposed && connected) retries.current = 0;
         }, 30000);
         setEnded(null);
+        setInputDropped(false);
         setReady(true);
-        if (result.buffer) term.write(result.buffer);
-        else pending.forEach((data) => term.write(data));
+        if (result.buffer) {
+          const offset = savedScroll.current;
+          savedScroll.current = 0;
+          term.write(result.buffer, () => {
+            if (!disposed && offset > 0)
+              term.scrollToLine(restoreLine(term.buffer.active.baseY, offset));
+          });
+        }
+        else {
+          // No retained buffer: the old position no longer refers to anything.
+          savedScroll.current = 0;
+          pending.forEach((data) => term.write(data));
+        }
         resize();
       })
       .catch((e) => {
@@ -233,10 +354,19 @@ export default function TerminalPanel({
     host.current.addEventListener("mousedown", focus);
     return () => {
       disposed = true;
+      linkRef.current.hovered = null;
+      linkRef.current.open = null;
       clearTimeout(stableTimer);
       observer.disconnect();
       unsubscribe();
       input.dispose();
+      // Only a view that actually attached holds the scroll position worth
+      // keeping; a failed blank attempt must not overwrite it with zero.
+      if (attached)
+        savedScroll.current = scrollOffset(
+          term.buffer.active.baseY,
+          term.buffer.active.viewportY,
+        );
       term.dispose();
       if (terminalRef.current === term) {
         terminalRef.current = null;
@@ -248,7 +378,10 @@ export default function TerminalPanel({
     const term = terminalRef.current;
     if (!term) return;
     term.options.fontFamily = preferences["terminal.fontFamily"];
-    term.options.fontSize = preferences["terminal.fontSize"];
+    term.options.fontSize = effectiveFontSize(
+      preferences["terminal.fontSize"],
+      zoom,
+    );
     term.options.lineHeight = preferences["terminal.lineHeight"];
     term.options.cursorStyle = preferences["terminal.cursorStyle"] as
       "bar" | "block" | "underline";
@@ -256,15 +389,26 @@ export default function TerminalPanel({
       preferences["terminal.cursorBlink"] &&
       !preferences["appearance.reduceMotion"];
     term.options.scrollback = preferences["terminal.scrollback"];
+    term.options.minimumContrastRatio = normalizeContrastRatio(
+      preferences["terminal.minimumContrastRatio"],
+    );
+    term.options.macOptionIsMeta = preferences["terminal.macOptionIsMeta"];
+    term.options.wordSeparator = sanitizeWordSeparator(
+      preferences["terminal.wordSeparator"],
+    );
     term.options.theme = terminalTheme(preferences, colorTheme);
     try {
       fitRef.current?.fit();
       window.hrig.resizeTerminal(config.terminalId!, term.cols, term.rows);
     } catch {}
-  }, [preferences, colorTheme, attempt, config.seat?.session]);
+  }, [preferences, colorTheme, attempt, config.seat?.session, zoom]);
+  const activity = terminalSeatActivity(config.seat, seatActivityAvailable);
   return (
-    <div className="terminal-panel">
-      <div className="session-toolbar">
+    <div className="terminal-panel" ref={panel}>
+      <div
+        className={hostTint?.color ? "session-toolbar host-tinted" : "session-toolbar"}
+        style={hostTintStyle(hostTint)}
+      >
         <span className="session-avatar">
           {config.seat ? config.seat.name.slice(0, 2).toUpperCase() : ">_"}
         </span>
@@ -284,9 +428,16 @@ export default function TerminalPanel({
                   : "Bash"}
           </span>
         </div>
+        {activity && (
+          <span className="terminal-seat-activity" title={activity.detail} role="status">
+            <StatusDot status={activity.status} />
+            {activity.label}
+          </span>
+        )}
         <span className="session-connection">
           <Plug size={11} />
           {config.connection.name}
+          <HostTintLabel tint={hostTint} />
         </span>
         <StatusDot
           status={ended !== null ? "stopped" : ready ? "idle" : "unknown"}
@@ -322,21 +473,70 @@ export default function TerminalPanel({
         </div>
       )}
       {error && <ErrorBox error={error} />}
-      {config.seat && retries.current >= 6 && (error || ended !== null) && (
-        <div className="editor-notice">
-          Automatic retries paused. Use Reconnect when the host is ready.
-        </div>
-      )}
-      {retrying && (
-        <div className="editor-notice">
-          Reconnecting to the existing seat… retry {retries.current} of 6
-        </div>
-      )}
+      {commandNotice && <div className="editor-notice" role="status">{commandNotice}</div>}
+      <TerminalFileDrop
+        host={host}
+        terminal={terminalRef}
+        connection={config.connection}
+        rigControl={!!config.rigControlToken}
+        ready={ready}
+        ended={ended}
+        localShell={localShell}
+      />
+      <TerminalReconnect
+        seat={!!config.seat}
+        retrying={retrying}
+        retries={retries.current}
+        failed={!!error || ended !== null}
+        nextAt={nextRetryAt}
+        reason={reconnectReason(error, ended)}
+        inputDropped={inputDropped}
+      />
+      <TerminalAlerts
+        terminal={terminalRef}
+        panel={panel}
+        generation={attempt * 2 + (ready ? 1 : 0)}
+        bell={
+          preferences["notifications.desktop"] &&
+          preferences["notifications.terminalBell"]
+        }
+        quiet={
+          preferences["notifications.desktop"] &&
+          preferences["notifications.terminalQuiet"]
+        }
+        label={config.seat?.name || "Shell"}
+        host={config.connection.name}
+      />
+      <TerminalSessionTools terminal={terminalRef} id={config.terminalId!} generation={attempt * 2 + (ready ? 1 : 0)} />
       <TerminalTools
+        findRequest={findRequest}
+        taskRequest={taskRequest}
+        terminalId={config.terminalId!}
         terminal={terminalRef}
         generation={attempt * 2 + (ready ? 1 : 0)}
+        links={linkRef}
       />
-      <div className="terminal-host" ref={host} />
+      <div className="terminal-stage">
+        <div className="terminal-host" ref={host} />
+        <TerminalScrollback
+          terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+          scrollback={preferences["terminal.scrollback"]}
+        />
+        <TerminalSize
+          terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+        />
+        <TerminalBell
+          terminal={terminalRef}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+        />
+        <TerminalOutputCounter
+          terminal={terminalRef}
+          id={config.terminalId!}
+          generation={attempt * 2 + (ready ? 1 : 0)}
+        />
+      </div>
       {ended !== null && (
         <div className="terminal-ended">
           {config.rigControlToken ? (
@@ -344,7 +544,13 @@ export default function TerminalPanel({
           ) : (
             <>
               Connection ended (exit {ended}).{" "}
-              <button onClick={() => setAttempt((n) => n + 1)}>
+              <button
+                ref={reconnectButton}
+                onClick={() => {
+                  retries.current = 0;
+                  setAttempt((n) => n + 1);
+                }}
+              >
                 Reconnect
               </button>
             </>

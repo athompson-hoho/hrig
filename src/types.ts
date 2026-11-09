@@ -60,6 +60,7 @@ export interface RoleTemplate {
   model: IJsonModel;
 }
 export interface WorkspaceState {
+  terminalSnippets?: import("./terminal-commands").TerminalSnippet[];
   preferences?: import("./settings").Overrides;
   projectPreferences?: Record<string, import("./settings").Overrides>;
   version: 1;
@@ -70,7 +71,11 @@ export interface WorkspaceState {
   layouts: Record<string, IJsonModel>;
   savedLayouts: SavedLayout[];
   projectHistory?: import("./project-history").RecentProject[];
+  recentFiles?: import("./recent-files").RecentFiles;
   sidebarWidth?: number;
+  hostTints?: import("./host-tint").HostTints;
+  taskFilters?: import("./task-filters").SavedTaskFilters;
+  reviewChecks?: import("./review-checks").ReviewChecks;
   roleTemplates?: RoleTemplate[];
   desktopNotifications?: boolean;
   windowBounds?: { x: number; y: number; width: number; height: number };
@@ -87,7 +92,12 @@ export interface PanelConfig {
   port?: number;
   line?: number;
   role?: string;
+  /** A terminal panel's own title, set with Rename; the tab name shows it. A label only. */
+  customTitle?: string;
+  /** The name the panel had before its first rename; Reset name brings it back, also after a restart. */
+  defaultTitle?: string;
 }
+export interface TerminalLogState { id: string; active: boolean; path: string; bytes: number; error: string }
 export interface TerminalEvent {
   id: string;
   data?: string;
@@ -106,6 +116,10 @@ export interface DesignSeat {
   firstHandoff?: FirstHandoff;
 }
 export interface HrigAPI {
+  terminalLog(request: {id: string; op: "start" | "stop" | "status"}): Promise<TerminalLogState>;
+  onTerminalLog(callback: (state: TerminalLogState) => void): () => void;
+  clipboardHasImage(): Promise<boolean>;
+  pasteClipboardImage(id: string): Promise<string|null>;
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
   updates(request:{op:string;confirmed?:boolean;allowUnsigned?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
@@ -116,6 +130,8 @@ export interface HrigAPI {
   openWorkLink(url: string): Promise<void>;
   exportTerminal(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
+  readClipboardText(): Promise<string>;
+  pathForFile(file: File): string;
   drafts(request: {op: string; key?: string; value?: unknown}): {result?: any; error?: string};
   assessTeam(
     connection: Connection,
@@ -157,6 +173,12 @@ export interface HrigAPI {
       content?: string;
       revision?: string;
       query?: string;
+      options?: {
+        regex: boolean;
+        wholeWord: boolean;
+        include?: string;
+        exclude?: string;
+      };
     },
   ): Promise<any>;
   rigAction(
@@ -219,6 +241,7 @@ export interface HrigAPI {
   resizeTerminal(id: string, cols: number, rows: number): void;
   onTerminal(callback: (event: TerminalEvent) => void): () => void;
   window(action: "minimize" | "maximize" | "close"): void;
+  setWindowTitle(title: string): Promise<void>;
 }
 declare global {
   interface Window {

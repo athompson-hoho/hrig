@@ -2,6 +2,7 @@ import {
   ArrowUpRight,
   FolderOpen,
   Network,
+  Star,
   TerminalSquare,
   Columns2,
   Grip,
@@ -9,6 +10,8 @@ import {
   Command,
   MousePointer2,
 } from "lucide-react";
+import type { Connection } from "./types";
+import { availableConnection, type RecentProject } from "./project-history";
 export default function Welcome({
   onConnect,
   onProject,
@@ -17,6 +20,9 @@ export default function Welcome({
   onGuide,
   connectionName,
   seatCount,
+  recents,
+  connections,
+  onOpenRecent,
 }: {
   onConnect: () => void;
   onProject: () => void;
@@ -25,6 +31,9 @@ export default function Welcome({
   onGuide: () => void;
   connectionName: string;
   seatCount: number;
+  recents: RecentProject[];
+  connections: Connection[];
+  onOpenRecent: (project: RecentProject) => void;
 }) {
   return (
     <div className="welcome">
@@ -81,6 +90,63 @@ export default function Welcome({
           <ArrowUpRight size={16} />
         </button>
       </div>
+      {recents.length > 0 && (
+        <section
+          className="welcome-recents"
+          aria-label="Continue where you left off"
+        >
+          <div className="project-history-caption">
+            <span>CONTINUE WHERE YOU LEFT OFF</span>
+          </div>
+          <div className="project-hub-list">
+            {recents.map((project) => {
+              const target = availableConnection(
+                project,
+                connections,
+                window.hrig.platform,
+              );
+              const changed = connections.some(
+                (c) => c.id === project.connectionId,
+              );
+              return (
+                <div className="project-history-row" key={project.id}>
+                  <button
+                    className="project-history-open"
+                    disabled={!target}
+                    title={project.root}
+                    onClick={() => onOpenRecent(project)}
+                    aria-label={`Continue project ${project.name} on ${project.hostName}${project.pinned ? ", pinned" : ""}`}
+                  >
+                    <FolderOpen size={20} />
+                    <span>
+                      <strong>
+                        {project.name}
+                        {project.pinned && (
+                          <span className="welcome-pin" title="Pinned project">
+                            <Star size={11} fill="currentColor" aria-hidden="true" />
+                          </span>
+                        )}
+                      </strong>
+                      <small>
+                        <Network size={10} />
+                        {target?.name || project.hostName}
+                        {project.rigName ? " · " + project.rigName : ""}
+                        {!target
+                          ? " · " +
+                            (changed
+                              ? "Connection target changed"
+                              : "Connection unavailable")
+                          : ""}
+                      </small>
+                    </span>
+                    <ArrowUpRight size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
       <div className="arrangement-intro">
         <div>
           <span className="eyebrow">A WORKSPACE THAT MOVES WITH YOU</span>

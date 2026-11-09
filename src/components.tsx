@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { X, LoaderCircle, AlertCircle } from "lucide-react";
+import { isFocusable, nextFocusIndex, type FocusCandidate } from "./focus-trap";
 export function IconButton({
   title,
   children,
@@ -25,6 +26,18 @@ export function IconButton({
     </button>
   );
 }
+const TABBABLE = "button,input,select,textarea,summary,a[href],[tabindex]";
+/** What the Tab trap needs to know about one element of the dialog. */
+const describe = (el: HTMLElement): FocusCandidate => {
+  const given = el.getAttribute("tabindex");
+  return {
+    tag: el.tagName,
+    disabled: el.matches(":disabled"),
+    hidden: el.hidden || el.offsetParent === null,
+    tabIndex: given === null ? null : Number.parseInt(given, 10),
+    hasHref: el.hasAttribute("href"),
+  };
+};
 export function Modal({
   title,
   subtitle,
@@ -54,19 +67,17 @@ export function Modal({
         closeRef.current();
       }
       if (event.key === "Tab") {
-        const els = ref.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input,select,textarea,[tabindex="0"]',
-        );
-        if (!els?.length) return;
-        const first = els[0],
-          last = els[els.length - 1];
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
+        const found = ref.current?.querySelectorAll<HTMLElement>(TABBABLE);
+        if (!found?.length) return;
+        const els = Array.from(found).filter((el) => isFocusable(describe(el)));
+        const active = document.activeElement;
+        const at = els.findIndex((el) => el === active);
+        // Focus on something inside the dialog that Tab does not list, such as a container given tabindex -1, is left to the browser.
+        if (at < 0 && active && dialog?.contains(active)) return;
+        const target = nextFocusIndex(els.length, at, event.shiftKey);
+        if (target < 0) return;
+        event.preventDefault();
+        els[target].focus();
       }
     };
     window.addEventListener("keydown", handler);
@@ -107,7 +118,7 @@ export function Modal({
 }
 export function Loading({ text = "Loading…" }: { text?: string }) {
   return (
-    <div className="panel-empty">
+    <div className="panel-empty" role="status">
       <LoaderCircle size={22} className="spin" />
       <span>{text}</span>
     </div>
@@ -115,7 +126,7 @@ export function Loading({ text = "Loading…" }: { text?: string }) {
 }
 export function ErrorBox({ error }: { error: string }) {
   return (
-    <div className="error-box">
+    <div className="error-box" role="alert">
       <AlertCircle size={15} />
       <span>{error}</span>
     </div>

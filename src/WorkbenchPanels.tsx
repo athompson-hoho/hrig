@@ -18,6 +18,14 @@ import {
 import type { Connection, Seat, Inventory, PanelConfig } from "./types";
 import { ErrorBox, Loading, StatusDot, Empty } from "./components";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
+import {
+  buildSearchRequest,
+  defaultSearchOptions,
+  readSearchOutcome,
+  searchNote,
+  stopNote,
+  type SearchOptions,
+} from "./content-search-view";
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState("");
@@ -211,6 +219,9 @@ export function ProjectTools({
 }) {
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<any[]>([]);
+  const [options, setOptions] = useState<SearchOptions>(defaultSearchOptions);
+  const [stopped, setStopped] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
@@ -220,8 +231,11 @@ export function ProjectTools({
     setBusy(true);
     try {
       const result = await window.hrig.edit(connection, { ...request, root });
-      if (request.op === "searchText") setMatches(result);
-      else {
+      if (request.op === "searchText") {
+        const outcome = readSearchOutcome(result);
+        setMatches(outcome.matches);
+        setStopped(stopNote(outcome));
+      } else {
         onChanged();
         if (request.op === "create") onFile(request.path);
         if (request.op === "rename") onFile(request.destination);
@@ -250,23 +264,85 @@ export function ProjectTools({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && query)
-                action({ op: "searchText", query });
+                action(buildSearchRequest(query, options));
             }}
             placeholder="Find text in this project…"
           />
           <button
+            className={`small-button ${options.regex ? "highlight" : ""}`}
+            aria-label="Use regular expression"
+            aria-pressed={options.regex}
+            title="Regular expression"
+            onClick={() => setOptions({ ...options, regex: !options.regex })}
+          >
+            .*
+          </button>
+          <button
+            className={`small-button ${options.wholeWord ? "highlight" : ""}`}
+            aria-label="Match whole word"
+            aria-pressed={options.wholeWord}
+            title="Whole word"
+            onClick={() =>
+              setOptions({ ...options, wholeWord: !options.wholeWord })
+            }
+          >
+            Word
+          </button>
+          <button
+            className={`small-button ${options.include?.trim() || options.exclude?.trim() ? "highlight" : ""}`}
+            aria-label="File include and exclude filters"
+            aria-expanded={showFilters}
+            title="Include and exclude files"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            Files
+          </button>
+          <button
             className="primary-button"
             disabled={busy || !query}
-            onClick={() => action({ op: "searchText", query })}
+            onClick={() => action(buildSearchRequest(query, options))}
           >
             Search text
           </button>
         </div>
       </label>
-      <p className="field-note">
-        Literal, case-insensitive search. Up to 200 matches across 20,000 files;
-        dependencies and binaries are excluded.
-      </p>
+      {showFilters && (
+        <>
+          <label className="field-label">
+            INCLUDE FILES
+            <input
+              aria-label="Include files"
+              value={options.include ?? ""}
+              onChange={(e) =>
+                setOptions({ ...options, include: e.target.value })
+              }
+              placeholder="*.ts, src/**"
+            />
+          </label>
+          <label className="field-label">
+            EXCLUDE FILES
+            <input
+              aria-label="Exclude files"
+              value={options.exclude ?? ""}
+              onChange={(e) =>
+                setOptions({ ...options, exclude: e.target.value })
+              }
+              placeholder="*.min.js, **/test/**"
+            />
+          </label>
+          <p className="field-note">
+            Comma-separated globs relative to the project folder: * and ? match
+            inside a name, ** crosses folders, a glob without a slash matches a
+            name at any depth. No braces, classes or .. segments.
+          </p>
+        </>
+      )}
+      <p className="field-note">{searchNote(options)}</p>
+      {stopped && (
+        <p className="field-note" role="status">
+          {stopped}
+        </p>
+      )}
       {error && <ErrorBox error={error} />}
       <div className="search-results">
         {matches.map((m, i) => (

@@ -80,7 +80,7 @@ Download the matching build from the [latest HRig release](https://github.com/at
 
 1. Choose **Connect a machine** and select a detected WSL distribution or enter an SSH alias / `user@hostname`.
 2. Set the project path on that machine. Set an absolute OpenRig executable path if `rig` is not available in its login shell.
-3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group.
+3. Existing rigs and seats appear in the sidebar. Click a seat to attach, or drag it directly into a split or tab group. Two optional settings show each seat's runtime and model as small badges and hide stopped seats from the list; both are off by default.
 4. Use **Arrange** for Team, Focus, and Review presets, or save your own named layout.
 
 The **Explorer** opens editable project files. **Source control** shows changed files with side-by-side diffs against HEAD. **New panel** adds shells, task queues, messages, and an activity view.
@@ -129,8 +129,8 @@ Open **Tools** in the top toolbar, or use **Ctrl K** to find a tool.
 | Arrange workspace | See a layout thumbnail, choose a panel and destination group, split or group without dragging, equalize sizes, undo/redo arrangement changes, and save role-based templates. |
 | Connection doctor | Check the real Node, OpenRig, tmux, Python and daemon environment. Connection/authentication failures include their cause. |
 | Attention center | See served attention/startup problems and blocked tasks; click a seat to focus it. Windows notifications are off by default and deduplicated when enabled. |
-| Task board | Filter by owner, text and state; inspect full task details; create work assigned to a seat. Handoffs are requested from the owning seat rather than impersonating it. |
-| Review workspace | Select a feedback recipient, open a changed file beside sessions, collect file/line notes, and explicitly send feedback through OpenRig. Git changes belong to the project; HRig does not infer which agent authored them. |
+| Task board | Filter by owner, state, tag and text (owner, state and tag are remembered per connection, see [Task board filters](TASKS.md#task-board-filters)); inspect full task details; create work assigned to a seat. Handoffs are requested from the owning seat rather than impersonating it. |
+| Review workspace | Select a feedback recipient, open a changed file beside sessions, collect file/line notes, and explicitly send feedback through OpenRig. Each changed file can be ticked as reviewed; the tick stays on this computer and is tied to the file's content, so an edited file loses it (see [Review checks](docs/review-checks.md)). Git changes belong to the project; HRig does not infer which agent authored them. |
 | Project tools | Search text, create new text files and rename entries within the project. Save and close editors for a path before renaming it. |
 | Problems | Inspect Monaco diagnostics from opened files and jump to their lines. |
 | Ports and previews | Discover listening ports or enter one manually. SSH targets get a loopback-only managed tunnel. Preview tabs restore their remote port binding, rather than assuming an old local tunnel still exists. |
