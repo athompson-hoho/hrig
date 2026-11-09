@@ -1055,3 +1055,213 @@ test("human-items real: a row for a person from another rig is dropped by a rig 
     "a row parked on a person is addressed to its seat, so it is not for the person here",
   );
 });
+
+// ---------------------------------------------------------------------------
+// Wiring and docs.
+
+test("human-items wiring: the module is pure, the hook reads the queue list and shows a notification and nothing else, App calls it once behind the setting, and nothing else in src or electron knows about it", () => {
+  const mod = read("src/human-items.ts");
+  const code = stripComments(mod);
+  assert.ok(!/^import /m.test(code), "no imports");
+  assert.ok(
+    !/\b(require|document|window|navigator|localStorage|sessionStorage|setTimeout|setInterval|requestAnimationFrame|Date|fetch|process)\b|Math\.random|hrig/.test(
+      code,
+    ),
+    "no page, clock, timer, network, storage, program or bridge",
+  );
+  const types = ["HumanItem", "HumanNotice", "HumanSeen"];
+  const exported = [...mod.matchAll(/^export (?:const|function|type) (\w+)/gm)]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(
+    exported,
+    [
+      "ACTIVE_STATES",
+      "HUMAN_ADDRESS_PATTERNS",
+      "MAX_FIELD",
+      "MAX_READ",
+      "MAX_SEEN",
+      "MAX_SUBJECT",
+      "NO_SEEN",
+      "QUIET_INTENT",
+      "isHumanAddressed",
+      "isOpenHumanItem",
+      "newHumanItems",
+      "nextHumanPoll",
+      "notificationFor",
+      ...types,
+    ].sort(),
+  );
+  assert.deepEqual(
+    Object.keys(lib).sort(),
+    exported.filter((name) => !types.includes(name)),
+    "the runtime exports are the list minus the types",
+  );
+  const lines = mod.split("\n");
+  lines.forEach((line, i) => {
+    if (/^export (const|function|type) /.test(line))
+      assert.ok(
+        lines[i - 1].trim().endsWith("*/"),
+        "a doc comment right above: " + line.slice(0, 50),
+      );
+  });
+
+  const hook = read("src/useHumanItemNotices.ts");
+  const hookCode = stripComments(hook);
+  assert.deepEqual(
+    [...hookCode.matchAll(/^import .* from "([^"]+)";/gm)].map((m) => m[1]),
+    ["react", "./types", "./inventory-health", "./human-items"],
+  );
+  assert.deepEqual(
+    [...hookCode.matchAll(/hrig\s*\.\s*(\w+)/g)].map((m) => m[1]).sort(),
+    ["notifyAttention", "queue"],
+    "the only bridge calls: read the queue list, show a notification",
+  );
+  assert.equal(count(hookCode, "window.hrig.queue(connection)"), 1);
+  assert.equal(count(hookCode, ".notifyAttention("), 1);
+  assert.ok(
+    !/\b(document|localStorage|sessionStorage|fetch|setInterval|Date|XMLHttpRequest|addEventListener|requestAnimationFrame)\b/.test(
+      hookCode,
+    ),
+    "no page, storage, network or second timer: it also reads while the window is hidden",
+  );
+  assert.equal(count(hookCode, "setTimeout("), 1);
+  assert.equal(count(hookCode, "clearTimeout("), 1);
+  assert.equal(count(hookCode, "export function"), 1);
+
+  const app = read("src/App.tsx");
+  assert.equal(
+    count(app, 'import { useHumanItemNotices } from "./useHumanItemNotices";'),
+    1,
+  );
+  assert.equal(count(app, "useHumanItemNotices("), 1);
+  const block = between(app, "useHumanItemNotices({", "});");
+  assert.equal(
+    collapse(block),
+    'useHumanItemNotices({ enabled: loaded && preferences["notifications.humanItems"], connection, intervalSeconds: preferences["workspace.refreshInterval"], refresh, log,',
+  );
+  assert.ok(
+    app.indexOf("useHumanItemNotices({") >
+      app.indexOf(
+        '}, [inventory, preferences["notifications.desktop"], connection.id]);',
+      ),
+    "right after the seat attention effect",
+  );
+  assert.equal(
+    count(app, "notifyAttention("),
+    1,
+    "App's own call is unchanged",
+  );
+  assert.equal(count(app, "notifications.humanItems"), 1);
+  assert.equal(count(read("src/settings.ts"), "notifications.humanItems"), 2);
+
+  const mentions = (text) =>
+    /human-items|useHumanItemNotices|humanItems/.test(text);
+  for (const file of fs.readdirSync(path.join(root, "src")))
+    assert.equal(
+      mentions(read("src/" + file)),
+      ["App.tsx", "settings.ts", "useHumanItemNotices.ts"].includes(file),
+      file,
+    );
+  for (const file of fs.readdirSync(path.join(root, "electron")))
+    assert.ok(!mentions(read("electron/" + file)), "electron/" + file);
+  assert.ok(!mentions(read("src/styles.css")));
+});
+
+test("human-items docs: TASKS.md says what counts as addressed to a person, that only new items notify and what is taken in silently, how it reads, what the notification holds, and that nothing is sent or changed", () => {
+  const doc = read("TASKS.md");
+  const heading = "\n### Notification for items addressed to you\n";
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, heading), 1);
+  assert.equal(
+    count(doc, "\n## "),
+    2,
+    "the level 2 headings other tests count",
+  );
+  const at = doc.indexOf(heading);
+  assert.ok(at > doc.indexOf("separate, explicit actions."), "after the intro");
+  assert.ok(
+    at < doc.indexOf("\n### Card details\n"),
+    "before the section other tests read to the next heading",
+  );
+  const next = doc.indexOf("\n### ", at + 1);
+  assert.ok(next > at && next < doc.indexOf("\n## "));
+  const section = doc.slice(at + 1, next);
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 3);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line per paragraph");
+  const say = (paragraph, parts) => {
+    const flat = collapse(paragraph);
+    for (const part of parts)
+      assert.ok(flat.includes(part), "TASKS.md says: " + part);
+  };
+  const schema = (key) => settings.schema.find((row) => row.key === key);
+  const refresh = settings.defaults["workspace.refreshInterval"];
+  say(paragraphs[0], [
+    "a new queue item addressed to a person",
+    "It is off by default",
+    "Notify about queue items for me under Notifications in Settings (`notifications.humanItems`)",
+    "separate from Desktop attention notifications and needs nothing else turned on",
+    "`human@host`, `human@kernel`, `human-name@host`, `human-name@kernel` or `name@external`",
+    "which is how OpenRig names a person",
+    "still pending, in-progress or blocked",
+    "A quiet update (`--human-intent " +
+      lib.QUIET_INTENT +
+      "`) is not an ask and does not notify",
+    "a task parked on a person is addressed to its own seat, so it does not notify either",
+  ]);
+  say(paragraphs[1], [
+    "Only new items notify",
+    "only takes in what is already waiting, so starting HRig never notifies for old items",
+    "an item that left and came back is not new again (the last " +
+      lib.MAX_SEEN.toLocaleString("en-US") +
+      " are remembered)",
+    "the same queue list the Task queue panel reads, for every rig on the active connection",
+    "once per refresh interval (`workspace.refreshInterval`, " +
+      refresh +
+      " seconds by default)",
+    "whether or not the Task queue panel is open",
+    "A failed read is skipped and tried again with the same back-off as the rig refresh",
+    "nothing is notified twice",
+    "Several new items found in one read give one notification",
+  ]);
+  say(paragraphs[2], [
+    "says how many new items there are (for example `" +
+      lib.notificationFor([{ subject: "a" }, { subject: "b" }]).title +
+      "`)",
+    "at most the first item's summary, cut to " +
+      lib.MAX_SUBJECT +
+      " characters with control characters removed",
+    "It never shows an item's text, id, address or tags",
+    "the Activity list gets one matching line",
+    "This is read only: HRig never claims, answers, resolves or changes an item and sends nothing to a seat or shell",
+    "the notification is silent and clicking it does nothing",
+    "Windows notification preferences still apply",
+  ]);
+  // The names and numbers the page uses are the code's.
+  assert.equal(refresh, 15);
+  assert.equal(
+    schema("notifications.humanItems").label,
+    "Notify about queue items for me",
+  );
+  assert.equal(
+    schema("notifications.desktop").label,
+    "Desktop attention notifications",
+  );
+  assert.ok(schema("workspace.refreshInterval"));
+  for (const example of [
+    "human@host",
+    "human@kernel",
+    "human-name@host",
+    "human-name@kernel",
+    "name@external",
+  ])
+    assert.equal(
+      lib.isHumanAddressed({ destinationSession: example }),
+      true,
+      example,
+    );
+  assert.equal(count(read("README.md"), "TASKS.md"), 1);
+});

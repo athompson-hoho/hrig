@@ -1116,8 +1116,7 @@ test("shortcut-overrides docs: SETTINGS.md has the row and one paragraph that sa
   assert.ok(/^[\n\x20-\x7e]*$/.test(rows[0]));
   assert.equal(
     lines.indexOf(rows[0]),
-    lines.findIndex((l) => l.startsWith("| `notifications.terminalQuiet` |")) +
-      1,
+    lines.findIndex((l) => l.startsWith("| `notifications.humanItems` |")) + 1,
     "right after the last row",
   );
   for (const part of [

@@ -1326,3 +1326,83 @@ test("terminal.showOutputCounter is an off-by-default boolean Terminal setting t
   );
   assert.ok(lines[at + 1].startsWith("| `terminal.bellStyle` |"));
 });
+test("notifications.humanItems is an off-by-default Notifications boolean, separate from the desktop notification setting, listed once right after the terminal quiet alerts, resolved user then project, and documented in SETTINGS.md", () => {
+  const key = "notifications.humanItems";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.category, "Notifications");
+  assert.equal(row.label, "Notify about queue items for me");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  for (const part of [
+    "addressed to a person",
+    "human@host",
+    "name@external",
+    "Off by default",
+    "this setting alone is the opt-in",
+    "Read only",
+    "never claims, answers or changes an item",
+    "sends anything to a seat",
+    "80 characters",
+    "never an item's text, id or address",
+    "do not notify",
+  ])
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  const keys = settings.schema.map((r) => r.key);
+  assert.equal(
+    keys.indexOf(key),
+    keys.indexOf("notifications.terminalQuiet") + 1,
+  );
+  assert.ok(keys.indexOf(key) < keys.indexOf("shortcuts.overrides"));
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  // Separate from the desktop attention notifications: neither implies the other.
+  const only = settings.resolveSettings({ [key]: true });
+  assert.equal(only["notifications.desktop"], false);
+  const desktop = settings.resolveSettings({ "notifications.desktop": true });
+  assert.equal(desktop[key], false);
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) => line.startsWith("| `" + key + "` |"));
+  assert.ok(at > 0, "SETTINGS.md must have a notifications.humanItems row");
+  assert.ok(lines[at].startsWith("| `" + key + "` | `false` |"));
+  for (const part of [
+    "human@host",
+    "name@external",
+    "separate from `notifications.desktop`",
+    "this setting alone is the opt-in",
+    "Read only",
+    "never claims, answers or changes an item",
+    "at most the first item's summary",
+    "80 characters",
+    "never an item's text, id or address",
+    "Items already waiting when you turn the setting on or switch connection do not notify",
+    "quiet updates",
+    "See TASKS.md",
+  ])
+    assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
+  assert.ok(
+    lines[at - 1].startsWith("| `notifications.terminalQuiet` | `false` |"),
+  );
+  assert.ok(lines[at + 1].startsWith("| `shortcuts.overrides` |"));
+});
