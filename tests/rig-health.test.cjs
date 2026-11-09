@@ -13,7 +13,7 @@ test('counts only known-working as working; running-unknown, stopped, failed are
   const h = rigHealthSummary([seat('working'), seat('running'), seat('idle'), seat('attention'), seat('attention'),
     seat('stopped'), seat('failed'), seat('unknown')], 'Rig', true);
   assert.deepEqual([h.working, h.idle, h.attention, h.other, h.total], [1, 1, 2, 4, 8]);
-  assert.equal(h.text, '1 working · 1 idle · 2 attention');
+  assert.equal(h.text, '1 working · 1 idle · 2 attention · 4 other');
   assert.match(h.detail, /4 other \(running with unknown activity, stopped, failed or unknown\)/);
   assert.match(h.detail, /last inventory snapshot/);
 });
@@ -46,4 +46,10 @@ test('a selected rig missing from a verified inventory reads "Rig not found", no
   assert.doesNotMatch(h.text, /No sessions/); assert.match(h.detail, /not in the represented inventory/);
   const ui = fs.readFileSync('src/RigHealthStatus.tsx', 'utf8');
   assert.match(ui, /!!rigId && !!inventory && !rig/);
+});
+
+test('sessions with unknown activity never read as an all-zero rig on screen', () => {
+  const h = rigHealthSummary([seat('running'), seat('running')], 'Rig', true);
+  assert.equal(h.text, '0 working · 0 idle · 0 attention · 2 other');
+  assert.equal(rigHealthSummary([seat('idle')], 'Rig', true).text, '0 working · 1 idle · 0 attention');
 });

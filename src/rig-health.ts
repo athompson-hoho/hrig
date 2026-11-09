@@ -55,7 +55,10 @@ export function rigHealthSummary(
       : ". Inventory is stale or not verified, so these are last known counts.");
   return {
     available: true, current, working, idle, attention, other, total,
-    text: total === 0 ? `No sessions${stale}` : parts.join(" · ") + stale,
+    text:
+      total === 0
+        ? `No sessions${stale}`
+        : parts.concat(other ? [`${other} other`] : []).join(" · ") + stale,
     detail,
   };
 }
