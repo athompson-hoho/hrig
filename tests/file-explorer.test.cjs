@@ -174,6 +174,44 @@ if (require.main === module) {
     assert.ok(hasText(view, '1 paths not shown'), 'the known returned entry beyond the cap is disclosed');
     assertNavigationOnly(view);
   });
+  test('odd composition actual Files filter Clear and explicit open retain the backend literal identity', async t => {
+    const { localFiles } = require('./git-badges-api.test.cjs');
+    const h = localFiles(root), opened = [], reads = [], operations = [];
+    const view = mountScenario({
+      handle: (owner, request) => {
+        const operation = h.core.fileOperation(owner, request);
+        operations.push(operation);
+        return operation;
+      },
+      props: { onFile(path) {
+        opened.push(path);
+        reads.push(h.core.fileOperation(connection, { op: 'read', root, path }));
+      } },
+    });
+    t.after(() => view.unmount()); await view.settle();
+    assert.equal(operations.length, 1);
+    await operations[0]; await view.settle();
+    assert.ok(listedRow(view, 'ordinary.ts'), 'ordinary actual Sidebar listing positive');
+    const normal = listedRow(view, 'literal\\name.ts'); assert.ok(normal);
+    await searchFor(view, 'literal');
+    assert.equal(operations.length, 2);
+    await operations[1]; await view.settle();
+    const filtered = visibleRows(view).find(n => n.props.title === 'literal\\name.ts');
+    assert.ok(filtered, 'actual core search result retains the literal name through actual projection');
+    assert.equal(visibleRows(view).some(n => n.props.title === 'literal' || n.props.title === 'literal/name.ts'), false,
+      'no phantom directory or rewritten path appears');
+    view.event(filtered, 'onClick');
+    assert.deepEqual(opened, ['literal\\name.ts']);
+    assert.equal((await reads[0]).content, 'synthetic:literal\\name.ts');
+    const before = view.requests.length;
+    view.event(button(view, 'Clear file filter'), 'onClick'); await view.settle();
+    assert.equal(listedRow(view, 'literal\\name.ts'), normal, 'Clear retains the same mounted normal row');
+    assert.equal(view.requests.length, before, 'Clear issues no replacement listings');
+    assert.equal(view.gitRequests.length, 1, 'file navigation does not refetch Git');
+    assert.deepEqual(view.forbidden, []);
+    assert.deepEqual(h.calls.filter(([op]) => op === 'read'), [['read', root + '/literal\\name.ts']]);
+    t.diagnostic('GREEN composition evidence: actual Sidebar/filter/Clear/open callback reached the actual contained core read with unchanged identity.');
+  });
 }
 
 if (require.main === module) {

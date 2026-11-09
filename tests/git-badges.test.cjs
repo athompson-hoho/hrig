@@ -50,7 +50,8 @@ for (const [status, letter, description] of meanings) {
 test('pure projection requires explicit valid provenance and distinguishes nonrepository', () => {
   for (const value of [undefined, null, [], {}, { isRepository: 'true' },
     { isRepository: true, root: '/x', entries: [] },
-    ...[null, 0, {}, 'nested', '/nested/', '../', './', 'a//', 'a/../', 'a\\b/', 'C:/', 'a\n/'].map(projectPrefix => ({ isRepository: true, root: '/x', entries: [], projectPrefix })),
+    // Root prefix consistency: repo-relative POSIX names are not Windows names.
+    ...[null, 0, {}, 'nested', '/nested/', '../', './', 'a//', 'a/../', 'a\0/'].map(projectPrefix => ({ isRepository: true, root: '/x', entries: [], projectPrefix })),
     ...['', null, 0].map(root => ({ isRepository: true, root, entries: [], projectPrefix: '' })),
     { isRepository: true, root: '/x', entries: {}, projectPrefix: '' }]) {
     assert.deepEqual(plain(projectGitStatus(freeze(value))), { state: 'unavailable' });
@@ -161,4 +162,16 @@ test('pure partial snapshots sum parser and projection omissions and refuse inva
   ]));
   assert.deepEqual(plain(conflicting.records.map(r => r.path)), ['good']);
   assert.equal(conflicting.omittedPaths, 4, 'every ambiguous input is disclosed instead of choosing an arbitrary winner');
+});
+
+test('odd prefix pure Git projection accepts legitimate POSIX directories without losing children', t => {
+  assert.equal(projectGitStatus(snapshot([{ path: 'ordinary/needle.ts', status: 'M' }], 'ordinary/')).state, 'ready');
+  t.diagnostic('Positive setup: the actual mapper accepts an ordinary repo-relative directory prefix.');
+  for (const prefix of ['project:dir/', 'literal\\directory/']) {
+    const result = projectGitStatus(snapshot([{ path: prefix + 'needle.ts', status: 'M' }], prefix));
+    assert.equal(result.state, 'ready', 'legal prefix characters must not invalidate the complete snapshot');
+    assert.equal(result.records[0]?.path, 'needle.ts', 'prefix characters must not be reclassified as an unsafe child path');
+    assert.equal(result.records[0]?.letter, 'M');
+    assert.equal(result.omittedPaths || 0, 0);
+  }
 });

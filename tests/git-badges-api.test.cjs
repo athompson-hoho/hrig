@@ -269,3 +269,57 @@ test('odd listing backend preserves literal POSIX backslash identity and Windows
   t.diagnostic('Positive setup: actual local listing executed with inert paths, Dirents and one read on each platform.');
   assert.ok(posix.some(e => e.path === 'literal\\name.ts'), 'literal POSIX backslash must not become a directory separator');
 });
+
+test('odd prefix actual Git accepts literal POSIX colon and backslash directories', async t => {
+  await ordinaryStatus(localGit(), t);
+  for (const prefix of ['project:dir/', 'literal\\directory/']) {
+    const h = localGit({ prefix: prefix + '\n', raw: ` M ${prefix}needle.ts\0` });
+    const outcome = await h.core.gitStatus({ id: 'synthetic', kind: 'local' }, '/synthetic-alias')
+      .then(value => ({ value }), error => ({ error: error.message }));
+    assert.equal(outcome.error, undefined, 'repo-relative POSIX prefix must not inherit Windows filename restrictions');
+    assert.equal(outcome.value.projectPrefix, prefix);
+    assert.equal(outcome.value.entries[0].path, prefix + 'needle.ts');
+  }
+});
+
+// Same actual service for the root-requested list/search/read composition check.
+// Every filesystem call is synthetic; no host path or process is consulted.
+function localFiles(root = '/synthetic-compose') {
+  const module = { exports: {} }, calls = [];
+  const names = ['ordinary.ts', 'literal\\name.ts'];
+  const allowed = new Set([root, ...names.map(name => path.posix.join(root, name))]);
+  const files = {
+    async realpath(value) { assert.ok(allowed.has(value), 'only the exact synthetic root/file identity is accessed'); return value; },
+    async readdir(value, options) {
+      assert.equal(value, root); assert.equal(options.withFileTypes, true); calls.push(['list', value]);
+      return names.map(name => ({ name, isDirectory: () => false, isSymbolicLink: () => false }));
+    },
+    async stat(value) { assert.ok(allowed.has(value) && value !== root); calls.push(['stat', value]); return { size: 32 }; },
+    async readFile(value, encoding) {
+      assert.ok(allowed.has(value) && value !== root); assert.equal(encoding, 'utf8');
+      calls.push(['read', value]); return `synthetic:${path.posix.basename(value)}`;
+    },
+  };
+  vm.runInNewContext(source, { module, Buffer, process: { platform: 'linux', env: {} }, require(id) {
+    if (id === 'node:path') return path.posix;
+    if (id === 'node:os') return { homedir: () => root };
+    if (id === 'node:fs/promises') return files;
+    assert.equal(id, 'node:child_process');
+    return { execFile() { assert.fail('synthetic file navigation never invokes a host process'); } };
+  } });
+  return { core: module.exports, calls, root };
+}
+module.exports.localFiles = localFiles;
+
+test('odd composition actual core preserves the same literal identity through list search and read', async t => {
+  const h = localFiles(), owner = { id: 'synthetic', kind: 'local' };
+  const listed = await h.core.fileOperation(owner, { op: 'list', root: h.root, path: '' });
+  assert.ok(listed.some(e => e.path === 'ordinary.ts'), 'ordinary actual list positive');
+  assert.ok(listed.some(e => e.path === 'literal\\name.ts'));
+  const matches = await h.core.fileOperation(owner, { op: 'search', root: h.root, path: '', query: 'literal' });
+  assert.deepEqual(JSON.parse(JSON.stringify(matches.map(e => e.path))), ['literal\\name.ts']);
+  const read = await h.core.fileOperation(owner, { op: 'read', root: h.root, path: matches[0].path });
+  assert.equal(read.content, 'synthetic:literal\\name.ts');
+  assert.deepEqual(h.calls.filter(([op]) => op === 'read'), [['read', h.root + '/literal\\name.ts']]);
+  t.diagnostic('GREEN composition evidence: actual list/search/read shared one literal POSIX file identity under inert filesystem containment.');
+});

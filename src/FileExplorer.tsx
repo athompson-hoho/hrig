@@ -1,7 +1,7 @@
 import { cloneElement, useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, FileCode2, Folder, Search } from "lucide-react";
 import type { Connection, FileEntry } from "./types";
-import { compareFileEntries, fileTreeOwner, normalizeFileQuery, projectFileMatches, resolveRevealPath } from "./file-tree";
+import { fileTreeOwner, normalizeFileQuery, projectFileListing, projectFileMatchResult, resolveRevealPath } from "./file-tree";
 import { projectGitStatus, gitCounts, gitRowRecords, gitRecordText } from "./git-badges";
 import type { GitSnapshot } from "./git-badges";
 
@@ -24,7 +24,7 @@ export default function FileExplorer(props: Props) {
 function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner }: Props & { currentOwner: () => boolean }) {
   const [query, setQuery] = useState("");
   const [searchAttempt, setSearchAttempt] = useState(0);
-  const [search, setSearch] = useState<{ token: object; files?: FileEntry[]; error?: boolean } | null>(null);
+  const [search, setSearch] = useState<{ token: object; files?: FileEntry[]; omittedPaths?: number; error?: boolean } | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [verification, setVerification] = useState<{ refresh: number; listings: Map<string, Listing> } | null>(null);
   const verified = verification?.refresh === refresh ? verification.listings : undefined;
@@ -89,7 +89,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
         if (!active || !current()) return null;
         return window.hrig.file(connection, { op: "search", root, path: "", query: normalized });
       }).then(data => {
-        if (data && active && current()) setSearch({ token, files: projectFileMatches(data) });
+        if (data && active && current()) setSearch({ token, ...projectFileMatchResult(data) });
       }).catch(() => { if (active && current()) setSearch({ token, error: true }); });
     }, 200);
     return () => { active = false; clearTimeout(timer); };
@@ -139,18 +139,21 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
       count ? `${count} matching files in the searched scope.` : "No matching files in the searched scope." :
     reveal?.state === "pending" && !shownReveal ? cancelled : "";
   const row = (file: FileEntry, depth: number, context = false) => {
+    const canOpen = resolveRevealPath(connection, root, file.path, window.hrig.platform) === file.path;
     const reported = gitRowRecords(gitRecords, file.path, file.directory);
     const counts = gitCounts(reported);
     const meaning = reported.length ? file.directory ? `Reported descendant statuses: ${counts.map(c => `${c.letter} ${c.count}`).join("; ")}. ${reported.map(gitRecordText).join(" ")}` : reported[0].description : "";
-    const label = file.path + (meaning ? ` — ${meaning}` : "");
+    const label = file.path + (meaning ? ` — ${meaning}` : "") + (canOpen ? "" : " — cannot be opened here");
     const highlighted = !context && shownReveal?.state === "success" && shownReveal.path === file.path;
     const content = <>{file.directory ? expanded.has(file.path) || context ? <ChevronDown size={12} /> : <ChevronRight size={12} /> : <span className="tree-spacer" />}
       {file.directory ? <Folder size={14} className="folder-icon" /> : <FileCode2 size={14} className={`file-icon ${file.name.split(".").pop()}`} />}
       <span className="file-name">{file.name}</span>{highlighted && <span className="sr-only">Revealed file</span>}
+      {!canOpen && <span style={{ flex: "0 0 auto" }}>cannot be opened here</span>}
       {counts.map(c => <span key={c.letter} className="git-badge" title={meaning}>{c.letter}{file.directory ? ` ${c.count}` : ""}</span>)}</>;
     if (context && file.directory) return <div key={file.path} className="file-row" title={label} aria-label={label}
       style={{ paddingLeft: 14 + depth * 13 }}>{content}</div>;
     return <button key={file.path} type="button" className={`file-row${highlighted ? " file-revealed" : ""}`}
+      disabled={!canOpen}
       title={label} aria-label={label} aria-expanded={file.directory ? expanded.has(file.path) : undefined}
       style={{ paddingLeft: 14 + depth * 13 }}
       ref={highlighted ? node => {
@@ -159,7 +162,7 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
         }
       } : undefined}
       onClick={() => {
-        if (!current() || (!context && !normalView())) return;
+        if (!canOpen || !current() || (!context && !normalView())) return;
         if (!context && (file.directory || reveal)) lifetime.current = { ...lifetime.current, token: {} };
         if (file.directory) {
           setReveal(null);
@@ -208,6 +211,8 @@ function Explorer({ connection, root, refresh, activeFile, onFile, currentOwner 
     {shownReveal?.state === "error" && <div className="tree-error" role="alert">Could not reveal the active file. Retry.
       <button type="button" onClick={revealFile}>Retry reveal</button></div>}
     {filtered && !pendingSearch && !searchError && count === 0 && <div className="explorer-notice">Try another name or path, or clear the filter.</div>}
+    {filtered && !pendingSearch && !searchError && !!shownSearch?.omittedPaths &&
+      <div className="explorer-notice">{shownSearch.omittedPaths} paths not shown.</div>}
     <div hidden={filtered} className="file-normal-tree">
       <div className="explorer-notice">Directory listings show up to 600 entries. Excluded paths may be omitted.</div>
       <FileTree key={refresh} connection={connection} root={root} path="" depth={0} expanded={expanded}
@@ -252,11 +257,8 @@ function FileTree({ connection, root, path, depth, expanded, verified, valid, ac
   if (!data) return <div className="sidebar-empty">{depth ? "Loading folder…" : "Loading files…"}</div>;
   if (data.error) return <div role="alert" className="tree-error">Could not list this folder. Retry.
     <button type="button" onClick={() => { if (active()) setAttempt(n => n + 1); }}>Retry folder</button></div>;
-  const files = data.files.slice(0, 600).filter(file => {
-    const relative = resolveRevealPath(connection, root, file.path, window.hrig.platform);
-    return relative === file.path && file.path.slice(0, file.path.lastIndexOf("/") + 1) === (path ? path + "/" : "");
-  }).sort(compareFileEntries);
-  return <>{files.map(file => {
+  const { files, omittedPaths } = projectFileListing(data.files, path);
+  return <>{!!omittedPaths && <div className="explorer-notice">{omittedPaths} paths not shown.</div>}{files.map(file => {
     const rendered = renderRow(file, depth);
     // Bind row lifetime as well as owner/view lifetime; collapsed children cannot act later.
     return <div key={file.path}>
@@ -264,7 +266,7 @@ function FileTree({ connection, root, path, depth, expanded, verified, valid, ac
       {file.directory && expanded.has(file.path) && <FileTree connection={connection} root={root} path={file.path}
         depth={depth + 1} expanded={expanded} verified={verified} valid={valid} actionable={actionable} renderRow={renderRow} />}
     </div>;
-  })}{!files.length && <div className="sidebar-empty">{depth ? "No entries in this directory listing." : "No files are available in this directory listing."}</div>}</>;
+  })}{!files.length && <div className="sidebar-empty">{omittedPaths ? "No shown entries in this directory listing." : depth ? "No entries in this directory listing." : "No files are available in this directory listing."}</div>}</>;
 }
 
 function GuardedRow({ row, valid }: { row: React.ReactNode; valid: () => boolean }) {

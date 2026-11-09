@@ -39,7 +39,8 @@ if (require.main === module) {
       ['/project', '/Project/a.ts', null], ['/project', '/project', null],
       ['/project', '../a.ts', null], ['/project', 'src/../a.ts', null],
       ['/project', './a.ts', null], ['/project', 'src//a.ts', null],
-      ['/project', 'a.ts/', null], ['/project', 'a\\b.ts', null],
+      // L-02 permits literal POSIX backslashes; foreign drive/UNC shapes remain refused.
+      ['/project', 'a.ts/', null], ['/project', 'a\\b.ts', 'a\\b.ts'],
       ['/project', 'C:/a.ts', null], ['/project', '//server/share/a.ts', null],
       ['/project', 'a\0.ts', null], ['/project', '', null],
       ['/project/../else', '/project/../else/a.ts', null],

@@ -386,7 +386,8 @@ async function fileOperation(connection, request) {
         if (entry.isDirectory()) await scan(full, depth + 1);
         else {
           scanned++;
-          const relative = path.relative(target, full).replaceAll("\\", "/");
+          const nativeRelative = path.relative(target, full);
+          const relative = process.platform === "win32" ? nativeRelative.replaceAll("\\", "/") : nativeRelative;
           if (relative.toLowerCase().includes(request.query.toLowerCase()))
             results.push({
               name: entry.name,
@@ -411,9 +412,9 @@ async function fileOperation(connection, request) {
       )
       .map((e) => ({
         name: e.name,
-        path: path
-          .relative(canonicalRoot, path.join(target, e.name))
-          .replaceAll("\\", "/"),
+        path: process.platform === "win32"
+          ? path.relative(canonicalRoot, path.join(target, e.name)).replaceAll("\\", "/")
+          : path.relative(canonicalRoot, path.join(target, e.name)),
         directory: e.isDirectory(),
       }))
       .sort(
@@ -524,7 +525,7 @@ async function gitStatus(connection, root) {
   if (result.isRepository) {
     const prefix = result.projectPrefix;
     if (typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") ||
-      /[\\:\x00-\x1f\x7f]/.test(prefix) || prefix.slice(0, -1).split("/").some(part => !part || part === "." || part === ".."))))
+      prefix.includes("\0") || prefix.slice(0, -1).split("/").some(part => !part || part === "." || part === ".."))))
       throw new Error("Malformed Git status.");
   }
   const { entries, omittedPaths } = countedGitStatus(result.raw);
