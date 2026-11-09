@@ -2907,6 +2907,13 @@ export default function App() {
                             <span>{saved.name}</span>
                             <span
                               role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.currentTarget.click();
+                                }
+                              }}
                               aria-label={`Delete layout ${saved.name}`}
                               className="delete-layout"
                               onClick={(e) => {

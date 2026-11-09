@@ -308,3 +308,327 @@ test("focus-trap tracer: in the real dialog a disabled last field no longer lets
     },
   );
 });
+
+// ---- the dialog: every case of the Tab trap, and what did not change ----
+
+test("focus-trap modal: the real dialog skips disabled, hidden and tabindex -1 elements, counts summaries, links and tabindex 0, pulls an outside focus back in, leaves an unlisted inner focus and the middle to the browser, and keeps Escape, the first focus and the focus restore", () => {
+  const shell = [{ name: "close" }, { name: "name", tag: "input" }];
+
+  // A hidden or detached last control is not a stop.
+  withDialog(
+    [
+      ...shell,
+      { name: "go" },
+      { name: "folded", detached: true },
+      { name: "gone", hidden: true },
+    ],
+    (d) => {
+      d.focusOn("go");
+      assert.equal(d.press("Tab").prevented, 1);
+      assert.equal(d.focused(), "close");
+      d.press("Tab", true);
+      assert.equal(d.focused(), "go");
+    },
+  );
+
+  // A control inside a disabled fieldset answers to :disabled and is not a stop.
+  withDialog(
+    [...shell, { name: "go" }, { name: "busy", disabled: true }],
+    (d) => {
+      d.focusOn("go");
+      d.press("Tab");
+      assert.equal(d.focused(), "close");
+    },
+  );
+
+  // A summary, a link with an address and tabindex 0 are stops; tabindex -1 and a link without an address are not.
+  withDialog(
+    [
+      ...shell,
+      { name: "more", tag: "summary" },
+      { name: "docs", tag: "a", attrs: { href: "x" } },
+      { name: "box", tag: "div", attrs: { tabindex: "0" } },
+      { name: "list", tag: "div", attrs: { tabindex: "-1" } },
+      { name: "bare", tag: "a" },
+    ],
+    (d) => {
+      d.focusOn("box");
+      assert.equal(d.press("Tab").prevented, 1, "the tabindex 0 box is last");
+      assert.equal(d.focused(), "close");
+      d.press("Tab", true);
+      assert.equal(d.focused(), "box");
+      assert.equal(
+        d.press("Tab", true).prevented,
+        0,
+        "middle: the browser moves",
+      );
+      d.focusOn("more");
+      assert.equal(d.press("Tab").prevented, 0, "middle: the browser moves");
+      assert.equal(d.press("Tab", true).prevented, 0);
+      assert.equal(d.focused(), "more");
+    },
+  );
+  withDialog(
+    [...shell, { name: "docs", tag: "a", attrs: { href: "x" } }],
+    (d) => {
+      d.focusOn("docs");
+      assert.equal(d.press("Tab").prevented, 1, "a link is the last stop");
+      assert.equal(d.focused(), "close");
+    },
+  );
+  withDialog([...shell, { name: "more", tag: "summary" }], (d) => {
+    d.focusOn("more");
+    assert.equal(d.press("Tab").prevented, 1, "a summary is the last stop");
+    assert.equal(d.focused(), "close");
+  });
+
+  // Focus outside the dialog is pulled back in: Tab to the first, Shift+Tab to the last.
+  withDialog([...shell, { name: "go" }], (d) => {
+    d.doc.activeElement = d.body;
+    let key = d.press("Tab");
+    assert.equal(key.prevented, 1);
+    assert.equal(d.focused(), "close");
+    d.doc.activeElement = { name: "page" };
+    key = d.press("Tab", true);
+    assert.equal(key.prevented, 1);
+    assert.equal(d.focused(), "go");
+  });
+
+  // Focus inside the dialog on something Tab does not list stays with the browser, as before.
+  withDialog(
+    [...shell, { name: "list", tag: "div", attrs: { tabindex: "-1" } }],
+    (d) => {
+      d.focusOn("list");
+      assert.equal(d.press("Tab").prevented, 0);
+      assert.equal(d.press("Tab", true).prevented, 0);
+      assert.equal(d.focused(), "list");
+    },
+  );
+
+  // One stop keeps focus on itself; no stop does nothing.
+  withDialog([{ name: "only" }], (d) => {
+    d.focusOn("only");
+    assert.equal(d.press("Tab").prevented, 1);
+    assert.equal(d.press("Tab", true).prevented, 1);
+    assert.equal(d.focused(), "only");
+  });
+  withDialog([{ name: "folded", detached: true }], (d) => {
+    d.focusOn("folded");
+    assert.equal(d.press("Tab").prevented, 0);
+    assert.equal(d.press("Tab", true).prevented, 0);
+  });
+
+  // The middle is the browser's; other keys are ignored.
+  withDialog([...shell, { name: "go" }], (d) => {
+    d.focusOn("name");
+    assert.equal(d.press("Tab").prevented, 0);
+    assert.equal(d.press("Tab", true).prevented, 0);
+    for (const key of ["Enter", " ", "a", "ArrowDown", "Shift"]) {
+      const event = d.press(key);
+      assert.equal(event.prevented + event.stopped, 0, key);
+    }
+    assert.deepEqual(d.closed, []);
+  });
+
+  // Escape closes through onClose and stops there; nothing else does.
+  withDialog([...shell], (d) => {
+    const event = d.press("Escape");
+    assert.equal(event.stopped, 1);
+    assert.deepEqual(d.closed, ["close"]);
+  });
+
+  // The first focus: the first field, else the first button; the listener lives on the window.
+  withDialog([...shell, { name: "second", tag: "select" }], (d) => {
+    assert.equal(d.focused(), "name");
+    assert.deepEqual(
+      d.listeners.map((l) => l.type),
+      ["keydown"],
+    );
+    assert.deepEqual(
+      d.effects.map((e) => e.deps),
+      [["Test"]],
+    );
+  });
+  withDialog([{ name: "close" }, { name: "go" }], (d) => {
+    assert.equal(d.focused(), "close");
+  });
+
+  // Closing removes the same listener and gives focus back unless an action focused elsewhere.
+  for (const [where, back] of [
+    ["body", true],
+    ["inside", true],
+    ["elsewhere", false],
+  ]) {
+    withDialog([...shell, { name: "go" }], (d) => {
+      const [listener] = d.listeners;
+      if (where === "body") d.doc.activeElement = d.body;
+      if (where === "elsewhere") d.doc.activeElement = { name: "else" };
+      if (where === "inside") d.focusOn("go");
+      d.log.length = 0;
+      d.close();
+      assert.deepEqual(
+        d.removed,
+        [{ type: "keydown", fn: listener.fn }],
+        where,
+      );
+      assert.deepEqual(d.log, back ? ["opener"] : [], where);
+    });
+  }
+});
+
+// ---- the status roles ----
+
+test("focus-trap roles: an error box is an alert and a loading message a status, nothing else in the file gained a role and the file still exports the same six components", () => {
+  const compiled = compileComponents();
+  const { ErrorBox, Loading, Empty } = compiled.exports;
+  assert.deepEqual(Object.keys(compiled.exports).sort(), [
+    "Empty",
+    "ErrorBox",
+    "IconButton",
+    "Loading",
+    "Modal",
+    "StatusDot",
+  ]);
+
+  const box = ErrorBox({ error: "Boom" });
+  assert.equal(box.type, "div");
+  assert.equal(box.props.className, "error-box");
+  assert.equal(box.props.role, "alert");
+  assert.deepEqual(
+    flatten(box)
+      .filter((n) => n.type === "span")
+      .map((n) => n.props.children),
+    ["Boom"],
+  );
+
+  const loading = Loading({});
+  assert.equal(loading.props.className, "panel-empty");
+  assert.equal(loading.props.role, "status");
+  assert.deepEqual(
+    flatten(loading)
+      .filter((n) => n.type === "span")
+      .map((n) => n.props.children),
+    ["Loading\u2026"],
+  );
+  const named = Loading({ text: "Opening file" });
+  assert.equal(
+    flatten(named).find((n) => n.type === "span").props.children,
+    "Opening file",
+  );
+
+  // The empty state shares the class and stays a plain block, so it is not announced.
+  const empty = Empty({ icon: "i", title: "T", description: "D" });
+  assert.equal(empty.props.className, "panel-empty");
+  assert.equal(empty.props.role, undefined);
+
+  const source = read("src/components.tsx");
+  assert.equal(count(source, 'role="alert"'), 1);
+  assert.equal(count(source, 'role="status"'), 1);
+  assert.equal(count(source, 'className="error-box" role="alert"'), 1);
+  assert.equal(count(source, 'className="panel-empty" role="status"'), 1);
+  assert.equal(count(source, 'className="panel-empty"'), 2);
+  // The sidebar's own stale-inventory box keeps its status role: it is its own element.
+  assert.equal(
+    count(read("src/Sidebar.tsx"), '<div className="error-box" role="status">'),
+    1,
+  );
+});
+
+// ---- the rings and the delete control ----
+
+test("focus-trap rings: the global ring lists summary, links, tabindex 0 and role button next to the four controls at low specificity, the two search boxes show it on their wrapper outside High Contrast, and the layout delete control is reached with Tab and pressed with Enter or Space", () => {
+  const css = read("src/styles.css");
+  const ring = [
+    "button:focus-visible,",
+    "input:focus-visible,",
+    "select:focus-visible,",
+    "textarea:focus-visible,",
+    "summary:focus-visible,",
+    "a:focus-visible,",
+    ':where([tabindex="0"], [role="button"]):focus-visible {',
+    "  outline: 2px solid var(--color-86cdb0);",
+    "  outline-offset: 2px;",
+    "}",
+    "",
+  ].join("\n");
+  assert.equal(count(css, ring), 1, "one list, one ring, edited in place");
+  assert.equal(count(css, "\nbutton:focus-visible,"), 1);
+
+  // Each search box: its own rule, right after the rule that hides the input's ring, same ring, not in High Contrast.
+  const wrapper = (box, off) =>
+    new RegExp(
+      "\\." +
+        box +
+        " " +
+        off +
+        " \\{\\n  outline: 0;\\n\\}\\n(?:/\\*[^\\n]*\\*/\\n)?" +
+        ':root:not\\(\\[data-theme="high-contrast"\\]\\) \\.' +
+        box +
+        ":focus-within \\{\\n  outline: 2px solid var\\(--color-86cdb0\\);\\n  outline-offset: 2px;\\n\\}\\n",
+      "g",
+    );
+  assert.equal(
+    (css.match(wrapper("sidebar-search", "input:focus")) || []).length,
+    1,
+  );
+  assert.equal(
+    (css.match(wrapper("palette-input", "input:focus-visible")) || []).length,
+    1,
+  );
+  assert.equal(count(css, ".sidebar-search:focus-within"), 1);
+  assert.equal(count(css, ".palette-input:focus-within"), 1);
+  // The High Contrast ring that already reaches every control is untouched.
+  assert.equal(
+    count(
+      css,
+      ':root[data-theme="high-contrast"] :focus-visible {\n  outline: 2px solid #ffffff;\n  outline-offset: 2px;\n}\n',
+    ),
+    1,
+  );
+  // The rings that were there stay as they were.
+  assert.equal(
+    count(
+      css,
+      ".task-markdown:focus-visible {\n  outline: 2px solid var(--color-86cdb0);\n  outline-offset: 2px;\n}",
+    ),
+    1,
+  );
+  assert.equal(count(css, ".designer-option:has(input:focus-visible) {"), 1);
+  assert.equal(
+    count(
+      css,
+      ".settings-search:focus-within {\n  border-color: var(--mint);\n}",
+    ),
+    1,
+  );
+
+  // The saved-layout delete control: still a span with a role and a label, now focusable, with a key handler that clicks it.
+  const app = collapse(read("src/App.tsx"));
+  const head = '<span role="button" tabIndex={0} onKeyDown={';
+  assert.equal(count(app, head), 1);
+  const from = app.indexOf(head) + head.length;
+  const to = app.indexOf("} aria-label={`Delete layout ${saved.name}`}", from);
+  assert.ok(to > from, "the handler ends before the label");
+  const handler = new Function("return " + app.slice(from, to))();
+  const press = (key) => {
+    const calls = [];
+    handler({
+      key,
+      preventDefault: () => calls.push("prevent"),
+      currentTarget: { click: () => calls.push("click") },
+    });
+    return calls;
+  };
+  assert.deepEqual(press("Enter"), ["prevent", "click"]);
+  assert.deepEqual(press(" "), ["prevent", "click"]);
+  for (const key of ["Tab", "Escape", "a", "Backspace", "Delete", "Shift"])
+    assert.deepEqual(press(key), [], key);
+  assert.equal(
+    count(
+      app,
+      'className="delete-layout" onClick={(e) => { e.stopPropagation(); setState(',
+    ),
+    1,
+    "the mouse path still stops the click from restoring the layout",
+  );
+});

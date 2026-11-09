@@ -118,7 +118,7 @@ export function Modal({
 }
 export function Loading({ text = "Loading…" }: { text?: string }) {
   return (
-    <div className="panel-empty">
+    <div className="panel-empty" role="status">
       <LoaderCircle size={22} className="spin" />
       <span>{text}</span>
     </div>
@@ -126,7 +126,7 @@ export function Loading({ text = "Loading…" }: { text?: string }) {
 }
 export function ErrorBox({ error }: { error: string }) {
   return (
-    <div className="error-box">
+    <div className="error-box" role="alert">
       <AlertCircle size={15} />
       <span>{error}</span>
     </div>

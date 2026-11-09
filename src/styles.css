@@ -1018,7 +1018,10 @@ button {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+summary:focus-visible,
+a:focus-visible,
+:where([tabindex="0"], [role="button"]):focus-visible {
   outline: 2px solid var(--color-86cdb0);
   outline-offset: 2px;
 }
@@ -1391,6 +1394,11 @@ button:hover {
 }
 .sidebar-search input:focus {
   outline: 0;
+}
+/* The input draws no ring of its own, so the box around it shows focus (not in High Contrast, whose white ring already reaches the input). */
+:root:not([data-theme="high-contrast"]) .sidebar-search:focus-within {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
 }
 .sidebar-search kbd {
   font-size: 9px;
@@ -3033,6 +3041,11 @@ button:hover {
 }
 .palette-input input:focus-visible {
   outline: 0;
+}
+/* Same for the command center search box. */
+:root:not([data-theme="high-contrast"]) .palette-input:focus-within {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
 }
 .command-list {
   margin-top: 15px;
