@@ -1023,3 +1023,649 @@ test("markdown-safe wiring: the module is pure, the component only uses react an
     ),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Second slice: helpers for the syntax, inline and docs tests.
+
+const walk = (node, out = []) => {
+  if (Array.isArray(node)) node.forEach((n) => walk(n, out));
+  else if (node && typeof node === "object") {
+    out.push(node);
+    walk(node.props && node.props.children, out);
+  }
+  return out;
+};
+const textOf = (node) =>
+  Array.isArray(node)
+    ? node.map(textOf).join("")
+    : node && typeof node === "object"
+      ? textOf(node.props && node.props.children)
+      : typeof node === "string" || typeof node === "number"
+        ? String(node)
+        : "";
+const expandTree = (node) => {
+  if (Array.isArray(node)) return node.map(expandTree);
+  if (!node || typeof node !== "object") return node;
+  const own = node.props || {};
+  if (typeof node.type === "function") return expandTree(node.type(own));
+  if (own.children === undefined) return node;
+  return {
+    type: node.type,
+    props: { ...own, children: expandTree(own.children) },
+  };
+};
+/** The real TaskDetailBody over the small react, on its own, for a task result or a body text. */
+function bodyView(input) {
+  const detail = typeof input === "string" ? { body: input } : input;
+  const slots = [];
+  let cursor = 0;
+  let tree = null;
+  const same = (a, b) =>
+    a && b && a.length === b.length && a.every((d, k) => d === b[k]);
+  const react = {
+    useState(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = initial;
+      return [
+        slots[i],
+        (value) => {
+          slots[i] = value;
+          render();
+        },
+      ];
+    },
+    useMemo(fn, list) {
+      const i = cursor++;
+      if (!slots[i] || !same(slots[i].deps, list))
+        slots[i] = { deps: list, value: fn() };
+      return slots[i].value;
+    },
+  };
+  const jsx = (type, props) => ({ type, props });
+  const Body = load("src/TaskDetailBody.tsx", {
+    react,
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
+  }).default;
+  const fallback = {
+    type: "pre",
+    props: {
+      className: "json-result",
+      children: JSON.stringify(detail, null, 2),
+    },
+  };
+  function render() {
+    cursor = 0;
+    tree = expandTree(Body({ detail, children: fallback }));
+  }
+  render();
+  return {
+    tree: () => tree,
+    all: (node = tree) => walk(node),
+    region: () =>
+      walk(tree).find((n) => n.props && n.props["aria-label"] === "Task body"),
+    button: (name) =>
+      walk(tree).find((n) => n.type === "button" && textOf(n) === name),
+  };
+}
+const markup = (node) =>
+  Array.isArray(node)
+    ? node.map(markup).join("")
+    : node && typeof node === "object"
+      ? "<" +
+        node.type +
+        (node.props.className && node.type !== "div"
+          ? "." + node.props.className
+          : "") +
+        (node.props.start !== undefined ? " start=" + node.props.start : "") +
+        ">" +
+        markup(node.props.children) +
+        "</" +
+        node.type +
+        ">"
+      : typeof node === "string"
+        ? node
+        : "";
+/** The rendered blocks of a body text as simple markup. */
+const html = (text) => markup(bodyView(text).region().props.children);
+
+const inl = (list) =>
+  list
+    .map((n) =>
+      n.type === "text"
+        ? n.text
+        : n.type === "code"
+          ? "`" + n.text + "`"
+          : n.type === "strong"
+            ? "<b>" + inl(n.children) + "</b>"
+            : n.type === "em"
+              ? "<i>" + inl(n.children) + "</i>"
+              : "<a " + n.url + ">" + inl(n.children) + "</a>",
+    )
+    .join("");
+/** Blocks of a body text as short strings: p:, h1:, ul[ | ], ol3[ | ], code:, quote:, hr. */
+const show = (text, caps) => {
+  const result = md.parseMarkdown(text, caps);
+  checkTree(result);
+  return result.blocks.map((b) =>
+    b.type === "code"
+      ? "code:" + b.text
+      : b.type === "rule"
+        ? "hr"
+        : b.type === "list"
+          ? (b.ordered ? "ol" + b.start : "ul") +
+            "[" +
+            b.items.map(inl).join(" | ") +
+            "]"
+          : b.type === "heading"
+            ? "h" + b.level + ":" + inl(b.children)
+            : b.type + ":" + inl(b.children),
+  );
+};
+const formatted = (result) => {
+  let n = 0;
+  let deepest = 0;
+  const inline = (list, depth) => {
+    for (const node of list)
+      if (node.type !== "text") {
+        n++;
+        deepest = Math.max(deepest, depth);
+        if (node.children) inline(node.children, depth + 1);
+      }
+  };
+  for (const b of result.blocks) {
+    if (b.children) inline(b.children, 1);
+    if (b.items) b.items.forEach((item) => inline(item, 1));
+  }
+  return { count: n, depth: deepest };
+};
+
+test("markdown-safe syntax: bullet and numbered lists, block quotes and rules read as tables, the limits count list items, and the rendered blocks are plain elements", () => {
+  const eq = (text, expected) =>
+    assert.deepEqual(show(text), expected, JSON.stringify(text));
+  // Lists.
+  eq("- a\n- b", ["ul[a | b]"]);
+  eq("* a\n+ b\n- c", ["ul[a | b | c]"]);
+  eq("1. a\n2. b", ["ol1[a | b]"]);
+  eq("3) a\n4) b", ["ol3[a | b]"]);
+  eq("- a\n1. b", ["ul[a]", "ol1[b]"]);
+  eq("1. a\n- b", ["ol1[a]", "ul[b]"]);
+  eq("123456789. a", ["ol123456789[a]"]);
+  eq("1234567890. a", ["paragraph:1234567890. a"]);
+  eq("-a\n-", ["paragraph:-a\n-"]);
+  eq("- -", ["ul[-]"]);
+  eq("* *", ["ul[*]"]);
+  eq("- a\n  > b", ["ul[a]", "quote:b"]);
+  eq(">   a  \n>\tb", ["quote:a\nb"]);
+  eq("- ", ["paragraph:-"]);
+  eq("- a\n  more\n- b", ["ul[a\nmore | b]"]);
+  eq("- a\nlazy", ["ul[a]", "paragraph:lazy"]);
+  eq("- a\n    - deep", ["ul[a\n- deep]"]);
+  eq("- a\n  - b", ["ul[a | b]"]);
+  eq("- a\n\n- b", ["ul[a]", "ul[b]"]);
+  eq("- a\n# h\n- b", ["ul[a]", "h1:h", "ul[b]"]);
+  eq("- a\n---\n- b", ["ul[a]", "hr", "ul[b]"]);
+  eq("- a\n```\nx\n```", ["ul[a]", "code:x"]);
+  eq("- a\n> q", ["ul[a]", "quote:q"]);
+  eq("text\n- a\nmore", ["paragraph:text", "ul[a]", "paragraph:more"]);
+  eq("- [x] done\n- [ ] open", ["ul[[x] done | [ ] open]"]);
+  eq("- **a** and `b`", ["ul[<b>a</b> and `b`]"]);
+  // Quotes.
+  eq("> a\n> b", ["quote:a\nb"]);
+  eq(">a", ["quote:a"]);
+  eq("> > x", ["quote:> x"]);
+  eq(">\n>", []);
+  eq("> a\n\n> b", ["quote:a", "quote:b"]);
+  eq("text\n> q\nmore", ["paragraph:text", "quote:q", "paragraph:more"]);
+  eq("> **b** and `c`", ["quote:<b>b</b> and `c`"]);
+  // Rules.
+  for (const rule of [
+    "---",
+    "***",
+    "___",
+    "- - -",
+    "* * *",
+    "_ _ _ _",
+    " ---  ",
+  ])
+    eq(rule, ["hr"]);
+  eq("--", ["paragraph:--"]);
+  eq("-*-", ["paragraph:-*-"]);
+  eq("Title\n---", ["paragraph:Title", "hr"]);
+  eq("a\n***\nb", ["paragraph:a", "hr", "paragraph:b"]);
+  eq("---\n---", ["hr", "hr"]);
+  // Everything together.
+  eq(
+    "# T\n\nintro *x*\n\n- one\n- two\n\n1. a\n2. b\n\n> q\n\n---\n\n```\ncode\n```",
+    [
+      "h1:T",
+      "paragraph:intro <i>x</i>",
+      "ul[one | two]",
+      "ol1[a | b]",
+      "quote:q",
+      "hr",
+      "code:code",
+    ],
+  );
+
+  // List items count against the block limit together with the blocks.
+  const items = md.parseMarkdown("- x\n".repeat(3000));
+  checkTree(items);
+  assert.equal(items.blocks.length, 1);
+  assert.equal(items.blocks[0].items.length, 2000);
+  assert.equal(items.truncated, true);
+  const mixed = md.parseMarkdown("- a\n- b\n\ntext\n\nmore", { maxBlocks: 3 });
+  assert.equal(mixed.blocks.length, 1);
+  assert.equal(mixed.truncated, true);
+  assert.equal(
+    md.parseMarkdown("- a\n- b\n\ntext", { maxBlocks: 4 }).truncated,
+    false,
+  );
+  assert.equal(
+    md.parseMarkdown("> a\n> b\n\ntext", { maxBlocks: 2 }).truncated,
+    false,
+  );
+
+  // Rendered: plain elements only.
+  assert.equal(html("- a\n- b"), "<ul><li>a</li><li>b</li></ul>");
+  assert.equal(html("3. a\n4. b"), "<ol start=3><li>a</li><li>b</li></ol>");
+  assert.equal(html("> q"), "<blockquote>q</blockquote>");
+  assert.equal(html("a\n---\nb"), "<p>a</p><hr></hr><p>b</p>");
+  assert.equal(html("# T\n\ntext"), "<h3>T</h3><p>text</p>");
+  assert.equal(
+    html("## S\n\n```\nx < y\n```"),
+    "<h4>S</h4><pre><code>x < y</code></pre>",
+  );
+  for (const [body, shown] of [
+    ["- <script>alert(1)</script>\n- b", "<script>alert(1)</script>"],
+    ["1. <img src=x onerror=alert(1)>", "<img src=x onerror=alert(1)>"],
+    ["> <svg onload=alert(1)>\n> more", "<svg onload=alert(1)>"],
+    ["---\n- [x](javascript:alert(1))", "[x](javascript:alert(1))"],
+  ]) {
+    const view = bodyView(body);
+    assertPlainElements(view, view.region());
+    assert.ok(textOf(view.region()).includes(shown), "kept: " + shown);
+  }
+  const all = bodyView("# a\n\n- b\n\n1. c\n\n> d\n\n---\n\n```\ne\n```\n\nf");
+  assert.deepEqual(
+    [...new Set(all.all(all.region()).map((n) => n.type))].sort(),
+    ["blockquote", "code", "div", "h3", "hr", "li", "ol", "p", "pre", "ul"],
+  );
+
+  // Every class the component sets by name is defined in the Task details block of the stylesheet.
+  const css = read("src/styles.css");
+  const block = css.slice(
+    css.indexOf("/* Task details: rendered markdown body */"),
+    css.indexOf("/* end of Task details */"),
+  );
+  const used = [
+    ...read("src/TaskDetailBody.tsx").matchAll(/className="([^"]+)"/g),
+  ].map((m) => m[1]);
+  for (const name of used.filter((c) => /^(task|md)-/.test(c)))
+    assert.ok(block.includes("." + name), "styled: " + name);
+  assert.deepEqual(used.filter((c) => /^(task|md)-/.test(c)).sort(), [
+    "md-code",
+    "md-url",
+    "task-markdown",
+  ]);
+
+  // The module exports: the original names, and the new limits with their values.
+  const names = [
+    ...read("src/markdown-safe.ts").matchAll(
+      /^export (?:const|function|type|interface) (\w+)/gm,
+    ),
+  ]
+    .map((m) => m[1])
+    .sort();
+  assert.deepEqual(names, [
+    "MAX_INLINE_DEPTH",
+    "MAX_INLINE_LINE",
+    "MAX_INLINE_NODES",
+    "MAX_INLINE_SCAN",
+    "MAX_MARKDOWN_BLOCKS",
+    "MAX_MARKDOWN_CHARS",
+    "MAX_URL_LENGTH",
+    "MdBlock",
+    "MdCaps",
+    "MdInline",
+    "MdResult",
+    "TASK_BODY_FIELDS",
+    "TaskBody",
+    "parseMarkdown",
+    "pickTaskBody",
+  ]);
+  assert.deepEqual(
+    [
+      md.MAX_MARKDOWN_CHARS,
+      md.MAX_MARKDOWN_BLOCKS,
+      md.MAX_INLINE_LINE,
+      md.MAX_INLINE_NODES,
+      md.MAX_INLINE_SCAN,
+      md.MAX_INLINE_DEPTH,
+      md.MAX_URL_LENGTH,
+    ],
+    [100000, 2000, 4000, 5000, 400000, 3, 2000],
+  );
+});
+
+test("markdown-safe inline: code, bold, italic and plain-address links parse as tables, a link is only its text and its visible address, everything hostile stays text, and the inline limits hold", () => {
+  const eq = (text, expected) =>
+    assert.deepEqual(
+      show(text),
+      ["paragraph:" + expected],
+      JSON.stringify(text),
+    );
+  const literal = (text) => eq(text, text);
+  // Emphasis.
+  eq("**b**", "<b>b</b>");
+  eq("__b__", "<b>b</b>");
+  eq("*i*", "<i>i</i>");
+  eq("_i_", "<i>i</i>");
+  eq("a **b** c *d* e", "a <b>b</b> c <i>d</i> e");
+  eq("**a *b* c**", "<b>a <i>b</i> c</b>");
+  eq("*a **b** c*", "<i>a <b>b</b> c</i>");
+  eq("__init__.py", "<b>init</b>.py");
+  for (const text of [
+    "**a",
+    "a** b",
+    "a * b * c",
+    "2 * 3 * 4",
+    "snake_case_name",
+    "a_b_ c",
+    "***x***",
+    "**",
+    "** a **",
+    "_ a _",
+    "x *",
+  ])
+    literal(text);
+  // Code spans keep their content as typed.
+  eq("`a`", "`a`");
+  eq("``a`b``", "`a`b`");
+  eq("` a `", "`a`");
+  eq("`  a`", "`  a`");
+  eq("` `", "` `");
+  eq("`**x**` and `<script>`", "`**x**` and `<script>`");
+  eq("a `b` c `d`", "a `b` c `d`");
+  for (const text of ["`a", "``a`", "``", "`"]) literal(text);
+  // Links: only plain http and https addresses, shown as text and address.
+  eq("[t](https://x.y/z?a=1&b=2)", "<a https://x.y/z?a=1&b=2>t</a>");
+  eq("[t](http://x.y)", "<a http://x.y>t</a>");
+  eq("[t](HTTPS://X.Y)", "<a HTTPS://X.Y>t</a>");
+  eq("[**t**](https://x.y)", "<a https://x.y><b>t</b></a>");
+  eq(
+    "see [a](https://x.y) and [b](http://z.w).",
+    "see <a https://x.y>a</a> and <a http://z.w>b</a>.",
+  );
+  eq("[a [b] c](https://x.y)", "<a https://x.y>a [b] c</a>");
+  eq("[[a](http://x.y)](http://z.w)", "<a http://z.w>[a](http://x.y)</a>");
+  eq("[t](https://x.y)(more)", "<a https://x.y>t</a>(more)");
+  eq(
+    "[t](https://x.y/" + "a".repeat(1980) + ")",
+    "<a https://x.y/" + "a".repeat(1980) + ">t</a>",
+  );
+  eq(
+    "[t](https://x.y/a" + char(0x200b) + "b" + char(0x202e) + ")",
+    "<a https://x.y/ab>t</a>",
+  );
+  for (const text of [
+    "[t](javascript:alert(1))",
+    "[t](JaVaScRiPt:alert(1))",
+    "[t](data:text/html;base64,PHNjcmlwdD4=)",
+    "[t](vbscript:msgbox(1))",
+    "[t](file:///etc/passwd)",
+    "[t](ftp://x.y)",
+    "[t](/relative)",
+    "[t](#frag)",
+    "[t](mailto:a@b.c)",
+    '[t](https://x.y "title")',
+    "[t](https://x.y/a(b))",
+    "[t]( https://x.y)",
+    "[t](https://x.y/'q')",
+    "[t](https://x.y/<b>)",
+    "[](https://x.y)",
+    "[t](https://x.y",
+    "[t]",
+    "[t] (https://x.y)",
+    "![i](https://x.y/i.png)",
+    "![i](javascript:alert(1))",
+    "[a](<https://x.y>)",
+    "https://bare.example/x",
+    "<https://auto.example>",
+    "javascript:alert(1)",
+    "[t](https://x.y/" + "a".repeat(2000) + ")",
+  ])
+    literal(text);
+
+  // Hostile inline text: every payload is on the page as text, and the elements stay plain.
+  const payloads = [
+    ["**<script>alert(1)</script>**", "<script>alert(1)</script>"],
+    [
+      "[<img src=x onerror=alert(1)>](https://x.y)",
+      "<img src=x onerror=alert(1)> (https://x.y)",
+    ],
+    ["`<script>alert(1)</script>`", "<script>alert(1)</script>"],
+    ["*<b onmouseover=alert(1)>x</b>*", "<b onmouseover=alert(1)>x</b>"],
+    [
+      '[x](https://x.y" onclick="alert(1))',
+      '[x](https://x.y" onclick="alert(1))',
+    ],
+    [
+      "[x](https://x.y/><script>alert(1)</script>)",
+      "[x](https://x.y/><script>alert(1)</script>)",
+    ],
+    [
+      "[x](https://x.y/%22%20onclick=alert(1))",
+      "[x](https://x.y/%22%20onclick=alert(1))",
+    ],
+    ["- <iframe src=x></iframe>", "<iframe src=x></iframe>"],
+    ["> <svg onload=1>", "<svg onload=1>"],
+    [
+      "# <a href=javascript:alert(1)>x</a>",
+      "<a href=javascript:alert(1)>x</a>",
+    ],
+    ["__<style>*{display:none}</style>__", "<style>*{display:none}</style>"],
+  ];
+  for (const [payload, shown] of payloads) {
+    const view = bodyView(payload);
+    const nodes = assertPlainElements(view, view.region());
+    assert.ok(
+      nodes.every(
+        (n) =>
+          typeof n.type !== "string" ||
+          !/^(a|img|script|iframe|svg|style)$/.test(n.type),
+      ),
+    );
+    assert.ok(textOf(view.region()).includes(shown), "kept: " + payload);
+  }
+  // A link shows its text and its address and nothing is clickable.
+  assert.equal(
+    html("Use **bold**, *italic*, `code` and [a link](https://x.y/z)."),
+    "<p>Use <strong>bold</strong>, <em>italic</em>, <code.md-code>code</code> and <span>a link<span.md-url> (https://x.y/z)</span></span>.</p>",
+  );
+  const spoof = bodyView("[https://good.example](https://evil.example)");
+  const spoofText = textOf(spoof.region());
+  assert.ok(spoofText.includes("https://good.example"));
+  assert.ok(spoofText.includes("(https://evil.example)"));
+  assertPlainElements(spoof, spoof.region());
+
+  // Limits: formatted nodes, depth, a long line and the search budget.
+  const manyLines = ("*a* ".repeat(900) + "\n").repeat(20);
+  const many = md.parseMarkdown(manyLines);
+  checkTree(many);
+  assert.equal(formatted(many).count, md.MAX_INLINE_NODES);
+  assert.ok(plain(many).includes("*a* "), "syntax past the limit stays text");
+  const nested = md.parseMarkdown(
+    "*a **b *c **d *e **f** e* d** c* b** a*\n" +
+      "[x [y](https://a.b)](https://c.d)",
+  );
+  checkTree(nested);
+  assert.ok(formatted(nested).depth <= md.MAX_INLINE_DEPTH);
+  const deep = md.parseMarkdown("**a *b __c _d d_ c__ b* a**");
+  checkTree(deep);
+  assert.equal(formatted(deep).depth, md.MAX_INLINE_DEPTH);
+  assert.ok(plain(deep).includes("_d d_"), "a level past the limit stays text");
+  assert.deepEqual(show("_a_b_"), ["paragraph:<i>a_b</i>"]);
+  const run = md.parseMarkdown("`a``b`").blocks[0].children;
+  assert.deepEqual(
+    run.map((n) => n.type + ":" + n.text),
+    ["code:a``b"],
+  );
+  const label = (n) => "[" + "a".repeat(n) + "](https://x.y)";
+  assert.equal(md.parseMarkdown(label(999)).blocks[0].children[0].type, "link");
+  assert.deepEqual(show(label(1000)), ["paragraph:" + label(1000)]);
+  const lineLimit = "x".repeat(md.MAX_INLINE_LINE);
+  assert.deepEqual(show(lineLimit + "**b**"), [
+    "paragraph:" + lineLimit + "**b**",
+  ]);
+  assert.deepEqual(show("**b** " + lineLimit), [
+    "paragraph:<b>b</b> " + lineLimit,
+  ]);
+  const tail = md.parseMarkdown(
+    "a".repeat(md.MAX_INLINE_LINE - 2) + "**b**" + "c".repeat(50),
+  );
+  assert.equal(
+    plain(tail).length,
+    md.MAX_INLINE_LINE - 2 + 5 + 50 - formatted(tail).count * 4,
+  );
+
+  // Pathological inline lines stay quick and bounded.
+  const start = process.hrtime.bigint();
+  for (const line of [
+    "[".repeat(3990),
+    "[a".repeat(1990),
+    "*a ".repeat(1300),
+    "`a ".repeat(1300),
+    "[a](http://x.y/ ".repeat(240),
+    "*a [b](c `d _e __f ".repeat(200),
+    "[a](https://x.y) ".repeat(240),
+    "**a *b ".repeat(500),
+    "![a](".repeat(700),
+  ]) {
+    const text = (line + "\n").repeat(25);
+    const result = md.parseMarkdown(text);
+    const nodes = checkTree(result);
+    assert.ok(nodes <= 20000, "nodes " + nodes);
+    assert.ok(formatted(result).count <= md.MAX_INLINE_NODES);
+  }
+  assert.ok(
+    Number(process.hrtime.bigint() - start) / 1e6 < 5000,
+    "inline lines stay quick",
+  );
+
+  // Random walks over inline pieces: well formed, deterministic, and no character is ever invented.
+  const pieces = [
+    "[",
+    "](",
+    "https://a.b",
+    "http://c.d/e",
+    ")",
+    "(",
+    "**",
+    "*",
+    "__",
+    "_",
+    "`",
+    "``",
+    "x",
+    "yz",
+    " ",
+    " ",
+    "\n",
+    "- ",
+    "1. ",
+    "> ",
+    "# ",
+    "![",
+    "!",
+    "<b>",
+    "javascript:",
+    "\\",
+    "|",
+    "&amp;",
+  ];
+  const rand = seeded(8112026);
+  const began = process.hrtime.bigint();
+  for (let run = 0; run < 800; run++) {
+    let text = "";
+    const length = 1 + Math.floor(rand() * 60);
+    for (let k = 0; k < length; k++)
+      text += pieces[Math.floor(rand() * pieces.length)];
+    const result = md.parseMarkdown(text);
+    checkTree(result);
+    assert.deepEqual(md.parseMarkdown(text), result);
+    const seen = new Set(text + "\n");
+    for (const c of plain(result))
+      assert.ok(
+        seen.has(c),
+        "invented " + JSON.stringify(c) + " in " + JSON.stringify(text),
+      );
+  }
+  assert.ok(
+    Number(process.hrtime.bigint() - began) / 1e6 < 5000,
+    "the random walk stays quick",
+  );
+});
+
+test("markdown-safe docs: TASKS.md has one Task details section that says what is shown, the supported subset, that nothing is HTML or clickable, the limits and that viewing sends nothing", () => {
+  const doc = read("TASKS.md");
+  assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
+  assert.ok(doc.startsWith("# Task board\n\n"));
+  assert.equal(count(doc, "\n## Task board filters\n"), 1);
+  assert.equal(count(doc, "\n## Task details\n"), 1);
+  // The new section sits before the filters section, which stays last: the filters test reads from its heading to the end of the page.
+  assert.ok(
+    doc.indexOf("## Task details") < doc.indexOf("## Task board filters"),
+  );
+  assert.equal(count(doc, "\n## "), 2);
+  assert.ok(
+    collapse(doc.slice(0, doc.indexOf("## Task details"))).includes(
+      "This page describes the task details dialog and the panel's filters.",
+    ),
+  );
+  const section = doc.slice(
+    doc.indexOf("## Task details"),
+    doc.indexOf("## Task board filters"),
+  );
+  const paragraphs = section.trim().split("\n\n").slice(1);
+  assert.equal(paragraphs.length, 4);
+  for (const paragraph of paragraphs)
+    assert.ok(!paragraph.includes("\n"), "one line each");
+  const flat = collapse(section);
+  const chars = md.MAX_MARKDOWN_CHARS.toLocaleString("en-US");
+  const blocks = md.MAX_MARKDOWN_BLOCKS.toLocaleString("en-US");
+  for (const part of [
+    "Selecting a task on the board opens its details.",
+    "taken from the first of its body, bodyPreview and summary fields that holds text",
+    "when only the summary is used, the dialog says so",
+    "The Raw JSON button switches to the whole item exactly as OpenRig returns it",
+    "a task with no text, or a failed read, shows only that JSON",
+    "Viewing a task is read only: nothing is sent to OpenRig, no task or seat is changed",
+    "the owner and handoff controls below the text work as before",
+    "a small fixed subset of Markdown",
+    "headings (`#` to `###`)",
+    "bullet lists (`-`, `*` or `+`) and numbered lists with one level",
+    "block quotes (`>`) with one level",
+    "rules (`---`)",
+    "fenced code blocks (three backticks or `~~~`)",
+    "inline code, bold (`**text**`), italic (`*text*` or `_text_`) and links",
+    "A line break inside a paragraph is kept as a line break.",
+    "Wrap names such as `__init__` or `src/*.ts` in inline code so their marks stay visible.",
+    "Nothing in the text is ever treated as HTML or as a program.",
+    "HTML such as script or img tags, entities and comments are shown exactly as typed.",
+    "shows its text followed by its address in parentheses and cannot be clicked, so HRig never opens anything from a task",
+    "only plain http and https addresses count as links",
+    "(javascript:, data:, file:, relative paths) stays as typed, as do images",
+    "Tables, nested lists, setext headings, backslash escapes and syntax highlighting are not supported and show as typed.",
+    "Control, zero-width and direction-changing characters are removed.",
+    "A text longer than " +
+      chars +
+      " characters or " +
+      blocks +
+      " blocks (a list item counts as a block) is cut with a note",
+    "very long or very repetitive lines show their formatting only in part, always as plain text. Raw JSON has the whole item.",
+  ])
+    assert.ok(flat.includes(part), "docs say: " + part);
+  // The claims in the docs match the limits in the code.
+  assert.equal(chars, "100,000");
+  assert.equal(blocks, "2,000");
+});

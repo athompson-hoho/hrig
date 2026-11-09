@@ -4439,4 +4439,35 @@ button:hover {
   line-height: 1.8;
   color: var(--color-8c9eb5);
 }
+.task-markdown ul,
+.task-markdown ol {
+  margin: 0 0 10px;
+  padding-left: 22px;
+}
+.task-markdown li {
+  white-space: pre-wrap;
+}
+.task-markdown blockquote {
+  margin: 0 0 10px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--color-3b4b5e);
+  color: var(--color-a1b5c7);
+  white-space: pre-wrap;
+}
+.task-markdown hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--color-303a48);
+}
+.task-markdown .md-code {
+  padding: 1px 4px;
+  background: var(--color-12171e);
+  border: 1px solid var(--color-313b49);
+  border-radius: 4px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+}
+.task-markdown .md-url {
+  color: var(--color-889db6);
+}
 /* end of Task details */

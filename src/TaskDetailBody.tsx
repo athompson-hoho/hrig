@@ -12,7 +12,30 @@ import {
 const HEADINGS = ["h3", "h4", "h5"] as const;
 
 function renderInline(nodes: MdInline[]): ReactNode[] {
-  return nodes.map((node) => node.text);
+  return nodes.map((node, key) => {
+    switch (node.type) {
+      case "code":
+        return (
+          <code key={key} className="md-code">
+            {node.text}
+          </code>
+        );
+      case "strong":
+        return <strong key={key}>{renderInline(node.children)}</strong>;
+      case "em":
+        return <em key={key}>{renderInline(node.children)}</em>;
+      case "link":
+        // A link is its text and its address as plain text; nothing here can be clicked or opened.
+        return (
+          <span key={key}>
+            {renderInline(node.children)}
+            <span className="md-url"> ({node.url})</span>
+          </span>
+        );
+      default:
+        return node.text;
+    }
+  });
 }
 
 function renderBlock(block: MdBlock, key: number): ReactNode {
@@ -21,12 +44,28 @@ function renderBlock(block: MdBlock, key: number): ReactNode {
       const Tag = HEADINGS[block.level - 1];
       return <Tag key={key}>{renderInline(block.children)}</Tag>;
     }
+    case "list": {
+      const items = block.items.map((item, at) => (
+        <li key={at}>{renderInline(item)}</li>
+      ));
+      return block.ordered ? (
+        <ol key={key} start={block.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul key={key}>{items}</ul>
+      );
+    }
     case "code":
       return (
         <pre key={key}>
           <code>{block.text}</code>
         </pre>
       );
+    case "quote":
+      return <blockquote key={key}>{renderInline(block.children)}</blockquote>;
+    case "rule":
+      return <hr key={key} />;
     default:
       return <p key={key}>{renderInline(block.children)}</p>;
   }
