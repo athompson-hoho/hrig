@@ -20,6 +20,7 @@ import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { seatActivityAge } from "./seat-activity-age";
+import { seatWorkSummary } from "./seat-work";
 import { filterSeats } from "./seat-search";
 import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
 import { sortSeats } from "./seat-sort";
@@ -149,6 +150,7 @@ export default function Sidebar({
   const ageCurrent = !inventoryError && pinsAvailable;
   const renderSeat = (s: Seat) => {
     const age = seatActivityAge(s.lastActivityAt, activityClock, ageCurrent);
+    const work = seatWorkSummary(s.assignedWork, s.pendingWork, ageCurrent);
     return (
     <div className="session-row" key={s.id}>
       <button
@@ -158,7 +160,7 @@ export default function Sidebar({
         onClick={() => onSeat(s)}
         className="seat-row"
         key={s.id}
-        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"} · ${age.tooltip}`}
+        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"} · ${age.tooltip} ${work.tooltip}`}
       >
         <span
           className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
@@ -174,6 +176,9 @@ export default function Sidebar({
             )}
           </small>
         </span>
+        {work.badge && (
+          <span className="seat-work" aria-label={work.label}>{work.badge}</span>
+        )}
         <StatusDot status={s.status} />
         <GripVertical size={12} className="grip" />
       </button>

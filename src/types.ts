@@ -30,6 +30,9 @@ export interface Seat {
   lastActivityAt?: string | null;
   error: string;
   workCount: number;
+  /** Raw reported counts; null/absent = not reported (distinct from a confirmed 0). */
+  assignedWork?: number | null;
+  pendingWork?: number | null;
 }
 export interface Rig {
   id: string;

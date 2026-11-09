@@ -130,6 +130,7 @@ function rows(value) {
     "Unsupported OpenRig JSON schema. Expected an array of rigs or seats.",
   );
 }
+const workCount = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
 function normalizeInventory(rigData, nodeData) {
   const rigs = rows(rigData).map((r) => ({
     id: r.rigId || r.id || r.name,
@@ -168,6 +169,8 @@ function normalizeInventory(rigData, nodeData) {
         : null,
     error: n.latestError || "",
     workCount: n.assignedWorkCount || 0,
+    assignedWork: workCount(n.assignedWorkCount),
+    pendingWork: workCount(n.pendingWorkCount),
   }));
   return { rigs, seats, sampledAt: new Date().toISOString() };
 }

@@ -4553,3 +4553,14 @@ button:hover {
   border-radius: 6px;
   user-select: text;
 }
+.seat-work {
+  flex-shrink: 0;
+  min-width: 16px;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  opacity: 0.85;
+}
