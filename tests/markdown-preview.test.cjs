@@ -130,3 +130,11 @@ test('link and autolink openers are bounded too (QA f920a90)', () => {
   assert.equal(parseInline('see [docs](https://x.io/a) now')[1].href, 'https://x.io/a');
   assert.equal(parseInline('<https://x.io>')[0].t, 'link');
 });
+
+test('hostile link-opener files stay under a second (review tighten)', () => {
+  for (const unit of ['![a](', '[a]((', '<http://']) {
+    const t0 = Date.now(); parseMarkdown(unit.repeat(Math.floor(200000 / unit.length)));
+    assert.ok(Date.now() - t0 < 1200, `${JSON.stringify(unit)} took ${Date.now() - t0} ms`);
+  }
+  assert.equal(parseInline('[a](' + 'u'.repeat(400) + ')')[0].t, 'link');
+});
