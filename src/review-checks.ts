@@ -199,17 +199,22 @@ export function pruneReviewed(
   );
 }
 
-/** How many checkable files are reviewed at the revision just read, out of how many checkable files there are; `revisions` maps a path to its current revision (null when the read failed) and an unread path counts as not reviewed. */
+/** How many checkable files are reviewed at the revision just read, out of how many checkable files there are; `revisions` maps a path to its current revision (null when the read failed) and an unread path counts as not reviewed. `unreadable` lists paths whose read failed when ticked: they are left out of both numbers, so the caller counts them as not checkable. */
 export function reviewProgress(
   entries: readonly { path: string; status?: string }[],
   checks: unknown,
   key: string,
   revisions: ReadonlyMap<string, string | null>,
+  unreadable?: ReadonlySet<string> | readonly string[],
 ): { reviewed: number; total: number } {
+  const left = new Set<unknown>(
+    unreadable instanceof Set || Array.isArray(unreadable) ? unreadable : [],
+  );
   const seen = new Set<string>();
   let reviewed = 0;
   for (const entry of entries) {
-    if (!isCheckable(entry) || seen.has(entry.path)) continue;
+    if (!isCheckable(entry) || left.has(entry.path) || seen.has(entry.path))
+      continue;
     seen.add(entry.path);
     if (isReviewed(checks, key, entry.path, revisions.get(entry.path)))
       reviewed++;

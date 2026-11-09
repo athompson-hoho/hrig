@@ -172,7 +172,13 @@ export function ReviewWorkspace({
   const listed = (changes ?? []).filter(
     (c) => !unreviewedOnly || stateOf(c) !== "reviewed",
   );
-  const progress = reviewProgress(changes ?? [], saved, rkey, seen);
+  const progress = reviewProgress(
+    changes ?? [],
+    saved,
+    rkey,
+    seen,
+    unreadable,
+  );
   const seat = seats.find((s) => s.id === (target || seats[0]?.id));
   return (
     <div className="tool-panel">

@@ -795,12 +795,21 @@ test("review-checks verify: a failed or unreadable read never invents a tick, an
   await withReview(
     { entries: ENTRIES, disk: { "a.ts": "r1" } },
     async ({ handle, app }) => {
+      const line = () =>
+        handle.text(
+          handle.find(
+            (n) => n.type === "div" && n.props.className === "review-progress",
+          )[0].props.children[0],
+        );
       assert.equal(handle.row("b.ts").disabled, false, "unknown until tried");
+      assert.equal(line(), "0 of 2 reviewed \u00b7 1 cannot be checked");
       await handle.tick("b.ts");
       assert.equal(app.checks, undefined);
       assert.equal(handle.row("b.ts").checked, false);
       assert.equal(handle.row("b.ts").disabled, true);
       assert.match(handle.row("b.ts").title, /could not be read/);
+      // The file that cannot be read is left out of M and counted among the files that cannot be checked.
+      assert.equal(line(), "0 of 1 reviewed \u00b7 2 cannot be checked");
     },
   );
   // A revision that is not a string, or is empty, is not a revision.
@@ -918,6 +927,62 @@ test("review-checks progress: the count is of checkable files reviewed at the re
     reviewed: 0,
     total: 3,
   });
+  // Files whose read failed when ticked are left out of the total and never counted as reviewed, so the caller's "cannot be checked" (list length minus total) includes them.
+  const both = seen([
+    ["a.ts", "r1"],
+    ["b.ts", "r2"],
+  ]);
+  assert.deepEqual(
+    reviewProgress(entries, checks, K, both, new Set(["b.ts"])),
+    {
+      reviewed: 1,
+      total: 2,
+    },
+  );
+  assert.equal(
+    entries.length -
+      reviewProgress(entries, checks, K, both, new Set(["b.ts"])).total,
+    4,
+    "list length 6 minus total 2",
+  );
+  // A reviewed-looking unreadable file is not counted in N either; an array works the same; duplicates and paths that are not listed change nothing.
+  assert.deepEqual(
+    reviewProgress(entries, checks, K, both, [
+      "a.ts",
+      "a.ts",
+      "b.ts",
+      "nope.ts",
+    ]),
+    { reviewed: 0, total: 1 },
+  );
+  assert.deepEqual(
+    reviewProgress(entries, checks, K, both, new Set(["nope.ts", "gone.ts"])),
+    { reviewed: 2, total: 3 },
+  );
+  // Prototype keys, non-strings and non-collections are harmless: nothing is excluded by them.
+  for (const odd of [
+    undefined,
+    null,
+    "a.ts",
+    5,
+    {},
+    { has: () => true },
+    { "a.ts": true },
+    new Map([["a.ts", 1]]),
+    new Set(["__proto__", "constructor", "toString", 1, null, {}]),
+    ["__proto__", "constructor", 7, null],
+  ])
+    assert.deepEqual(reviewProgress(entries, checks, K, both, odd), {
+      reviewed: 2,
+      total: 3,
+    });
+  // The list of unreadable paths is never changed.
+  const frozen = Object.freeze(["b.ts"]);
+  assert.deepEqual(reviewProgress(entries, checks, K, both, frozen), {
+    reviewed: 1,
+    total: 2,
+  });
+  assert.deepEqual(frozen, ["b.ts"]);
 
   // Pruning: only this project's paths that are not in the list are dropped; the input is never changed.
   const pruned = pruneReviewed(checks, K, ["a.ts", "c.ts", "new.ts"]);
@@ -1241,6 +1306,14 @@ test("review-checks wiring: the module is pure, only the list, App and the state
     ),
   );
   assert.equal(count(list, "onChecks("), 4, "tick, untick, prune and clear");
+  assert.ok(
+    has(
+      list,
+      "const progress = reviewProgress( changes ?? [], saved, rkey, seen, unreadable, );",
+    ),
+    "the files that could not be read are left out of the progress line",
+  );
+  assert.equal(count(list, "reviewProgress("), 1);
   assert.equal(
     count(list, "const [unreviewedOnly, setUnreviewedOnly] = useState(false);"),
     1,
