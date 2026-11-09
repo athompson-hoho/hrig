@@ -98,3 +98,27 @@ test('actual RigControl: a fresh request opens the command and prefills the rig;
   props = mk({ path: ['ps'], rigId: 'r1', nonce: Date.now() - 3600000 }); view.update(props); await settle();
   assert.equal(calls.length, before, 'a stale request does nothing');
 });
+
+test('a prefill request belongs to its command: choosing another command first discards it (review LOW)', async () => {
+  const { mountComponent } = require('./helpers/virtual-list-harness.cjs');
+  const schemaFor = path => ({ name: path.join(' '), description: '', arguments: [{ name: 'rig', required: true, variadic: false }], options: [], commands: [] });
+  const api = { rigControl: async (c, req) => ({ schema: schemaFor(req.path || []) }) };
+  const connection = { id: 'h', kind: 'ssh', name: 'H', host: 'h', root: '~' };
+  const mk = initial => ({ connection, root: '~', inventory: { rigs: [], seats: [] }, onFile() {}, initial });
+  let props = mk(undefined);
+  const view = mountComponent('src/RigControl.tsx', 'default', props, { actualComponents: true, resolvedChildren: true, api, height: 600, rowHeight: 30,
+    dependencies: { './TerminalPanel': { default: 'terminal-panel' }, './RigCommandResult': { default: 'rig-command-result' }, './openrig-command-index.json': { default: { entries: [] }, entries: [] } } });
+  const settle = async () => { for (let i = 0; i < 8; i++) { await Promise.resolve(); view.update(props); } };
+  await settle();
+  const src = fs.readFileSync('src/RigControl.tsx', 'utf8');
+  assert.match(src, /wanted\.pathKey === pathKey/);
+  assert.match(src, /const choose = \(next: string\[\]\) => \{\s*pendingRig\.current = undefined;/);
+  props = mk({ path: ['snapshot', 'list'], rigId: 'r1', nonce: Date.now() }); view.update(props); await settle();
+  assert.ok(view.nodes().some(n => n.type === 'input' && n.props.value === 'r1'), 'still prefilled for the requested command');
+});
+test('compare dialog: both panes use live status; Copy both waits for the second snapshot', () => {
+  const ui = fs.readFileSync('src/SeatTranscript.tsx', 'utf8');
+  assert.match(ui, /const liveSeat = others\.find\(\(o\) => o\.id === seat\.id\) \|\| seat/);
+  assert.match(ui, /seat=\{other \? liveSeat : undefined\}/);
+  assert.match(ui, /\(!!other && !second\.snapshot\)/);
+});

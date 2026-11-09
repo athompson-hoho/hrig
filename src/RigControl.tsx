@@ -130,8 +130,8 @@ export default function RigControl({
         if (!path.length) setRootCommands(result.schema!.commands);
         const wanted = pendingRig.current;
         const name = rigArgument(result.schema!);
-        if (wanted && name) setValues({ [name]: wanted });
-        pendingRig.current = undefined;
+        if (wanted && name && wanted.pathKey === pathKey) setValues({ [name]: wanted.rigId });
+        if (wanted && wanted.pathKey === pathKey) pendingRig.current = undefined;
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -154,23 +154,27 @@ export default function RigControl({
       if (id) void window.hrig.closeTerminal(id).catch(() => {});
     };
   }, [terminal?.terminalId]);
-  const pendingRig = useRef<string | undefined>(undefined);
+  // Rig id to prefill, valid only for the command path that was requested.
+  const pendingRig = useRef<{ pathKey: string; rigId: string } | undefined>(undefined);
   const schemaRef = useRef<CommandSchema | null>(null);
   schemaRef.current = schema;
   const rigArgument = (s: CommandSchema | null) => s?.arguments?.find((a) => /rig/i.test(a.name))?.name;
   useEffect(() => {
     if (!initial || !isFreshRequest(initial.nonce, Date.now())) return;
-    pendingRig.current = initial.rigId;
+    pendingRig.current = undefined;
     if (JSON.stringify(initial.path) === pathKey) {
       // Same command already open: fill the rig now (no schema reload happens).
       const name = rigArgument(schemaRef.current);
       if (name && initial.rigId) setValues((v) => ({ ...v, [name]: initial.rigId! }));
-      pendingRig.current = undefined;
       setPlan(null);
       setConfirmation("");
-    } else choose(initial.path);
+    } else {
+      choose(initial.path);
+      if (initial.rigId) pendingRig.current = { pathKey: JSON.stringify(initial.path), rigId: initial.rigId };
+    }
   }, [initial?.nonce]);
   const choose = (next: string[]) => {
+    pendingRig.current = undefined;
     setPath(next);
     setSearch("");
     setPlan(null);

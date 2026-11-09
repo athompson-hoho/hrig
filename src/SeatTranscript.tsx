@@ -76,6 +76,8 @@ export default function SeatTranscript({
   const [otherId, setOtherId] = useState("");
   const candidates = compareCandidates(others, seat);
   const other = candidates.find((c) => c.id === otherId) || null;
+  // Both panes show live inventory status; fall back to the opened seat if it left the inventory.
+  const liveSeat = others.find((o) => o.id === seat.id) || seat;
   const first = useSnapshot(connection, seat.id, revision);
   const second = useSnapshot(connection, other ? other.id : null, revision);
   useEffect(() => setCopied(false), [revision, seat.id, otherId]);
@@ -109,7 +111,7 @@ export default function SeatTranscript({
         </label>
       )}
       <div className={other ? "seat-compare-grid two" : "seat-compare-grid"}>
-        <Pane title={other ? seat.name : ""} state={first} label={other ? `${seat.name} transcript` : "Transcript tail"} seat={other ? seat : undefined} />
+        <Pane title={other ? seat.name : ""} state={first} label={other ? `${seat.name} transcript` : "Transcript tail"} seat={other ? liveSeat : undefined} />
         {other && <Pane title={other.name} state={second} label={`${other.name} transcript`} seat={other} />}
       </div>
       {copied && <p role="status">Copied</p>}
@@ -117,7 +119,7 @@ export default function SeatTranscript({
         <button className="secondary-button" onClick={() => setRevision((n) => n + 1)} disabled={loading}>
           Refresh transcript
         </button>
-        <button className="secondary-button" onClick={copy} disabled={!first.snapshot || !first.snapshot.text}>
+        <button className="secondary-button" onClick={copy} disabled={!first.snapshot || !first.snapshot.text || (!!other && !second.snapshot)}>
           {other ? "Copy both" : "Copy text"}
         </button>
         <button className="primary-button" onClick={onClose}>Close</button>
