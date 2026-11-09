@@ -96,7 +96,9 @@ producer.assessment = assess('installed-producer', () => {
   assert.ok(payload.evidence.some(item => item.target === descriptor.target && item.kind === 'node-test'
     && item.failFirst === true && item.passed === true && item.failFirstProof === 'violation-fixture'));
 });
-const files = [planPath, `${phase}/13-01-PLAN.md`, 'NAVIGATION.md', 'electron/core.cjs', 'src/types.ts', 'src/styles.css', 'src/git-badges.ts',
+const files = [planPath, `${phase}/13-01-PLAN.md`,
+  '.planning/quick/261109-2ic-preserve-valid-git-badges-and-legal-file/261109-2ic-PLAN.md',
+  'tests/file-tree.test.cjs', 'NAVIGATION.md', 'electron/core.cjs', 'src/types.ts', 'src/styles.css', 'src/git-badges.ts',
   'tests/git-badges-consumer.test.cjs', 'tests/git-badges-api.test.cjs', 'tests/git-badges.test.cjs', 'tests/file-explorer-prohibition.test.cjs',
   'tests/file-explorer-proof.cjs', 'tests/fixtures/file-explorer-bad.cjs', 'tests/fixtures/file-explorer-clean.cjs', 'src/App.tsx', 'src/Sidebar.tsx', 'src/FileExplorer.tsx', 'src/file-tree.ts',
   'src/editor-buffers.ts', 'src/components.tsx', 'src/seat-pins.ts', 'src/seat-pods.ts', 'src/seat-sort.ts',
