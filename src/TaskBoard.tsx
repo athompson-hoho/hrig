@@ -16,6 +16,7 @@ import {
   type TaskFilters,
 } from "./task-filters";
 import { reasonOf } from "./task-reason";
+import { ageBadge, isStuck } from "./task-age";
 export default function TaskBoard({
   connection,
   rigName,
@@ -132,6 +133,20 @@ export default function TaskBoard({
       <span data-reason={reason.kind} title={reason.title}>
         {reason.line}
       </span>
+    ) : null;
+  };
+  // Ages are measured at render time; the board renders again on every refresh.
+  const now = Date.now();
+  const ageNote = (item: any) => {
+    const badge = ageBadge(item, now);
+    return badge ? (
+      <small
+        className="badge"
+        data-stuck={badge.stuck ? "true" : undefined}
+        title={badge.title}
+      >
+        {badge.text}
+      </small>
     ) : null;
   };
   return (
@@ -277,11 +292,13 @@ export default function TaskBoard({
                     className="task-card"
                     key={item.id}
                     onClick={() => inspect(item)}
+                    data-stuck={isStuck(item, now) ? "true" : undefined}
                   >
                     <strong>{item.title}</strong>
                     <span>{item.destination}</span>
                     {reasonNote(item)}
                     <small className="badge">{item.status}</small>
+                    {ageNote(item)}
                   </button>
                 ))}
             </section>

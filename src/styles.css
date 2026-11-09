@@ -864,6 +864,16 @@
   align-self: flex-start;
   font-size: 8px;
 }
+/* Task cards: stuck highlight */
+.task-card[data-stuck="true"] {
+  border-color: var(--color-75613f);
+}
+.task-card .badge[data-stuck="true"] {
+  background: var(--color-382e22);
+  border-color: var(--color-75613f);
+  color: var(--color-d9c393);
+}
+/* end of Task cards: stuck highlight */
 .review-changes {
   margin: 20px 0;
   max-height: 300px;

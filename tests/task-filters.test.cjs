@@ -1352,11 +1352,13 @@ test("task-filters board: with a filter set a line says how many tasks show and 
       ],
     );
     const card = board.byClass("task-card")[0];
+    // The first three children are today's; the age badge (task-age) comes after them.
     assert.deepEqual(
       board
         .all()
         .filter((n) => card.props.children.includes(n))
-        .map((n) => [n.type, board.text(n)]),
+        .map((n) => [n.type, board.text(n)])
+        .slice(0, 3),
       [
         ["strong", "Fix the login redirect"],
         ["span", "dev-a@hrig"],

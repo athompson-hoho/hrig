@@ -8,6 +8,10 @@ A card for a blocked task shows why under the owner, for example `Blocked on qit
 
 The reason line is cut after 80 characters with three dots, and its tooltip holds up to 400 characters. Control, zero-width and direction-changing characters are removed and line breaks become spaces. The reason is shown as plain text only. This is display only: no task or seat is changed, nothing is sent to OpenRig, and the board makes no extra request and starts no timer.
 
+A card also shows an age badge under the state badge, in the same badge style: the time since the task was created (`tsCreated`) as `<1m`, minutes (`5m`), hours (`3h`) or days (`2d`). Its tooltip says how old the task is. A task with no valid creation time, or one dated later than this computer's clock, shows no badge.
+
+A task in progress or blocked with no update for more than 24 hours is stuck. The time without an update is counted from `tsUpdated`, or from the creation time when there is no update time. The badge then adds the word stuck, its tooltip says `Stuck: no update for 2d`, and the card border and the badge turn amber; the word carries the meaning, the colour only helps. Pending tasks and tasks in other states are never marked stuck. The limit is a constant in `src/task-age.ts` (`STUCK_AFTER_MS`) and is not a setting. A task that is being worked quietly without queue updates also shows as stuck after a day, so read the word as a reason to look, not as a verdict. Ages are measured each time the board refreshes (every 15 seconds); the board reads only the queue list it already loads and sends nothing to OpenRig.
+
 ## Task details
 
 Selecting a task on the board opens its details. The text of the task is shown as formatted text, taken from the first of its body, bodyPreview and summary fields that holds text (when only the summary is used, the dialog says so). The Raw JSON button switches to the whole item exactly as OpenRig returns it, and a task with no text, or a failed read, shows only that JSON. Viewing a task is read only: nothing is sent to OpenRig, no task or seat is changed, and the owner and handoff controls below the text work as before.
