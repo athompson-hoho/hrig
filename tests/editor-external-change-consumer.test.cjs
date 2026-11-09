@@ -6,7 +6,7 @@ const initial = { content: 'const original = "disk";\n', revision: 'synthetic-r1
 const observed = { content: 'external observation 分支\n', revision: 'synthetic-r2' };
 const fresh = { content: 'fresh disk after confirmation é\n', revision: 'synthetic-r3' };
 const local = 'unsaved local e\u0301 <&>\n';
-const ackCopy = 'Keeping your text. Save remains blocked while the disk version conflicts. Compare or reload to review the disk changes.';
+const ackCopy = 'Keeping your text. Saving still checks for conflicts. Compare or reload to review the disk changes.';
 const conflict = 'CONFLICT: File changed on disk. Reload or compare before saving.';
 
 function exactBuffer(v, expected) {
