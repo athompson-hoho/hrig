@@ -247,3 +247,24 @@ test('actual reported paths retain every source meaning and conflict description
   assert.match(row(v, 'src').props['aria-label'], /M 12; A 1; D 2; \? 1/);
   assertSafe(v);
 });
+
+test('aggregate badge accessible cues retain conflict and combined-status meanings', async t => {
+  const v = mount({ handleGit: () => response([
+    { path: 'src/conflict.ts', status: 'UU' },
+    { path: 'src/combined.ts', status: 'AD' },
+  ]) });
+  t.after(() => v.unmount());
+  await v.settle();
+  const folder = row(v, 'src');
+  assert.ok(folder, 'actual represented directory exists');
+  assert.match(folder.props['aria-label'], /M 1; D 1/);
+  assert.match(folder.props['aria-label'], /Conflict: both modified/);
+  assert.match(folder.props['aria-label'], /Added; Deleted/);
+  const rootCounts = v.nodes().find(n => n.props['aria-label']?.startsWith('Reported descendant statuses:'));
+  assert.ok(rootCounts, 'actual root aggregate exists');
+  assert.match(rootCounts.props['aria-label'], /Conflict: both modified/);
+  assert.match(rootCounts.props['aria-label'], /Added; Deleted/);
+  assert.match(rootCounts.props['aria-label'], /Git code: AD/);
+  assert.equal(v.gitRequests.length, 1);
+  assertSafe(v);
+});
