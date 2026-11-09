@@ -183,9 +183,23 @@ async function inventory(connection) {
   const { runRig } = require("./features.cjs");
   const [rigs, nodes] = await Promise.all([
     runRig(connection, ["ps", "--json"]),
-    runRig(connection, ["ps", "--nodes", "--all-rigs", "--json"]),
+    nodeList(connection, runRig),
   ]);
   return normalizeInventory(parseJson(rigs), parseJson(nodes));
+}
+// The compact node list omits the raw lastActivityAt fact (its own `lastActivity`
+// is a sample time, not terminal activity). `--full` carries it; only the fields
+// normalizeInventory reads leave the main process. Hosts whose rig rejects the
+// flag fall back to the compact list (age then reads "not reported by this host").
+const NODE_LIST = ["ps", "--nodes", "--all-rigs", "--json"];
+async function nodeList(connection, runRig) {
+  try {
+    return await runRig(connection, [...NODE_LIST, "--full"]);
+  } catch (error) {
+    if (!/unknown option|unrecognized|unexpected argument|--full/i.test(String(error?.message || error)))
+      throw error;
+    return runRig(connection, NODE_LIST);
+  }
 }
 function sessionCommand(session) {
   if (
@@ -741,6 +755,7 @@ module.exports = {
   parseJson,
   rows,
   normalizeInventory,
+  nodeList,
   inventory,
   sessionCommand,
   localPath,

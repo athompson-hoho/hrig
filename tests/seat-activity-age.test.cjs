@@ -111,3 +111,28 @@ test('actual Sidebar renders age only for current inventory, with explanatory to
   view.update(props);
   assert.equal(ages().length, 0, 'non-current raw owner suppresses age');
 });
+
+test('real rig 0.7.7 shapes: compact `lastActivity` (a sample time) is ignored; --full lastActivityAt is used', async () => {
+  const { nodeList } = require('../electron/core.cjs');
+  // Shapes observed from `rig ps --nodes --all-rigs --json [--full]` on rig 0.7.7.
+  const compact = { rigId: 'r', rigName: 'r', logicalId: 'a', sessionStatus: 'running', lastActivity: '2026-01-01T11:59:59.000Z', agentActivity: { state: 'idle' } };
+  const full = { rigId: 'r', rigName: 'r', logicalId: 'a', sessionStatus: 'running', lastActivityAt: '2026-01-01T11:50:00.000Z', terminalActive: false, agentActivity: { state: 'idle' } };
+  assert.equal(normalizeInventory([], [compact]).seats[0].lastActivityAt, null, 'sampledAt-like field never counts');
+  assert.equal(normalizeInventory([], [full]).seats[0].lastActivityAt, '2026-01-01T11:50:00.000Z');
+  const calls = [];
+  const ok = async (c, args) => { calls.push(args); return '[]'; };
+  await nodeList({}, ok);
+  assert.deepEqual(calls, [['ps', '--nodes', '--all-rigs', '--json', '--full']]);
+});
+
+test('nodeList falls back to the compact list only when --full is rejected', async () => {
+  const { nodeList } = require('../electron/core.cjs');
+  const calls = [];
+  const old = async (c, args) => { calls.push(args); if (args.includes('--full')) throw new Error("error: unknown option '--full'"); return 'compact'; };
+  assert.equal(await nodeList({}, old), 'compact');
+  assert.equal(calls.length, 2); assert.ok(!calls[1].includes('--full'));
+  calls.length = 0;
+  const down = async (c, args) => { calls.push(args); throw new Error('connection refused'); };
+  await assert.rejects(nodeList({}, down), /connection refused/);
+  assert.equal(calls.length, 1, 'real failures are not doubled');
+});
