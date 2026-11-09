@@ -114,3 +114,19 @@ test('pathological inline input stays fast (unclosed openers are bounded)', () =
   assert.equal(parseInline('a **b** c')[1].t, 'strong');
   assert.deepEqual(parseInline('**x** '.repeat(5000)).map(n => n.t), ['text']);
 });
+
+test('link and autolink openers are bounded too (QA f920a90)', () => {
+  for (const unit of ['[', '[a](', '![', '[a](b "c', '<http://a', '[a]( ']) {
+    const src = unit.repeat(Math.floor(19990 / unit.length));
+    const t0 = Date.now();
+    parseInline(src);
+    assert.ok(Date.now() - t0 < 300, `${JSON.stringify(unit)} paragraph took ${Date.now() - t0} ms`);
+    const big = unit.repeat(Math.floor(200000 / unit.length));
+    const t1 = Date.now(); parseMarkdown(big);
+    assert.ok(Date.now() - t1 < 1500, `${JSON.stringify(unit)} 200KB took ${Date.now() - t1} ms`);
+  }
+  // Normal links still parse, including a title and spaces inside the parens.
+  assert.equal(parseInline('see [docs]( https://x.io/a "T" ) now')[1].t, 'link');
+  assert.equal(parseInline('see [docs](https://x.io/a) now')[1].href, 'https://x.io/a');
+  assert.equal(parseInline('<https://x.io>')[0].t, 'link');
+});
