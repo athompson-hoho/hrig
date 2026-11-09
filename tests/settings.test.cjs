@@ -1406,3 +1406,74 @@ test("notifications.humanItems is an off-by-default Notifications boolean, separ
   );
   assert.ok(lines[at + 1].startsWith("| `shortcuts.overrides` |"));
 });
+test("appearance.windowTitleDetails is an off-by-default Appearance boolean listed once right after the hidden status bar items, resolved user then project, and documented in SETTINGS.md and NAVIGATION.md", () => {
+  const key = "appearance.windowTitleDetails";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.category, "Appearance");
+  assert.equal(row.label, "Show project and panel in the window title");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  for (const part of [
+    "project folder name",
+    "active panel's name",
+    "Panel - project - hRig",
+    "Off by default, so the title stays hRig",
+    "100 characters",
+    "no file text, seat output, host or secret",
+    "Main window only: detached windows keep hRig",
+    "The title bar drawn inside HRig does not change",
+  ])
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  const keys = settings.schema.map((r) => r.key);
+  assert.equal(keys[keys.indexOf(key) - 1], "appearance.statusBarHidden");
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings()[key], false);
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  assert.equal(
+    settings.resolveSettings({ [key]: true }, { [key]: false })[key],
+    false,
+  );
+  assert.equal(
+    settings.resolveSettings({ [key]: false }, { [key]: true })[key],
+    true,
+  );
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) => line.startsWith("| `" + key + "` |"));
+  assert.ok(
+    at > 0,
+    "SETTINGS.md must have an appearance.windowTitleDetails row",
+  );
+  assert.ok(lines[at].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at - 1].startsWith("| `appearance.statusBarHidden` |"));
+  for (const part of [
+    "`Panel - project - hRig`",
+    "Off (the default) keeps the title exactly `hRig`",
+    "cut to 100 characters",
+    "the main process cleans it again",
+    "no file text, seat output, host or secret",
+    "detached windows keep `hRig`",
+    "the title bar drawn inside HRig is unchanged",
+    "See NAVIGATION.md",
+  ])
+    assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
+  const doc = lines.join("\n");
+  assert.equal(
+    doc.split("\nWindow title: `" + key + "` is off by default").length - 1,
+    1,
+  );
+});

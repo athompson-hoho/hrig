@@ -138,6 +138,7 @@ import {
   welcomeRecents,
   type RecentProject,
 } from "./project-history";
+import { buildWindowTitle, projectNameOf } from "./window-title";
 import RigControl from "./RigControl";
 import {
   bufferText,
@@ -659,6 +660,21 @@ export default function App() {
     model.addChangeListener(listener);
     return () => model.removeChangeListener(listener);
   }, [model]);
+  // The OS window title: "hRig" unless the setting is on, and then nothing is ever sent. When on, it follows the project and the active panel; the main process cleans the text again.
+  const sentTitle = useRef("hRig");
+  const titleDetails = preferences["appearance.windowTitleDetails"];
+  useEffect(() => {
+    if (!loaded) return;
+    const selected = model.getActiveTabset()?.getSelectedNode();
+    const title = buildWindowTitle({
+      enabled: titleDetails,
+      project: projectNameOf(root),
+      panel: selected instanceof TabNode ? selected.getName() : "",
+    });
+    if (title === sentTitle.current) return;
+    sentTitle.current = title;
+    window.hrig.setWindowTitle(title).catch(() => {});
+  }, [loaded, model, revision, root, titleDetails]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
     if (!inventory || inventoryError || !preferences["notifications.desktop"])

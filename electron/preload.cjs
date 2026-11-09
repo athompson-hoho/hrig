@@ -64,4 +64,5 @@ contextBridge.exposeInMainWorld("hrig", {
     return () => ipcRenderer.removeListener("terminal:data", listener);
   },
   window: (action) => ipcRenderer.send("window:action", action),
+  setWindowTitle: invoke("window:title"),
 });

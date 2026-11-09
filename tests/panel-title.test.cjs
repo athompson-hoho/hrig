@@ -1535,7 +1535,11 @@ test("panel-title wiring: the module is pure, the menu only passes text, App cha
     3,
     "every stored layout, saved layout and role template is cleaned by the one restore",
   );
-  assert.deepEqual(filesWith('"./panel-title"'), ["App.tsx", "layout.ts"]);
+  assert.deepEqual(filesWith('"./panel-title"'), [
+    "App.tsx",
+    "layout.ts",
+    "window-title.ts",
+  ]);
 
   // Label only: the terminal never reads its whole config in a dependency list, and nothing outside the title code knows the two keys.
   const terminal = stripComments(read("src/TerminalPanel.tsx"));

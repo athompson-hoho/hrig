@@ -40,6 +40,7 @@ function handle(channel, fn) {
 }
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
 require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
+require('./window-title.cjs').registerWindowTitle({handle,getWindow:()=>mainWindow});
 const terminalLogs = require('./terminal-logging.cjs').createTerminalLogs({notify: state => {
   if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal:log-state', state);
 }});

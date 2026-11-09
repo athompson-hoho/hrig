@@ -240,6 +240,7 @@ export interface HrigAPI {
   resizeTerminal(id: string, cols: number, rows: number): void;
   onTerminal(callback: (event: TerminalEvent) => void): () => void;
   window(action: "minimize" | "maximize" | "close"): void;
+  setWindowTitle(title: string): Promise<void>;
 }
 declare global {
   interface Window {

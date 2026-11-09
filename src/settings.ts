@@ -10,6 +10,7 @@ export const defaults = {
   "appearance.reduceMotion": false,
   "appearance.statusBar": true,
   "appearance.statusBarHidden": "",
+  "appearance.windowTitleDetails": false,
   "editor.fontSize": 13,
   "editor.fontFamily": '"Cascadia Code", Consolas, monospace',
   "editor.tabSize": 2,
@@ -160,6 +161,13 @@ export const schema: Setting[] = [
       "Status bar items to hide, as ids separated by commas or spaces: " +
       STATUS_ITEMS.map((item) => item.id).join(", ") +
       ". Empty (the default) shows every item, and unknown ids are ignored. An empty box is not accepted: use the reset button to show every item again. The reconnect button appears only while terminals are dropped, and the same action stays in the command center. Applies only while Show status bar is on. Display only; nothing is sent to the shell or the seat.",
+  },
+  {
+    key: "appearance.windowTitleDetails",
+    category: "Appearance",
+    label: "Show project and panel in the window title",
+    description:
+      "Show the project folder name and the active panel's name in the window title, as Panel - project - hRig, in the taskbar and the window switcher. Off by default, so the title stays hRig. The names are cleaned of control and direction characters and the whole title is cut to 100 characters; nothing else (no file text, seat output, host or secret) is put in it. Main window only: detached windows keep hRig. The title bar drawn inside HRig does not change.",
   },
   {
     key: "editor.fontSize",
