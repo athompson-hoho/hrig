@@ -1,9 +1,9 @@
 import { VirtualList } from "./VirtualList";
+import FileExplorer, { type ActiveFileTarget } from "./FileExplorer";
 import { useEffect, useId, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  Folder,
   FileCode2,
   RefreshCw,
   RotateCw,
@@ -16,7 +16,7 @@ import {
   PanelsTopLeft,
   Pin,
 } from "lucide-react";
-import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
+import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { filterSeats } from "./seat-search";
@@ -32,128 +32,6 @@ function InventoryAge({ sampledAt }: { sampledAt: string }) {
     return () => clearInterval(timer);
   }, []);
   return <>{formatAge(now - Date.parse(sampledAt))}</>;
-}
-function FileTree({
-  connection,
-  root,
-  path = "",
-  depth = 0,
-  onFile,
-  refresh,
-}: {
-  connection: Connection;
-  root: string;
-  path?: string;
-  depth?: number;
-  onFile: (path: string) => void;
-  refresh: number;
-}) {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let active = true;
-    window.hrig
-      .file(connection, { op: "list", root, path })
-      .then((data) => {
-        if (active) {
-          setFiles(data);
-          setError("");
-          setLoaded(true);
-        }
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [connection.id, root, path, refresh, attempt]);
-  const indent = { paddingLeft: 14 + depth * 13 };
-  if (error)
-    return (
-      <div className="tree-error" style={depth ? indent : undefined}>
-        {error}{" "}
-        <button
-          className="text-button"
-          onClick={() => {
-            setError("");
-            setAttempt((n) => n + 1);
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  if (!loaded)
-    return (
-      <div className="sidebar-empty" role="status" style={depth ? indent : undefined}>
-        Loading…
-      </div>
-    );
-  return (
-    <>
-      {files.map((file) => (
-        <div key={file.path}>
-          <button
-            className="file-row"
-            style={{ paddingLeft: 14 + depth * 13 }}
-            onClick={() => {
-              if (file.directory)
-                setExpanded((old) => {
-                  const next = new Set(old);
-                  next.has(file.path)
-                    ? next.delete(file.path)
-                    : next.add(file.path);
-                  return next;
-                });
-              else onFile(file.path);
-            }}
-            title={file.path}
-          >
-            {file.directory ? (
-              expanded.has(file.path) ? (
-                <ChevronDown size={12} />
-              ) : (
-                <ChevronRight size={12} />
-              )
-            ) : (
-              <span className="tree-spacer" />
-            )}
-            {file.directory ? (
-              <Folder size={14} className="folder-icon" />
-            ) : (
-              <FileCode2
-                size={14}
-                className={`file-icon ${file.name.split(".").pop()}`}
-              />
-            )}
-            <span>{file.name}</span>
-          </button>
-          {file.directory && expanded.has(file.path) && (
-            <FileTree
-              connection={connection}
-              root={root}
-              path={file.path}
-              depth={depth + 1}
-              onFile={onFile}
-              refresh={refresh}
-            />
-          )}
-        </div>
-      ))}
-      {!files.length &&
-        (depth === 0 ? (
-          <div className="sidebar-empty">This folder is empty.</div>
-        ) : (
-          <div className="sidebar-empty" style={indent}>
-            (empty)
-          </div>
-        ))}
-    </>
-  );
 }
 export default function Sidebar({
   section,
@@ -181,6 +59,7 @@ export default function Sidebar({
   onFile,
   onDiff,
   fileRevision,
+  activeFile,
 }: {
   section: string;
   connection: Connection;
@@ -207,6 +86,7 @@ export default function Sidebar({
   onFile: (path: string) => void;
   onDiff: (path: string) => void;
   fileRevision: number;
+  activeFile?: ActiveFileTarget | null;
 }) {
   const podNamespace = useId();
   const podTokens = useRef(new Map<string, number>());
@@ -392,14 +272,13 @@ export default function Sidebar({
             <span>PROJECT FILES</span>
             <span className="key-hint">Ctrl O</span>
           </div>
-          <div className="sidebar-scroll">
-            <FileTree
-              connection={connection}
-              root={root}
-              onFile={onFile}
-              refresh={fileRevision}
-            />
-          </div>
+          <FileExplorer
+            connection={connection}
+            root={root}
+            onFile={onFile}
+            refresh={fileRevision}
+            activeFile={activeFile}
+          />
         </>
       ) : section === "changes" ? (
         <>

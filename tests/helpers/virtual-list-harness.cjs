@@ -11,8 +11,10 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const instances = new Map(), dom = new Map(), modules = new Map();
   const observers = new Set(), pending = [];
   const intervals = new Map(), listeners = new Map(), animationFrames = new Map();
+  const timeouts = new Map();
+  let clock = 0;
   let timerSerial = 0;
-  const observations = { stateUpdates: 0 };
+  const observations = { stateUpdates: 0, scrolls: [] };
   const document = { activeElement: null };
   let current, dirty = true, tree, props = initialProps, serial = 0;
   const element = (type, props, key) => ({ type, key, props: props || {} });
@@ -74,6 +76,8 @@ function mountComponent(file, exportName, initialProps, options = {}) {
       // Timers stay inert; synthetic consumers never poll real hosts.
       setInterval(fn, delay) { const id = ++timerSerial; intervals.set(id, { fn, delay }); return id; },
       clearInterval(id) { intervals.delete(id); },
+      setTimeout(fn, delay) { const id = ++timerSerial; timeouts.set(id, { fn, at: clock + delay }); return id; },
+      clearTimeout(id) { timeouts.delete(id); },
       requestAnimationFrame(fn) { const id = ++timerSerial; animationFrames.set(id, fn); return id; },
       cancelAnimationFrame(id) { animationFrames.delete(id); },
       window: { hrig: options.api || {},
@@ -137,6 +141,7 @@ function mountComponent(file, exportName, initialProps, options = {}) {
         querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
         getAttribute(name) { return this.props[name] == null ? null : String(this.props[name]); },
         scrollTo(value) { this.scrollTop = value.top; },
+        scrollIntoView(options) { observations.scrolls.push({ node: this, options }); },
       };
       dom.set(location, node);
     }
@@ -175,7 +180,14 @@ function mountComponent(file, exportName, initialProps, options = {}) {
   const nodes = () => tree.flatMap(descendants).filter(n => typeof n === 'object');
   flush();
   return {
-    nodes, flush, document, observers, intervals, listeners, animationFrames, observations,
+    nodes, flush, document, observers, intervals, listeners, animationFrames, observations, timeouts,
+    advanceTime(milliseconds) {
+      clock += milliseconds;
+      // One finite snapshot; callbacks cannot create an endlessly drained queue.
+      const due = [...timeouts].filter(([, timer]) => timer.at <= clock).sort((a, b) => a[1].at - b[1].at);
+      for (const [id, timer] of due) if (timeouts.delete(id)) timer.fn();
+      flush(); return due.length;
+    },
     flushAnimationFrame() {
       const work = [...animationFrames.values()]; animationFrames.clear();
       for (const fn of work) fn(0);

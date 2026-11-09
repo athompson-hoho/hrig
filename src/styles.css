@@ -1682,6 +1682,76 @@ button:hover {
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
+.file-explorer {
+  min-width: 0;
+}
+.file-explorer .file-filter {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.file-explorer .file-filter input {
+  flex: 1;
+  width: 0;
+}
+.file-explorer .file-filter:focus-within {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
+}
+.file-explorer .explorer-notice,
+.file-explorer .explorer-reveal,
+.file-explorer .tree-error {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.file-explorer .explorer-notice {
+  padding: 4px 16px;
+  color: var(--muted);
+}
+.file-explorer .explorer-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+.file-explorer .explorer-reveal .explorer-notice {
+  padding: 0;
+}
+.file-explorer .tree-error button {
+  margin: 8px;
+}
+.file-explorer button:focus-visible {
+  outline: 2px solid var(--color-86cdb0);
+  outline-offset: 2px;
+}
+.file-explorer .file-revealed {
+  box-shadow: inset 3px 0 var(--mint);
+  text-decoration: underline;
+}
+.file-explorer .file-row > span:not(.tree-spacer):not(.sr-only) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-explorer .file-row > svg {
+  flex-shrink: 0;
+}
+.file-explorer .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .change-row {
   display: flex;
   align-items: center;
