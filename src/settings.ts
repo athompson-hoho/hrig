@@ -43,6 +43,7 @@ export const defaults = {
   "terminal.macOptionIsMeta": false,
   "terminal.wordSeparator": DEFAULT_WORD_SEPARATOR,
   "workspace.refreshInterval": 15,
+  "workspace.restoreLastProject": false,
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
@@ -411,6 +412,13 @@ export const schema: Setting[] = [
       "Seconds between background rig and seat inventory refreshes on the active connection.",
     min: 5,
     max: 120,
+  },
+  {
+    key: "workspace.restoreLastProject",
+    category: "Workspace",
+    label: "Reopen the last project on launch",
+    description:
+      "When HRig starts, open your most recent project if the project it brought back is a different one, for example because the saved folder or connection is gone. It uses the same Open project check as a project on the Welcome screen: the folder must exist, and a failure shows its message there and changes nothing else. Off by default, so HRig starts exactly as before. It never reaches a host that launch does not already use (a project on another SSH or WSL connection is not reopened for you), never starts or restarts a seat and never sends anything to a terminal. Read from your user settings only: a project override has no effect.",
   },
   {
     key: "connections.defaultKind",

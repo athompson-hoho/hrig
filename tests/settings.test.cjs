@@ -1477,3 +1477,57 @@ test("appearance.windowTitleDetails is an off-by-default Appearance boolean list
     1,
   );
 });
+test("workspace.restoreLastProject is an off-by-default Workspace boolean listed once right after the refresh interval, read from the user scope, validated as a boolean and documented in SETTINGS.md and NAVIGATION.md", () => {
+  const key = "workspace.restoreLastProject";
+  const root = path.join(srcDir, "..");
+  assert.equal(settings.defaults[key], false);
+  const rows = settings.schema.filter((row) => row.key === key);
+  assert.equal(rows.length, 1);
+  const row = rows[0];
+  assert.equal(row.category, "Workspace");
+  assert.equal(row.label, "Reopen the last project on launch");
+  for (const field of ["options", "min", "max", "step"])
+    assert.equal(row[field], undefined, field);
+  for (const part of [
+    "most recent project",
+    "the same Open project check as a project on the Welcome screen",
+    "the folder must exist",
+    "Off by default, so HRig starts exactly as before",
+    "never reaches a host that launch does not already use",
+    "never starts or restarts a seat",
+    "never sends anything to a terminal",
+    "Read from your user settings only",
+  ])
+    assert.ok(row.description.includes(part), "the row says: " + part);
+  const keys = settings.schema.map((r) => r.key);
+  assert.equal(keys[keys.indexOf(key) - 1], "workspace.refreshInterval");
+  for (const value of [true, false])
+    assert.deepEqual(settings.validateOverrides({ [key]: value }), {
+      [key]: value,
+    });
+  for (const value of ["true", "yes", 1, 0, null, {}, []])
+    assert.throws(
+      () => settings.validateOverrides({ [key]: value }),
+      (error) => error.message === "Wrong value type for " + key,
+    );
+  assert.deepEqual(settings.safeOverrides({ [key]: "yes" }), {});
+  assert.equal(settings.resolveSettings()[key], false);
+  assert.equal(settings.resolveSettings({ [key]: true })[key], true);
+  const lines = fs
+    .readFileSync(path.join(root, "SETTINGS.md"), "utf8")
+    .split("\n");
+  const at = lines.findIndex((line) => line.startsWith("| `" + key + "` |"));
+  assert.ok(at > 0, "SETTINGS.md must have a workspace.restoreLastProject row");
+  assert.ok(lines[at].startsWith("| `" + key + "` | `false` |"));
+  assert.ok(lines[at - 1].startsWith("| `workspace.refreshInterval` |"));
+  for (const part of [
+    "open your most recent project if the project it brought back is a different one",
+    "Off (the default) starts exactly as before",
+    "the Open project check of a project on the Welcome screen",
+    "A project on another SSH or WSL connection is not reopened for you",
+    "nothing is started, restarted or sent to a terminal",
+    "Read from the User scope only; a project override has no effect",
+    "See NAVIGATION.md",
+  ])
+    assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
+});

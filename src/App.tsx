@@ -138,6 +138,7 @@ import {
   welcomeRecents,
   type RecentProject,
 } from "./project-history";
+import { planLastProject } from "./last-project";
 import { buildWindowTitle, projectNameOf } from "./window-title";
 import RigControl from "./RigControl";
 import {
@@ -1029,6 +1030,22 @@ export default function App() {
     }
     void applyProject(project.root, target, project.rigId, project.rigName);
   };
+  // Once per launch, after the workspace has loaded, reopen the most recent project when the setting asks for it. It goes through the same path as a Welcome row, so the folder check, the connection check and the error message are the ones that path already has.
+  const restoreChecked = useRef(false);
+  useEffect(() => {
+    if (!loaded || restoreChecked.current) return;
+    restoreChecked.current = true;
+    const plan = planLastProject({
+      enabled: userPreferences["workspace.restoreLastProject"],
+      history: projectHistory,
+      connections: state.connections,
+      platform: window.hrig.platform,
+      active: { connection, root },
+    });
+    if (plan.project) openRecentProject(plan.project);
+    else if (plan.reason === "other-connection")
+      log("Your last project is on another connection, so it was not reopened.");
+  }, [loaded]);
   useEffect(() => {
     if (!loaded) return;
     let cancelled = false;
