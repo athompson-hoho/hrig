@@ -999,7 +999,7 @@ test("panel-close-targets wiring: two pure modules, one Layout hook that only op
   assert.ok(
     has(
       app,
-      "<PanelContextMenu menu={tabMenu} onDismiss={() => setTabMenu(null)} onClosePanels={closePanels} />",
+      "<PanelContextMenu menu={tabMenu} onDismiss={() => setTabMenu(null)} onClosePanels={closePanels} onRenamePanel={renamePanel} />",
     ),
   );
   assert.equal(count(app, "onContextMenu="), 1);

@@ -25,18 +25,25 @@ const ITEMS: { scope: CloseScope; label: string }[] = [
  * The right-click menu of a panel tab. It only chooses which panels to close:
  * onClosePanels receives the ids and closes them through the app's own close
  * and unsaved-edits flow, after a confirmation when more than one panel or
- * any terminal would close.
+ * any terminal would close. For a terminal panel it also offers Rename: the
+ * typed text goes to onRenamePanel as it is and the app cleans it, so a title
+ * is only ever a label.
  */
 export default function PanelContextMenu({
   menu,
   onDismiss,
   onClosePanels,
+  onRenamePanel,
 }: {
   menu: PanelMenu | null;
   onDismiss: () => void;
   onClosePanels: (ids: string[]) => void;
+  onRenamePanel: (id: string, text: string) => void;
 }) {
   const [ask, setAsk] = useState<ClosePlan | null>(null);
+  const [rename, setRename] = useState<{ id: string; text: string } | null>(
+    null,
+  );
   useEffect(() => {
     if (!menu) return;
     const key = (event: KeyboardEvent) => event.key === "Escape" && onDismiss();
@@ -57,6 +64,19 @@ export default function PanelContextMenu({
     if (plan.confirm) setAsk(plan);
     else onClosePanels(plan.order);
   };
+  const clickedId = menu?.id;
+  const clicked = menu?.panels.find((panel) => panel.id === clickedId);
+  const titled = clicked?.kind === "seat" || clicked?.kind === "shell";
+  const startRename = () => {
+    if (!menu) return;
+    onDismiss();
+    setRename({ id: menu.id, text: clicked ? clicked.name : "" });
+  };
+  const saveRename = () => {
+    const done = rename;
+    setRename(null);
+    if (done) onRenamePanel(done.id, done.text);
+  };
   return (
     <>
       {menu && (
@@ -66,7 +86,7 @@ export default function PanelContextMenu({
           aria-label="Panel"
           style={{
             left: Math.min(menu.x, window.innerWidth - 180),
-            top: Math.min(menu.y, window.innerHeight - 130),
+            top: Math.min(menu.y, window.innerHeight - 130 - (titled ? 44 : 0)),
           }}
           onMouseDown={(event) => event.stopPropagation()}
         >
@@ -82,7 +102,50 @@ export default function PanelContextMenu({
               <span>{item.label}</span>
             </button>
           ))}
+          {titled && <div className="menu-separator" />}
+          {titled && (
+            <button role="menuitem" onClick={startRename}>
+              <span>Rename...</span>
+            </button>
+          )}
         </div>
+      )}
+      {rename && (
+        <Modal
+          title="Rename panel"
+          subtitle="Only the tab title changes. The session and the seat are not touched."
+          onClose={() => setRename(null)}
+        >
+          <label className="field-label">
+            PANEL NAME
+            <input
+              aria-label="Panel name"
+              value={rename.text}
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) =>
+                setRename({ id: rename.id, text: event.target.value })
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.nativeEvent.isComposing)
+                  saveRename();
+              }}
+            />
+          </label>
+          <p className="field-note">
+            Up to 60 characters. Leave it empty to restore the original name.
+          </p>
+          <div className="modal-actions">
+            <button
+              className="secondary-button"
+              onClick={() => setRename(null)}
+            >
+              Cancel
+            </button>
+            <button className="primary-button" onClick={saveRename}>
+              Rename
+            </button>
+          </div>
+        </Modal>
       )}
       {ask && (
         <Modal

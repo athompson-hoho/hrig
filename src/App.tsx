@@ -162,6 +162,7 @@ import { isPanelCycleKey } from "./shortcuts";
 import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
 import PanelContextMenu, { type PanelMenu } from "./PanelContextMenu";
 import { dirtyPrompt, panelKind } from "./panel-close-targets";
+import { applyCustomTitle, type TitlePatch } from "./panel-title";
 import { filterCommands, pickFirst } from "./palette";
 import {
   describeClosedPanel,
@@ -1473,6 +1474,25 @@ export default function App() {
       setRevision((n) => n + 1);
     }
   }, []);
+  // The title fields of a tab as the title helpers read them; null when the id is not a tab.
+  const titledTab = (id: string) => {
+    const node = model.getNodeById(id);
+    return node instanceof TabNode
+      ? {
+          component: node.getComponent(),
+          name: node.getName(),
+          config: node.getConfig(),
+        }
+      : null;
+  };
+  // A title change touches only the tab name and the two title keys of its config. The tab id, the terminal id and the seat are never changed, so the session and everything addressed by an id carry on as before.
+  const retitleTab = (id: string, patch: TitlePatch | null) => {
+    if (!patch) return;
+    model.doAction(Actions.updateNodeAttributes(id, patch));
+    modelChanged(model);
+  };
+  const renamePanel = (id: string, text: string) =>
+    retitleTab(id, applyCustomTitle(titledTab(id), text));
   const savePending = async () => {
     if (!pending) return;
     setActionError("");
@@ -3588,6 +3608,7 @@ export default function App() {
           menu={tabMenu}
           onDismiss={() => setTabMenu(null)}
           onClosePanels={closePanels}
+          onRenamePanel={renamePanel}
         />
         {pending && (
           <Modal

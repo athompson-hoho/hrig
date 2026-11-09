@@ -91,6 +91,10 @@ export interface PanelConfig {
   port?: number;
   line?: number;
   role?: string;
+  /** A terminal panel's own title, set with Rename; the tab name shows it. A label only. */
+  customTitle?: string;
+  /** The name the panel had before its first rename; Reset name brings it back, also after a restart. */
+  defaultTitle?: string;
 }
 export interface TerminalLogState { id: string; active: boolean; path: string; bytes: number; error: string }
 export interface TerminalEvent {
