@@ -132,7 +132,9 @@ test('Sidebar disclosure names real pod content without false empty control rela
 });
 function sessionCount(view) {
   const heading = classNodes(view, 'section-label').find(n => view.text(n).startsWith('SESSIONS'));
-  return Number(view.text(heading.children.find(n => n.props?.className === 'count')));
+  // The count sits in the header's tools span (next to the hide-stopped button) since the build chain's change.
+  const dig = node => node.props?.className === 'count' ? node : (node.children || []).map(dig).find(Boolean);
+  return Number(view.text(dig(heading)));
 }
 function assertDisclosureTargets(view) {
   const ids = view.nodes().map(n => n.props.id).filter(Boolean);

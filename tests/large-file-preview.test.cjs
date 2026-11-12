@@ -32,7 +32,7 @@ test('setting is bounded and documented', () => {
 
 test('EditorPanel falls back to a read-only preview without creating a buffer or save path', () => {
   const panel = fs.readFileSync('src/EditorPanel.tsx', 'utf8');
-  const catchBlock = panel.slice(panel.indexOf('// A binary or over-2 MB file'), panel.indexOf('} else setError(e.message);')).replace(/\/\/.*$/gm, '');
+  const catchBlock = panel.slice(panel.indexOf('// A binary or over-2 MB file'), panel.indexOf('} else failed();')).replace(/\/\/.*$/gm, '');
   assert.match(catchBlock, /op: "inspect"/);
   assert.doesNotMatch(catchBlock, /buffers\.set|setValue|persist|save|op: "save"/);
   assert.match(panel, /\{inspected && value === undefined \? \(\s*<FilePreview/);

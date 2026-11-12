@@ -251,7 +251,8 @@ test("terminal.cursor tracer: defaults keep the blinking bar, a stored override 
   const styleStatement =
     'term.options.cursorStyle = preferences["terminal.cursorStyle"] as "bar" | "block" | "underline";';
   const blinkStatement =
-    'term.options.cursorBlink = preferences["terminal.cursorBlink"] && !preferences["appearance.reduceMotion"];';
+    // motionReduced also follows the system setting (long-list chain); the user setting still wins.
+    'term.options.cursorBlink = preferences["terminal.cursorBlink"] && !motionReduced(preferences["appearance.reduceMotion"]);';
   assert.ok(
     source.includes(styleStatement),
     "the cursor shape must come from the effective terminal.cursorStyle preference",
@@ -356,7 +357,8 @@ test("terminal.cursor xterm starts at the defaults and TerminalPanel is its only
   const source = collapsedTerminalPanel();
   assert.ok(
     source.includes(
-      `cursorBlink: ${settings.defaults["terminal.cursorBlink"]},`,
+      // The start value also asks whether motion is reduced (long-list chain), with the default setting off.
+      `cursorBlink: ${settings.defaults["terminal.cursorBlink"] ? "!motionReduced(false)" : "false"},`,
     ),
     "xterm must start with the default blink value",
   );
@@ -1638,7 +1640,8 @@ test("workspace.hideStoppedSeats is an off-by-default Workspace boolean listed o
   const keys = settings.schema.map((row) => row.key);
   assert.equal(keys.filter((k) => k === key).length, 1);
   assert.equal(keys[keys.indexOf(key) - 1], "workspace.restoreLastProject");
-  assert.equal(keys[keys.indexOf(key) + 1], "connections.defaultKind");
+  assert.equal(keys[keys.indexOf(key) + 1], "workspace.updateCheckHours"); // the update check row of the long-list chain sits between this row and the default connection kind
+  assert.equal(keys[keys.indexOf(key) + 2], "connections.defaultKind");
   assert.equal(keys[keys.length - 1], "shortcuts.overrides");
   const row = settings.schema[keys.indexOf(key)];
   assert.equal(row.category, "Workspace");
@@ -1676,7 +1679,7 @@ test("workspace.hideStoppedSeats is an off-by-default Workspace boolean listed o
   const at = lines.indexOf(rows[0]);
   assert.ok(rows[0].startsWith("| `" + key + "` | `false` |"));
   assert.ok(lines[at - 1].startsWith("| `workspace.restoreLastProject` |"));
-  assert.ok(lines[at + 1].startsWith("| `connections.defaultKind` |"));
+  assert.ok(lines[at + 1].startsWith("| `workspace.updateCheckHours` |")); // the update check row of the long-list chain
   for (const part of [
     "sessions that have stopped or exited, and the sessions of a rig the inventory calls archived",
     "Off (the default) lists every session as before",

@@ -1072,7 +1072,11 @@ test("task-filters wiring: one pure module, a board that only filters what it al
   const boardSource = read("src/TaskBoard.tsx");
   const board = tight(stripComments(boardSource));
   assert.equal(count(board, 'from "./task-filters";'), 1);
-  assert.equal(count(board, "applyFilters(items || [], filters)"), 1);
+  // The long-list chain's search runs first; the saved filters (owner, state, tag) then narrow what it found.
+  assert.equal(
+    count(board, 'applyFilters(searchTasks(items || [], filters.text), { ...filters, text: "" })'),
+    1,
+  );
   assert.equal(count(board, "tagOptions(items || [])"), 1);
   assert.equal(
     count(
@@ -1108,7 +1112,7 @@ test("task-filters wiring: one pure module, a board that only filters what it al
     .map((m) => m[1])
     .sort();
   assert.deepEqual(bridge, ["queue", "rigAction", "rigAction", "sendMessage"]);
-  assert.equal(count(board, "<select"), 4);
+  assert.equal(count(board, "<select"), 5); // the four filters plus the long-list chain's Group tasks by
   assert.equal(count(board, "maxLength={MAX_FILTER_TEXT}"), 1);
   assert.equal(count(board, 'aria-label="Filter task tag"'), 1);
   for (const label of [
@@ -1358,6 +1362,7 @@ test("task-filters board: with a filter set a line says how many tasks show and 
         "Filter task owner",
         "Filter task state",
         "Filter task tag",
+        "Group tasks by", // the long-list chain's grouping select follows the four filters
       ],
     );
     const card = board.byClass("task-card")[0];
@@ -1396,6 +1401,7 @@ test("task-filters board: with a filter set a line says how many tasks show and 
     "success-note",
     "task-board",
     "task-card",
+    "task-card-viewport", // the long-list chain's windowed card list
     "task-column",
     "tool-panel",
     "tool-panel-heading",

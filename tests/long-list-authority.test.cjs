@@ -62,7 +62,10 @@ test('long-list navigation preserves explicit action authority', async () => {
     project.event(button(project, 'Search text'), 'onClick');
     await project.settle();
     assert.equal(effects.length, 3);
-    assert.deepEqual(effects[2], ['edit', connection, { op: 'searchText', query: 'Synthetic', root: '/synthetic' }]);
+    // Compared as plain data: the options object is made inside the App's own realm.
+    assert.deepEqual(JSON.parse(JSON.stringify(effects[2])), JSON.parse(JSON.stringify(['edit', connection, { op: 'searchText', query: 'Synthetic', root: '/synthetic',
+      // The search options of the build chain (regex and whole word), both off by default.
+      options: { regex: false, wholeWord: false } }])));
     assert.deepEqual([...board.intervals.values()].map(timer => timer.delay), [15000], 'existing timer is inert');
     const baseline = effects.length;
     const scenarios = [

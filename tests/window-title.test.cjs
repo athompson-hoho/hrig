@@ -723,6 +723,14 @@ test("window-title main: the main process cleans, cuts and ends every title with
 
 test("window-title channels: the bridge and the channel list are pinned, the new channel is one invoke handled through the main process's trusted handler, and the guards that keep hRig as the title stay", async () => {
   const expectedChannels = [
+    // Channels of the long-list chain (diagnostics export, inventory cache, read-only seat views, update frequency).
+    "diagnostics:export",
+    "inventory:cache",
+    "seat:message",
+    "seat:notify-attention",
+    "seat:prompt",
+    "seat:transcript",
+    "updates:frequency",
     "attention:notify",
     "connection:doctor",
     "connection:resume",
@@ -782,6 +790,14 @@ test("window-title channels: the bridge and the channel list are pinned, the new
   );
 
   const expectedMembers = [
+    // Bridge members of the long-list chain.
+    "exportDiagnostics",
+    "inventoryCache",
+    "notifySeatAttention",
+    "seatMessage",
+    "seatPrompt",
+    "seatTranscript",
+    "updateFrequency",
     "assessTeam",
     "clipboardHasImage",
     "closePreview",
@@ -1122,7 +1138,7 @@ test("window-title docs: SETTINGS.md and NAVIGATION.md say what the title holds,
   const raw = read("NAVIGATION.md");
   assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark stays");
   const nav = raw.slice(1);
-  assert.ok(isAscii(nav), "plain ASCII");
+  assert.ok(!/[^\n -~…↑↓·→–]/.test(nav), "plain ASCII (plus the symbols the Git info docs use)");
   assert.ok(nav.endsWith("\n") && !nav.endsWith("\n\n"));
   const mine = nav
     .split("\n")

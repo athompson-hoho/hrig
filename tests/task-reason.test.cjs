@@ -856,7 +856,8 @@ test("task-reason wiring: the module is pure with the exports that are pinned, t
     .map((m) => m[1])
     .sort();
   assert.deepEqual(bridge, ["queue", "rigAction", "rigAction", "sendMessage"]);
-  assert.equal(count(board, "setInterval("), 1, "no timer was added");
+  assert.equal(count(board, "visibleInterval("), 1, "no timer was added (the one poll is now the visible-only interval)");
+  assert.equal(count(board, "setInterval("), 0);
   assert.equal(count(board, "setTimeout("), 0);
   assert.equal(count(boardSource, "dangerouslySetInnerHTML"), 0);
 

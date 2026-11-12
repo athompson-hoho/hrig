@@ -1116,6 +1116,9 @@ test("task-board-nav scope: keys act only on a card and only when handled, filte
       assert.deepEqual(Object.keys(card.props).sort(), [
         "children",
         "className",
+        // The cell position the windowed list needs to find a card again (long-list chain).
+        "data-col",
+        "data-row",
         "data-stuck",
         "onClick",
         "tabIndex",
@@ -1310,7 +1313,8 @@ test("task-board-nav wiring: the module is pure and only the board uses it, the 
     'role="listitem"',
   ])
     assert.equal(count(board, absent), 0, "absent: " + absent);
-  assert.equal(count(board, "setInterval("), 1, "no timer was added");
+  assert.equal(count(board, "visibleInterval("), 1, "no timer was added (the one poll is now the visible-only interval)");
+  assert.equal(count(board, "setInterval("), 0);
   assert.equal(count(boardSource, "style="), 0);
   assert.equal(count(boardSource, "className={"), 0);
   const bridge = [
@@ -1323,7 +1327,8 @@ test("task-board-nav wiring: the module is pure and only the board uses it, the 
   assert.equal(
     count(
       board,
-      'className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-stuck=',
+      // data-col and data-row (long-list chain) follow the tab stop, so the windowed list can find a card again.
+      'className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-col={col} data-row={row} data-stuck=',
     ),
     1,
   );
@@ -1405,7 +1410,7 @@ test("task-board-nav docs: TASKS.md and NAVIGATION.md say which keys move where,
     "if it is gone, focus goes to the card nearest to where it was",
     "A refresh never takes focus from anything outside the board",
   ]);
-  const refresh = /setInterval\(load, (\d+)\)/.exec(read("src/TaskBoard.tsx"));
+  const refresh = /visibleInterval\(load, (\d+)\)/.exec(read("src/TaskBoard.tsx"));
   assert.equal(
     Number(refresh[1]) / 1000,
     15,

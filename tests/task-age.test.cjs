@@ -408,6 +408,9 @@ test("task-age board: the real task board shows an age badge on every card with 
     assert.deepEqual(ages["Task q-stuck"].cardKeys, [
       "children",
       "className",
+      // The cell position the windowed list needs to find a card again (long-list chain).
+      "data-col",
+      "data-row",
       "data-stuck",
       "onClick",
       "tabIndex",
@@ -1219,7 +1222,7 @@ test("task-age wiring: the module is pure and reads no clock, the board reads th
   assert.equal(
     count(
       board,
-      '<button className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-stuck={isStuck(item, now) ? "true" : undefined} > <strong>{item.title}</strong> <span>{item.destination}</span> {reasonNote(item)} <small className="badge">{item.status}</small> {ageNote(item)} </button>',
+      '<button className="task-card" key={item.id} onClick={() => inspect(item)} tabIndex={tabFor(col, row)} data-col={col} data-row={row} data-stuck={isStuck(item, now) ? "true" : undefined} > <strong>{item.title}</strong> <span>{item.destination}</span> {reasonNote(item)} <small className="badge">{item.status}</small> {ageNote(item)} </button>',
     ),
     1,
     "the card: today's children, the reason line after the owner, the age badge last",
@@ -1232,7 +1235,8 @@ test("task-age wiring: the module is pure and reads no clock, the board reads th
   assert.equal(count(boardSource, "style="), 0);
   assert.equal(count(boardSource, "className={"), 0);
   assert.equal(count(boardSource, "dangerouslySetInnerHTML"), 0);
-  assert.equal(count(board, "setInterval("), 1, "no timer was added");
+  assert.equal(count(board, "visibleInterval("), 1, "no timer was added (the one poll is now the visible-only interval)");
+  assert.equal(count(board, "setInterval("), 0);
   assert.equal(count(board, "setTimeout("), 0);
   const bridge = [
     ...stripComments(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g),
@@ -1336,7 +1340,7 @@ test("task-age docs: TASKS.md says what the age badge counts, when a task is stu
   const hours = lib.STUCK_AFTER_MS["in-progress"] / lib.HOUR_MS;
   assert.equal(hours, 24);
   assert.equal(lib.STUCK_AFTER_MS.blocked / lib.HOUR_MS, 24);
-  const refresh = /setInterval\(load, (\d+)\)/.exec(read("src/TaskBoard.tsx"));
+  const refresh = /visibleInterval\(load, (\d+)\)/.exec(read("src/TaskBoard.tsx"));
   assert.equal(Number(refresh[1]) / 1000, 15);
   for (const part of [
     "A card also shows an age badge under the state badge, in the same badge style",
