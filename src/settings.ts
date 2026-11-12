@@ -642,7 +642,7 @@ export function validateOverrides(value: unknown): Overrides {
       typeof v === "string" &&
       (key === "terminal.wordSeparator"
         ? !isValidWordSeparator(v)
-        : !v.trim() || v.length > 300 || /[\u0000-\u001f;{}<>]/.test(v))
+        : !v.trim() || v.length > (key === "shortcuts.overrides" ? 1000 : 300) || /[\u0000-\u001f;{}<>]/.test(v))
     )
       throw new Error("Invalid text for " + key);
     result[key] = v;

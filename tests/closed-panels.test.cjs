@@ -670,12 +670,7 @@ test("closed-panels close routes: the one tab delete and the one close action bo
 
 test("closed-panels chord and docs: the shortcut is claimed before the generic chords, acts only with no dialog open, and NAVIGATION.md says what is and is not reopened", () => {
   const app = appText();
-  assert.ok(
-    has(
-      app,
-      'import { hasOpenDialog, isHelpKey, isReopenPanelKey, reopenShortcutHint, } from "./shortcuts";',
-    ),
-  );
+  assert.match(app, /reopenShortcutHint,\s*\}\s*from "\.\/shortcuts";/);
   assert.ok(
     app.includes(
       "Latest closed file or seat " +
@@ -689,21 +684,9 @@ test("closed-panels chord and docs: the shortcut is claimed before the generic c
     "const handler = (event: KeyboardEvent) => {",
     "const windows = [",
   );
-  const help = handler.indexOf(tight("if (isHelpKey("));
-  const reopen = handler.indexOf(
-    tight("if (isReopenPanelKey(event, window.hrig.platform)) {"),
-  );
-  const generic = handler.indexOf(
-    tight("if (event.ctrlKey || event.metaKey) {"),
-  );
-  assert.ok(help > 0 && reopen > help && generic > reopen, "claim order");
-  assert.ok(
-    has(
-      handler,
-      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
-    ),
-    "claimed always, acts only with no dialog open",
-  );
+  assert.ok(handler.indexOf("terminalOwnsKey(") < handler.indexOf("routeOverriddenKey("));
+  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"), "the shared route is claimed but acts only outside dialogs");
+  assert.ok(between(app, "const runShortcut =", "useEffect(() => {\n    const handler").includes('case "workspace.reopenPanel": reopenClosedPanel(); return;'));
   assert.ok(
     has(
       handler,
@@ -711,23 +694,8 @@ test("closed-panels chord and docs: the shortcut is claimed before the generic c
     ),
     "Alt and Option presses are still ignored first",
   );
-  assert.ok(
-    has(
-      handler,
-      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
-    ),
-    "the existing claimed chords are unchanged",
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
-    ),
-    "Ctrl+Shift+T is still New shell",
-  );
-  assert.equal(count(app, "reopenClosedPanel"), 4);
+  assert.equal(count(app, "reopenClosedPanel"), 3);
   assert.deepEqual(filesWith(/isReopenPanelKey\(/), [
-    "App.tsx",
     "shortcuts.ts",
   ]);
 

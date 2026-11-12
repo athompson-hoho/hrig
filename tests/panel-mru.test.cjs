@@ -189,6 +189,7 @@ function handlerHarness(platform, cyclePanel, overridesText = "", doc = null) {
   assert.ok(from > 0 && to > from, "the key handler is found");
   const js = transformSync(source.slice(from, to), { loader: "ts" }).code;
   const calls = [];
+  const cycle = cyclePanel || ((direction, source) => calls.push("cycle:" + direction + ":" + !!source));
   const state = { modal: null, dialog: false };
   const fakes = {
     terminalOwnsKey: terminalKeys.terminalOwnsKey,
@@ -199,6 +200,20 @@ function handlerHarness(platform, cyclePanel, overridesText = "", doc = null) {
     isFocusModeKey: catalog.isFocusModeKey,
     isPanelCycleKey: catalog.isPanelCycleKey,
     routeOverriddenKey: overrides.routeOverriddenKey,
+    runShortcut: (id, source) => {
+      if (id === "workspace.cyclePanelsNext") return cycle(1, source);
+      if (id === "workspace.cyclePanelsPrevious") return cycle(-1, source);
+      const actions = {
+        "workspace.palette": "palette",
+        "workspace.quickOpen": "quickOpen",
+        "workspace.sidebar": "sidebar",
+        "workspace.newShell": "shell",
+        "workspace.reopenPanel": "reopen",
+        "workspace.maximizePanel": "maximize:toggle",
+        "workspace.focusMode": "focus",
+      };
+      if (actions[id]) calls.push(actions[id]);
+    },
     window: { hrig: { platform } },
     shortcutOverrides: overrides.parseOverrideText(overridesText, platform).map,
     cyclePanel:
@@ -687,7 +702,10 @@ test("panel-mru wiring: one pure module, one import each in App, the chord claim
 
   const app = tight(stripComments(read("src/App.tsx")));
   const has = (text, part) => text.includes(tight(part));
-  assert.equal(count(app, 'import { isPanelCycleKey } from "./shortcuts";'), 1);
+  assert.equal(count(app, 'import { isPanelCycleKey } from "./shortcuts";'), 0);
+  assert.equal(count(app, "routeOverriddenKey(event, window.hrig.platform, shortcutOverrides)"), 1);
+  assert.equal(count(app, 'case "workspace.cyclePanelsNext": cyclePanel(1, source); return;'), 1);
+  assert.equal(count(app, 'case "workspace.cyclePanelsPrevious": cyclePanel(-1, source); return;'), 1);
   assert.equal(
     count(
       app,
@@ -701,33 +719,19 @@ test("panel-mru wiring: one pure module, one import each in App, the chord claim
     "noteActive(",
     "noteClosed(",
     "stepCycle(",
-    "isPanelCycleKey(",
-    "cyclePanel(",
   ])
     assert.equal(count(app, name), 1, name);
   const handler = app.slice(
     app.indexOf(tight("const handler = (event: KeyboardEvent) => {")),
     app.indexOf(tight("const windows = [")),
   );
-  const order = [
-    "if (isHelpKey(",
-    "if (isReopenPanelKey(event, window.hrig.platform)) {",
-    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
-    "if (isFocusModeKey(event, window.hrig.platform)) {",
-    "if (isPanelCycleKey(event)) {",
-    "if (event.ctrlKey || event.metaKey) {",
-  ].map((needle) => handler.indexOf(tight(needle)));
-  assert.ok(
-    order.every((at, i) => at >= 0 && (i === 0 || order[i - 1] < at)),
-    "claim order: " + order,
-  );
-  assert.ok(
-    has(
-      handler,
-      "if (isPanelCycleKey(event)) { event.preventDefault(); event.stopPropagation(); if (!event.repeat && modal === null && !hasOpenDialog(event.target)) cyclePanel(event.shiftKey ? -1 : 1, event.target); return; }",
-    ),
-    "claimed always, acts once per press and only with no dialog open",
-  );
+  assert.ok(handler.includes("routeOverriddenKey(event, window.hrig.platform, shortcutOverrides)"));
+  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"));
+  const rawApp = stripComments(read("src/App.tsx"));
+  const runStart = rawApp.indexOf("const runShortcut =");
+  const runShortcut = rawApp.slice(runStart, rawApp.indexOf("useEffect(() => {\n    const handler", runStart));
+  assert.ok(runShortcut.includes('case "workspace.cyclePanelsNext": cyclePanel(1, source); return;'));
+  assert.ok(runShortcut.includes('case "workspace.cyclePanelsPrevious": cyclePanel(-1, source); return;'));
   assert.ok(
     has(
       handler,
@@ -735,7 +739,6 @@ test("panel-mru wiring: one pure module, one import each in App, the chord claim
     ),
     "the early return for Alt, composing and handled keys is untouched",
   );
-  assert.ok(!handler.includes("Escape"));
   assert.equal(count(app, 'addEventListener("keyup"'), 1);
   assert.equal(count(app, 'removeEventListener("keyup"'), 1);
   assert.equal(count(app, 'addEventListener("blur"'), 1);
@@ -779,7 +782,7 @@ test("panel-mru wiring: one pure module, one import each in App, the chord claim
     files.filter((name) =>
       stripComments(read("src/" + name)).includes("isPanelCycleKey("),
     ),
-    ["App.tsx", "shortcuts.ts"],
+    ["shortcuts.ts"],
   );
   assert.deepEqual(
     files.filter((name) =>
@@ -827,7 +830,7 @@ test("panel-mru docs: NAVIGATION.md says what Ctrl+Tab does, that the order is f
     "kept in memory",
     "not saved",
     "listed in the Keyboard shortcuts sheet",
-    "cannot be rebound",
+    "can be rebound",
     "nothing is typed or sent",
   ])
     assert.ok(p.includes(fragment), "missing: " + fragment);

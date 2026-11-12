@@ -20,6 +20,28 @@ export function SnippetExport({
   onBack: () => void;
 }) {
   const out = describeExport(snippets);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(out.json);
+      setError("");
+      setNotice("Snippet JSON copied to the clipboard.");
+    } catch {
+      setNotice("");
+      setError("Could not copy to the clipboard. Select the JSON below and copy it.");
+    }
+  };
+  const save = async () => {
+    try {
+      const result = await window.hrig.exportSnippets(out.json);
+      setError("");
+      setNotice(result.saved ? "Snippet JSON saved." : "Save canceled.");
+    } catch (reason) {
+      setNotice("");
+      setError(reason instanceof Error ? reason.message : "Could not save the snippet file.");
+    }
+  };
   return (
     <>
       <p className="field-note">
@@ -27,8 +49,10 @@ export function SnippetExport({
         as saved, and nothing else: no ids, host names or paths. Snippet text
         can hold anything you typed, so do not keep passwords, tokens or other
         secrets in snippets. HRig does not write this anywhere or send it
-        anywhere; select it and copy it yourself.
+        anywhere unless you choose Copy or Save to file.
       </p>
+      {error && <ErrorBox error={error} />}
+      {notice && <div className="field-note" role="status">{notice}</div>}
       {out.count === 0 ? (
         <p className="field-note">There are no saved snippets to export.</p>
       ) : (
@@ -51,6 +75,10 @@ export function SnippetExport({
               onFocus={(e) => e.currentTarget.select()}
             />
           </label>
+          <div className="modal-actions">
+            <button onClick={() => void copy()}>Copy JSON</button>
+            <button onClick={() => void save()}>Save to file</button>
+          </div>
         </>
       )}
       <div className="modal-actions">
@@ -73,6 +101,7 @@ export function SnippetImport({
   const [text, setText] = useState("");
   const [checked, setChecked] = useState<string | null>(null);
   const [done, setDone] = useState("");
+  const [fileError, setFileError] = useState("");
   const parsed = checked === null ? null : parseSnippets(checked);
   let previewId = 0;
   const plan =
@@ -104,6 +133,37 @@ export function SnippetImport({
           {done}
         </div>
       )}
+      {fileError && <ErrorBox error={fileError} />}
+      <label className="field">
+        Choose a JSON file
+        <input
+          type="file"
+          accept=".json,application/json"
+          onChange={async (event) => {
+            const input = event.currentTarget;
+            const file = input.files?.[0];
+            input.value = "";
+            if (!file) return;
+            setFileError("");
+            setDone("");
+            if (file.size > MAX_IMPORT_CHARS) {
+              setText("");
+              setChecked(null);
+              setFileError("That file is larger than 256 KB, which is more than HRig imports at once.");
+              return;
+            }
+            try {
+              const contents = await file.text();
+              setText(contents);
+              setChecked(contents);
+            } catch {
+              setText("");
+              setChecked(null);
+              setFileError("Could not read that file. Choose another JSON file or paste the text below.");
+            }
+          }}
+        />
+      </label>
       <label className="field">
         Exported snippets
         <textarea
@@ -114,6 +174,7 @@ export function SnippetImport({
             setText(e.target.value);
             setChecked(null);
             setDone("");
+            setFileError("");
           }}
         />
       </label>

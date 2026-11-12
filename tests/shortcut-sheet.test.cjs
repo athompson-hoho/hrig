@@ -184,14 +184,14 @@ const labelOf = (platform, id) =>
     .flatMap((g) => g.shortcuts)
     .find((s) => s.id === id).label;
 
-test("shortcut-sheet edit: the real sheet lists today's keys, edits one of three shortcuts through the pure checks, shows the new keys and puts them back", () => {
+test("shortcut-sheet edit: the real sheet lists today's keys, edits supported shortcuts through the pure checks, shows the new keys and puts them back", () => {
   for (const platform of ["win32", "darwin", "linux"]) {
     const h = sheetHarness(platform);
     const catalog = shortcuts.shortcutGroups(platform);
     const flat = catalog.flatMap((g) => g.shortcuts);
     assert.deepEqual(
       h.rows().map((r) => [r.id, r.keys]),
-      flat.map((s) => [s.label, s.keys]),
+      flat.map((s) => [s.label, s.keys.map((key) => key.replace(/^Control\+/, "Ctrl+"))]),
       platform + " the rows are the catalog, byte for byte",
     );
     assert.equal(h.sections(), catalog.length);
@@ -202,16 +202,16 @@ test("shortcut-sheet edit: the real sheet lists today's keys, edits one of three
         .map((n) => n.props.children),
       catalog.map((g) => g.title.toUpperCase()),
     );
-    // Only the three rebindable rows have Edit; nothing else changes, no Reset and no Reset all yet.
+    // Every supported row has Edit; the rest of the catalog remains fixed.
     const withEdit = h
       .rows()
       .filter((r) => r.buttons.length > 0)
       .map((r) => [r.id, r.buttons]);
-    assert.deepEqual(withEdit, [
-      [labelOf(platform, REOPEN), ["Edit"]],
-      [labelOf(platform, MAXIMIZE), ["Edit"]],
-      [labelOf(platform, FOCUS), ["Edit"]],
-    ]);
+    assert.deepEqual(
+      withEdit.map(([label]) => label),
+      flat.filter((shortcut) => ov.OVERRIDABLE_IDS.includes(shortcut.id)).map((shortcut) => shortcut.label),
+    );
+    assert.ok(withEdit.every(([, buttons]) => buttons.length === 1 && buttons[0] === "Edit"));
     assert.equal(h.button("Reset all"), undefined);
     assert.deepEqual(h.errors(), []);
     assert.deepEqual(h.calls, { saved: [], closed: 0 });
@@ -249,7 +249,7 @@ test("shortcut-sheet edit: the real sheet lists today's keys, edits one of three
       .shortcutGroups("win32")
       .flatMap((g) => g.shortcuts)
       .filter((s) => s.id !== FOCUS)
-      .map((s) => [s.label, s.keys]),
+      .map((s) => [s.label, s.keys.map((key) => key.replace(/^Control\+/, "Ctrl+"))]),
   );
   // A second shortcut keeps the first; a clash is refused with the reason and saves nothing.
   const reopen = labelOf("win32", REOPEN);
@@ -292,7 +292,7 @@ test("shortcut-sheet edit: the real sheet lists today's keys, edits one of three
     shortcuts
       .shortcutGroups("win32")
       .flatMap((g) => g.shortcuts)
-      .map((s) => [s.label, s.keys]),
+      .map((s) => [s.label, s.keys.map((key) => key.replace(/^Control\+/, "Ctrl+"))]),
     "back to the catalog exactly",
   );
   assert.equal(h.calls.closed, 0, "saving never closes the sheet");
@@ -374,11 +374,11 @@ test("shortcut-sheet states: search, the question mark, Escape and Enter in the 
   assert.equal(g.calls.saved.length, 1, "Escape saves nothing");
   assert.equal(g.calls.closed, 0);
   g.edit(maximize);
-  g.type(g.rows().find((r) => r.id === maximize).input, "Ctrl+Y");
+  g.type(g.rows().find((r) => r.id === maximize).input, "Ctrl+Shift+Tab");
   g.button("Save").props.onClick();
   assert.equal(
     g.errors()[0].props.error,
-    "Add Shift: Ctrl or Cmd with a letter alone belongs to terminals and the editor.",
+    "Ctrl/Cmd+Shift+Tab is reserved by the operating system on some computers.",
   );
   g.button("Cancel").props.onClick();
   assert.equal(g.rows().find((r) => r.id === maximize).input, undefined);
@@ -517,7 +517,7 @@ test("shortcut-sheet wiring: the sheet reads the pure module only, writes throug
   assert.equal(count(app, 'setModal("shortcuts")'), 1);
 });
 
-test("shortcut-sheet docs: NAVIGATION.md describes the editable sheet and its limits in one paragraph after the go to line one, and the sheet sentence no longer says read-only", () => {
+test("shortcut-sheet docs: NAVIGATION.md describes supported rebinding in one paragraph after the go to line one, and the sheet sentence no longer says read-only", () => {
   const raw = read("NAVIGATION.md");
   assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark is kept");
   assert.ok(raw.endsWith(".\n") && !raw.endsWith("\n\n"));
@@ -534,27 +534,15 @@ test("shortcut-sheet docs: NAVIGATION.md describes the editable sheet and its li
   );
   assert.ok(goTo >= 0 && at > goTo, "after the go to line paragraph");
   assert.ok(
-    paragraph.startsWith(
-      "Shortcut overrides: three shortcuts can be given other keys from the Keyboard shortcuts sheet: Reopen closed panel, Maximize panel and Toggle focus mode.",
-    ),
+    paragraph.startsWith("Shortcut overrides: use Edit in the Keyboard shortcuts sheet to change supported app shortcuts"),
   );
   for (const part of [
-    "Type in the search box to filter the list by words in a name or its keys",
-    "A row with an Edit button takes typed keys such as Ctrl+Shift+Y",
-    "Ctrl and Cmd both mean the main modifier of your computer, Shift is required and the key is one letter A to Z",
-    "Save checks them before anything is stored",
-    "(Shift with F, C, V or K)",
-    "(Shift with A, G, I, K, L, O, R or Z)",
-    "refused with the reason and nothing changes",
-    "Reset puts one shortcut back and Reset all removes every change, so the defaults always return",
-    "The sheet and the command center hints then show the keys now in use",
-    "the old keys of a moved shortcut stop running it and reach the terminal again",
-    "with no changes saved every key, label and hint is exactly what it was",
-    "Every other shortcut in the list is fixed",
-    "the command center, Quick Open, the panel finder, settings, project, sidebar, new shell and help keys and every terminal and editor key",
-    "This is a typed text field and not a key recorder, and nothing is typed or sent to a terminal or seat",
-    "the shortcuts.overrides text setting described in SETTINGS.md",
-    "See docs/shortcut-rebinding.md for what rebinding the fixed shortcuts would need.",
+    "including the command center, Quick Open, sidebar, new terminal, close panel, next/previous panel, maximize, focus terminal/editor/task queue, terminal search, reopen, and focus mode",
+    "The main modifier is Ctrl on Windows/Linux and Cmd on macOS; Control means the physical Control key",
+    "Letters, numbers, Tab, Enter, Escape, Space, punctuation and F1-F12 are supported",
+    "a chord already used by a terminal, editor, fixed app shortcut or another shortcut, or reserved by the operating system, is refused",
+    "Reset restores one default and Reset all restores every default",
+    "nothing is typed into a terminal or sent to a seat",
   ])
     assert.ok(paragraph.includes(part), "paragraph: " + part);
   const sheet = lines.find((l) =>
@@ -569,7 +557,7 @@ test("shortcut-sheet docs: NAVIGATION.md describes the editable sheet and its li
   assert.ok(sheet.includes("The sheet sends nothing to a terminal or seat"));
 });
 
-test("shortcut-sheet design note: docs/shortcut-rebinding.md says it is partial by design, why only three shortcuts can be rebound and what a fuller version needs", () => {
+test("shortcut-sheet design note: docs/shortcut-rebinding.md describes the implemented scope and safety rules", () => {
   const raw = read("docs/shortcut-rebinding.md");
   assert.ok(/^[\n\x20-\x7e]*$/.test(raw), "ASCII only");
   assert.ok(raw.endsWith(".\n") && !raw.endsWith("\n\n"));
@@ -577,31 +565,18 @@ test("shortcut-sheet design note: docs/shortcut-rebinding.md says it is partial 
   assert.equal(lines[0], "# Rebinding shortcuts");
   assert.deepEqual(
     lines.filter((l) => l.startsWith("## ")),
-    [
-      "## What exists",
-      "## Why only these three",
-      "## What keeps the three safe",
-      "## What a fuller version would need",
-    ],
+    ["## Supported actions", "## Chords and conflicts", "## Scope and limits"],
   );
-  assert.ok(
-    lines.includes(
-      "Status: partial by design. Three shortcuts can be rebound; every other shortcut is fixed. A fuller version is a design note only. Not implemented.",
-    ),
-  );
+  assert.ok(lines.some((line) => line.startsWith("Status: implemented for high-use app actions.")));
   for (const part of [
     "`shortcuts.overrides`",
     "`src/shortcut-overrides.ts`",
-    "`isReopenPanelKey`, `isMaximizePanelKey`, `isFocusModeKey`",
-    "inline comparisons that also claim the key in a separate block",
-    "`src/terminal-keys.ts` and `src/terminal-zoom.ts`",
-    "never a bare letter, Ctrl plus a letter alone, an Alt chord or a function key",
-    "The terminal ones come from running the real `classifyTerminalKey`",
-    "checked by a test against the Monaco package that is installed",
-    "The old keys of a moved shortcut are released",
-    "A per-platform map",
-    "A key recorder",
-    "Export and import of key maps",
+    "command center, Quick Open, sidebar toggle, new terminal, close selected panel",
+    "physical Control key",
+    "known operating-system shortcuts",
+    "Terminal conflicts are checked with the real `classifyTerminalKey`",
+    "editor's Shift-letter list is checked against the installed Monaco package by tests",
+    "A moved shortcut's old chord is released",
   ])
     assert.ok(raw.includes(part), "the note says: " + part);
   assert.ok(

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("hrig", {
   terminalLog: invoke('terminal:log'),
   onTerminalLog: callback => { const listener = (_event,state) => callback(state); ipcRenderer.on('terminal:log-state',listener); return () => ipcRenderer.removeListener('terminal:log-state',listener); },
   exportTerminal: invoke('terminal:export'),
+  exportSnippets: invoke('snippets:export'),
   openTerminalLink: invoke('terminal:open-link'),
   clipboardHasImage: invoke('terminal:clipboard-image'),
   pasteClipboardImage: invoke('terminal:paste-image'),

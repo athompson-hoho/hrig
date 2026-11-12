@@ -758,12 +758,7 @@ test("panel-maximize adds no resize traffic: the terminal still ignores a zero-s
 test("panel-maximize chord, Escape and docs: the shortcut is claimed before the generic chords, acts only with no dialog open, never touches Escape, and NAVIGATION.md says what it does", () => {
   const DOT = String.fromCharCode(183);
   const app = appText();
-  assert.ok(
-    has(
-      app,
-      'import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";',
-    ),
-  );
+  assert.ok(app.includes('import { maximizeShortcutHint } from "./shortcuts";'));
   assert.ok(
     has(
       app,
@@ -785,54 +780,19 @@ test("panel-maximize chord, Escape and docs: the shortcut is claimed before the 
     "const handler = (event: KeyboardEvent) => {",
     "const windows = [",
   );
-  const order = [
-    "if (isHelpKey(",
-    "if (isReopenPanelKey(event, window.hrig.platform)) {",
-    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
-    "if (event.ctrlKey || event.metaKey) {",
-  ].map((needle) => handler.indexOf(tight(needle)));
-  assert.ok(
-    order[0] >= 0 &&
-      order[0] < order[1] &&
-      order[1] < order[2] &&
-      order[2] < order[3],
-    "claim order: " + order,
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (isMaximizePanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleMaximize("toggle", event.target); return; }',
-    ),
-  );
+  assert.ok(handler.indexOf("terminalOwnsKey(") < handler.indexOf("routeOverriddenKey("));
+  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"));
+  assert.ok(between(app, "const runShortcut =", "useEffect(() => {\n    const handler").includes('case "workspace.maximizePanel": toggleMaximize("toggle", source); return;'));
   assert.ok(
     has(
       handler,
       "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
     ),
   );
-  assert.ok(
-    has(
-      handler,
-      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
-    ),
-    "Reopen closed panel is untouched",
-  );
   assert.equal(
     count(app, "toggleMaximize("),
-    4,
-    "two commands, the chord and the rebound chord",
+    3,
+    "two command entries and the shared shortcut action",
   );
   assert.equal(
     count(app, '"Escape"'),
@@ -844,12 +804,7 @@ test("panel-maximize chord, Escape and docs: the shortcut is claimed before the 
     2,
     "no second key handler",
   );
-  const branch = between(
-    handler,
-    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
-    "if (event.ctrlKey || event.metaKey) {",
-  );
-  assert.ok(!/Escape/.test(branch));
+  assert.ok(!/Escape/.test(handler));
   const files = fs
     .readdirSync(path.join(root, "src"))
     .filter((name) => /\.(ts|tsx)$/.test(name))
@@ -858,7 +813,7 @@ test("panel-maximize chord, Escape and docs: the shortcut is claimed before the 
     files.filter((name) =>
       stripComments(read("src/" + name)).includes("isMaximizePanelKey("),
     ),
-    ["App.tsx", "shortcuts.ts"],
+    ["shortcuts.ts"],
   );
   assert.deepEqual(
     files.filter((name) =>

@@ -593,12 +593,7 @@ test("focus-mode is session view state: nothing is stored, the preference is nev
 test("focus-mode chord, hint and docs: the shortcut is claimed after the other chords and before the generic ones, acts only with no dialog open, is found in no other handler, and NAVIGATION.md says what it does", () => {
   const DOT = String.fromCharCode(183);
   const app = appText();
-  assert.ok(
-    has(
-      app,
-      'import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";',
-    ),
-  );
+  assert.ok(app.includes('import { focusModeShortcutHint } from "./shortcuts";'));
   assert.ok(
     has(
       app,
@@ -613,67 +608,20 @@ test("focus-mode chord, hint and docs: the shortcut is claimed after the other c
     "const handler = (event: KeyboardEvent) => {",
     "const windows = [",
   );
-  const order = [
-    "if (isHelpKey(",
-    "if (isReopenPanelKey(event, window.hrig.platform)) {",
-    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
-    "if (isFocusModeKey(event, window.hrig.platform)) {",
-    "if (event.ctrlKey || event.metaKey) {",
-  ].map((needle) => handler.indexOf(tight(needle)));
-  assert.ok(
-    order.every((at, i) => at >= 0 && (i === 0 || order[i - 1] < at)),
-    "claim order: " + order,
-  );
-  assert.ok(
-    has(
-      handler,
-      "if (isFocusModeKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode(); return; }",
-    ),
-    "claimed always, acts only with no dialog open",
-  );
+  assert.ok(handler.indexOf("terminalOwnsKey(") < handler.indexOf("routeOverriddenKey("));
+  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"), "the shared route is claimed but acts only outside dialogs");
+  assert.ok(between(app, "const runShortcut =", "useEffect(() => {\n    const handler").includes('case "workspace.focusMode": toggleFocusMode(); return;'));
   assert.equal(
     count(app, "toggleFocusMode("),
-    2,
-    "the chord and the rebound chord",
+    1,
+    "the shared route invokes focus mode once",
   );
-  assert.equal(count(app, "isFocusModeKey("), 1);
-  // What was there before is untouched: the early return, the claimed letters,
-  // the other claimed chords and Ctrl+B.
+  assert.equal(count(app, "isFocusModeKey("), 0);
+  // Unowned keys and terminal-owned keys still get first refusal.
   assert.ok(
     has(
       handler,
       "if (event.defaultPrevented || event.isComposing || event.altKey) return;",
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")',
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (event.key.toLowerCase() === "b") { event.preventDefault(); setSidebar((v) => !v); }',
-    ),
-    "Ctrl+B still toggles the sidebar",
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (event.shiftKey && event.key.toLowerCase() === "t") { event.preventDefault(); openShell(); }',
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      "if (isReopenPanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel(); return; }",
-    ),
-  );
-  assert.ok(
-    has(
-      handler,
-      'if (isMaximizePanelKey(event, window.hrig.platform)) { event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) toggleMaximize("toggle", event.target); return; }',
     ),
   );
   assert.ok(
@@ -707,7 +655,7 @@ test("focus-mode chord, hint and docs: the shortcut is claimed after the other c
     files.filter((name) =>
       stripComments(read("src/" + name)).includes("isFocusModeKey("),
     ),
-    ["App.tsx", "shortcuts.ts"],
+    ["shortcuts.ts"],
   );
   assert.deepEqual(
     files.filter((name) =>

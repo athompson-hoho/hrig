@@ -31,6 +31,18 @@ function registerTerminalTools({ handle, dialog, shell, getWindow, fs, clipboard
     await fs.writeFile(result.filePath, text, "utf8");
     return { saved: true };
   });
+  handle("snippets:export", async (_event, text) => {
+    if (typeof text !== "string" || Buffer.byteLength(text, "utf8") > 32 * 1024 * 1024)
+      throw new Error("Snippet export exceeds the 32 MiB limit.");
+    const result = await dialog.showSaveDialog(getWindow(), {
+      title: "Export terminal snippets",
+      defaultPath: "terminal-snippets.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+    await fs.writeFile(result.filePath, text, "utf8");
+    return { saved: true };
+  });
   handle("terminal:open-link", async (_event, value) => {
     const url = externalUrl(value);
     const result = await dialog.showMessageBox(getWindow(), {

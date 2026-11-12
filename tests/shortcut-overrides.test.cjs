@@ -57,11 +57,15 @@ function press(text, extra = {}) {
     ...extra,
   };
   for (const part of text.split("+")) {
-    if (part === "Ctrl") event.ctrlKey = true;
+    if (part === "Ctrl" || part === "Control") event.ctrlKey = true;
     else if (part === "Cmd") event.metaKey = true;
     else if (part === "Shift") event.shiftKey = true;
-    else event.key = event.shiftKey ? part.toUpperCase() : part;
+    else {
+      const named = ["Tab", "Escape", "Enter", "Space", "Comma", "Period", "Slash", "Backslash", "Minus", "Equal", "Plus", "Semicolon", "Quote", "BracketLeft", "BracketRight", "Backquote"];
+      event.key = named.find((key) => key.toLowerCase() === part.toLowerCase()) || (event.shiftKey ? part.toUpperCase() : part);
+    }
   }
+  event.key = ({ Space: " ", Comma: ",", Period: ".", Slash: "/", Backslash: "\\", Minus: "-", Equal: "=", Plus: "+", Semicolon: ";", Quote: "'", BracketLeft: "[", BracketRight: "]", Backquote: "`" })[event.key] || event.key;
   return event;
 }
 
@@ -85,6 +89,22 @@ function handlerHarness(platform, overridesText) {
     isPanelCycleKey: catalog.isPanelCycleKey,
     cyclePanel: () => calls.push("cycle"),
     routeOverriddenKey: ov.routeOverriddenKey,
+    runShortcut: (id) => {
+      const actions = {
+        "workspace.palette": "palette",
+        "workspace.quickOpen": "quickOpen",
+        "workspace.sidebar": "sidebar",
+        "workspace.newShell": "shell",
+        "workspace.closePanel": "close",
+        "workspace.cyclePanelsNext": "cycle",
+        "workspace.cyclePanelsPrevious": "cycle",
+        "workspace.reopenPanel": "reopen",
+        "workspace.maximizePanel": "maximize:toggle",
+        "workspace.focusMode": "focus",
+      };
+      const action = actions[id];
+      if (action) calls.push(action);
+    },
     window: { hrig: { platform } },
     shortcutOverrides: ov.parseOverrideText(overridesText, platform).map,
     openShortcuts: () => calls.push("shortcuts"),
@@ -147,6 +167,13 @@ test("shortcut-overrides tracer: a saved override text moves one chord in the re
     claimed: false,
     touched: 0,
   });
+  const expanded = handlerHarness("linux", "workspace.palette=Ctrl+Shift+9");
+  assert.deepEqual(expanded.key("Ctrl+Shift+9"), {
+    ran: ["palette"], claimed: true, touched: 2,
+  });
+  assert.deepEqual(expanded.key("Ctrl+K"), {
+    ran: [], claimed: false, touched: 0,
+  }, "the moved default chord is released");
 
   // The text goes through the real setting rules, then the real parser, then the handler.
   const text = "workspace.reopenPanel=Ctrl+Shift+Y";
@@ -223,7 +250,7 @@ test("shortcut-overrides tracer: a saved override text moves one chord in the re
     "garbage",
     "workspace.reopenPanel=Ctrl+Shift+C",
     "workspace.reopenPanel=Ctrl+Shift+P",
-    "workspace.sidebar=Ctrl+Shift+Y",
+    "workspace.sidebar=Ctrl+Shift+P",
     "workspace.reopenPanel=",
     ",,=,",
   ]) {
@@ -234,7 +261,7 @@ test("shortcut-overrides tracer: a saved override text moves one chord in the re
   }
 });
 
-test("shortcut-overrides chord: one Shift plus letter chord, canonical, never throws", () => {
+test("shortcut-overrides chord: supported keys and physical Control are canonical, malformed chords never throw", () => {
   const ok = [
     ["Ctrl+Shift+Y", "Ctrl+Shift+Y"],
     ["ctrl+shift+y", "Ctrl+Shift+Y"],
@@ -242,7 +269,12 @@ test("shortcut-overrides chord: one Shift plus letter chord, canonical, never th
     ["Cmd+Shift+Y", "Ctrl+Shift+Y"],
     ["command+shift+y", "Ctrl+Shift+Y"],
     ["Mod+Shift+j", "Ctrl+Shift+J"],
-    ["control+Shift+b", "Ctrl+Shift+B"],
+    ["control+Shift+b", "Control+Shift+B"],
+    ["Control+Tab", "Control+Tab"],
+    ["Ctrl+Tab", "Ctrl+Tab"],
+    ["Ctrl+1", "Ctrl+1"],
+    ["Ctrl+Shift+F5", "Ctrl+Shift+F5"],
+    ["Ctrl+Shift+Period", "Ctrl+Shift+Period"],
     ["Shift+Ctrl+j", "Ctrl+Shift+J"],
     ["Y+Shift+Ctrl", "Ctrl+Shift+Y"],
     ["  Ctrl + Shift + y  ", "Ctrl+Shift+Y"],
@@ -259,15 +291,11 @@ test("shortcut-overrides chord: one Shift plus letter chord, canonical, never th
     [undefined, "Type a shortcut such as Ctrl+Shift+Y."],
     [42, "Type a shortcut such as Ctrl+Shift+Y."],
     [{}, "Type a shortcut such as Ctrl+Shift+Y."],
-    ["Y", "Start with Ctrl or Cmd, for example Ctrl+Shift+Y."],
-    ["Shift+Y", "Start with Ctrl or Cmd, for example Ctrl+Shift+Y."],
-    [
-      "Ctrl+Y",
-      "Add Shift: Ctrl or Cmd with a letter alone belongs to terminals and the editor.",
-    ],
-    ["Ctrl+Shift", "Use exactly one letter key, for example Ctrl+Shift+Y."],
-    ["Ctrl+Shift+Y+Z", "Use exactly one letter key, for example Ctrl+Shift+Y."],
-    ["Ctrl+Cmd+Shift+Y", "Use Ctrl or Cmd once; they mean the same key here."],
+    ["Y", "Start with Ctrl, Cmd or Control, for example Ctrl+Shift+Y."],
+    ["Shift+Y", "Start with Ctrl, Cmd or Control, for example Ctrl+Shift+Y."],
+    ["Ctrl+Shift", "Use exactly one key, for example Ctrl+Shift+Y."],
+    ["Ctrl+Shift+Y+Z", "Use exactly one key, for example Ctrl+Shift+Y."],
+    ["Ctrl+Cmd+Shift+Y", "Use the main modifier or physical Control once."],
     ["Ctrl+Shift+Shift+Y", "Use Shift once."],
     [
       "Ctrl+Alt+Shift+Y",
@@ -293,13 +321,11 @@ test("shortcut-overrides chord: one Shift plus letter chord, canonical, never th
       "+",
       "Write modifiers and one letter joined with +, for example Ctrl+Shift+Y.",
     ],
-    ["Ctrl+Shift+1", "Only the letters A to Z can be used."],
-    ["Ctrl+Shift+Plus", "Only the letters A to Z can be used."],
-    ["Ctrl+Shift+F5", "Only the letters A to Z can be used."],
-    ["Ctrl+Shift+?", "Only the letters A to Z can be used."],
+    ["Ctrl+Shift+NotAKey", "Use a letter, number, Tab, Enter, Escape, Space, punctuation key or F1-F12."],
+    ["Ctrl+Shift+?", "Use a letter, number, Tab, Enter, Escape, Space, punctuation key or F1-F12."],
     [
       "Ctrl+Shift+" + String.fromCharCode(233),
-      "Only the letters A to Z can be used.",
+      "Use a letter, number, Tab, Enter, Escape, Space, punctuation key or F1-F12.",
     ],
     ["Ctrl+Shift+" + "Y".repeat(40), "That shortcut is too long."],
   ];
@@ -344,7 +370,7 @@ test("shortcut-overrides chord: one Shift plus letter chord, canonical, never th
       input += pieces[rand(pieces.length)] + (rand(3) === 0 ? "" : "+");
     const result = ov.parseChord(input);
     if (result.ok) {
-      assert.match(result.chord, /^Ctrl\+Shift\+[A-Z]$/, input);
+      assert.match(result.chord, /^(Ctrl|Control)\+(Shift\+)?([A-Z]|\d|Tab|Enter|Escape|Space|Comma|Period|Slash|Backslash|Minus|Equal|Plus|Semicolon|Quote|BracketLeft|BracketRight|Backquote|F(?:[1-9]|1[0-2]))$/, input);
       assert.deepEqual(ov.parseChord(result.chord), result, input);
     } else {
       assert.equal(typeof result.error, "string", input);
@@ -442,7 +468,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     "Q",
     "S",
     "U",
-    "W",
     "X",
     "Y",
   ]);
@@ -455,7 +480,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     "Q",
     "S",
     "U",
-    "W",
     "X",
     "Y",
   ]);
@@ -468,7 +492,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     "Q",
     "S",
     "U",
-    "W",
     "X",
     "Y",
   ]);
@@ -491,20 +514,21 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
       "Ctrl/Cmd+Shift+Y is already used by: Reopen the file or seat panel closed last.",
     ],
   );
-  assert.deepEqual(reasons({ [REOPEN]: "Ctrl+Y" }), [
-    "Add Shift: Ctrl or Cmd with a letter alone belongs to terminals and the editor.",
-  ]);
+  assert.deepEqual(reasons({ [REOPEN]: "Ctrl+Y" }), []);
   assert.deepEqual(
     reasons({ [REOPEN]: "Ctrl+Shift+H" }),
     [],
     "its own default is not a clash",
   );
+  for (const chord of ["Ctrl+Q", "Ctrl+W", "Ctrl+Tab", "Ctrl+Shift+Escape"])
+    assert.ok(ov.reservedReason(chord).includes("reserved by the operating system"), chord);
+  assert.equal(ov.reservedReason("Control+Tab"), "", "physical Control+Tab is the panel switch default");
 
   // validateOverrideMap: clean map plus errors, unknown ids and junk values dropped.
   const checked = ov.validateOverrideMap(groups, {
     [REOPEN]: "cmd+shift+j",
     [MAXIMIZE]: "Ctrl+Shift+C",
-    "workspace.sidebar": "Ctrl+Shift+Y",
+    "workspace.sidebar": "Ctrl+Shift+P",
     constructor: "Ctrl+Shift+Y",
     [FOCUS]: 5,
   });
@@ -551,7 +575,7 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
       "=Ctrl+Shift+Y",
       REOPEN + "=",
       REOPEN + "=Ctrl+Shift+Y=Z",
-      "workspace.sidebar=Ctrl+Shift+Y",
+      "workspace.sidebar=Ctrl+Shift+P",
       "__proto__=Ctrl+Shift+Y",
       FOCUS + "=Ctrl+Shift+Y",
       FOCUS + "=Ctrl+Shift+J",
@@ -567,9 +591,9 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
       "Not in the form id=keys.",
       "Not in the form id=keys.",
       "That shortcut cannot be rebound.",
-      "That shortcut cannot be rebound.",
       "That shortcut is set twice.",
       "Type a shortcut such as Ctrl+Shift+Y.",
+      "Ctrl/Cmd+Shift+P is already used by: Find open panels.",
     ],
   );
   for (const value of [undefined, null, 0, {}, [], "", "   "])
@@ -579,7 +603,7 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
   );
   assert.deepEqual(tooLong.map, {});
   assert.equal(tooLong.ignored.length, 1);
-  assert.equal(ov.MAX_OVERRIDES_TEXT, 300);
+  assert.equal(ov.MAX_OVERRIDES_TEXT, 1000);
 
   // The text round trip and the edit helpers.
   const map = { [FOCUS]: "Ctrl+Shift+Y", [REOPEN]: "Ctrl+Shift+J" };
@@ -618,12 +642,12 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     ov.saveOverride("", REOPEN, "Ctrl+Shift+C", "win32").ok,
     false,
   );
-  assert.deepEqual(ov.saveOverride("", REOPEN, "Ctrl+Y", "win32").ok, false);
+  assert.deepEqual(ov.saveOverride("", REOPEN, "Ctrl+Y", "win32").ok, true);
   assert.deepEqual(
     ov.saveOverride("", "workspace.sidebar", "Ctrl+Shift+Y", "win32"),
     {
-      ok: false,
-      error: "This shortcut is fixed and cannot be rebound.",
+      ok: true,
+      text: "workspace.sidebar=Ctrl+Shift+Y",
     },
   );
   assert.deepEqual(
@@ -642,7 +666,12 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
   assert.equal(ov.defaultChord(REOPEN), "Ctrl+Shift+H");
   assert.equal(ov.defaultChord(MAXIMIZE), "Ctrl+Shift+M");
   assert.equal(ov.defaultChord(FOCUS), "Ctrl+Shift+D");
-  assert.deepEqual([...ov.OVERRIDABLE_IDS], [REOPEN, MAXIMIZE, FOCUS]);
+  assert.deepEqual([...ov.OVERRIDABLE_IDS], [
+    "workspace.palette", "workspace.quickOpen", "workspace.cyclePanelsNext", "workspace.cyclePanelsPrevious",
+    "workspace.sidebar", "workspace.newShell", "workspace.closePanel",
+    "workspace.focusTerminal", "workspace.focusEditor", "workspace.focusTasks",
+    REOPEN, MAXIMIZE, FOCUS, "terminal.find",
+  ]);
   assert.equal(ov.OVERRIDES_SETTING, "shortcuts.overrides");
 });
 
@@ -771,11 +800,11 @@ test("shortcut-overrides apply: an empty map leaves the catalog exactly as it is
 
   // The router: empty map answers null for every key; guards; release; and a seeded model walk.
   for (const letter of LETTERS)
-    for (const platform of PLATFORMS)
-      assert.equal(
-        ov.routeOverriddenKey(press("Ctrl+Shift+" + letter), platform, {}),
-        null,
-      );
+    for (const platform of PLATFORMS) {
+      const routed = ov.routeOverriddenKey(press((platform === "darwin" ? "Cmd" : "Ctrl") + "+Shift+" + letter), platform, {});
+      const expected = ov.OVERRIDABLE_IDS.find((id) => ov.defaultChord(id) === "Ctrl+Shift+" + letter);
+      assert.deepEqual(routed, expected ? { id: expected } : null);
+    }
   const router = (event, platform, m) =>
     ov.routeOverriddenKey(event, platform, m);
   const one = { [MAXIMIZE]: "Ctrl+Shift+Y" };
@@ -790,9 +819,9 @@ test("shortcut-overrides apply: an empty map leaves the catalog exactly as it is
     router(press("Ctrl+Shift+M", { repeat: true }), "linux", one),
     { id: null },
   );
-  assert.equal(
+  assert.deepEqual(
     router(press("Ctrl+Shift+Y", { repeat: true }), "linux", one),
-    null,
+    { id: MAXIMIZE },
   );
   assert.equal(
     router(press("Ctrl+Shift+Y", { altKey: true }), "linux", one),
@@ -807,16 +836,27 @@ test("shortcut-overrides apply: an empty map leaves the catalog exactly as it is
     null,
   );
   assert.equal(router(press("Ctrl+Y"), "linux", one), null);
-  assert.equal(
+  assert.deepEqual(
     router(press("Ctrl+Shift+H"), "linux", one),
-    null,
-    "an unmoved default is not the router's",
+    { id: REOPEN },
+    "an unmoved default action is routed as well",
   );
   assert.equal(router(press("Cmd+Shift+Y"), "linux", one), null);
   assert.equal(router(press("Ctrl+Shift+Y"), "darwin", one), null);
   assert.deepEqual(router(press("Cmd+Shift+Y"), "darwin", one), {
     id: MAXIMIZE,
   });
+  assert.deepEqual(router(press("Control+Tab"), "darwin", {}), {
+    id: "workspace.cyclePanelsNext",
+  });
+  assert.deepEqual(router(press("Control+Shift+Tab"), "darwin", {}), {
+    id: "workspace.cyclePanelsPrevious",
+  });
+  assert.deepEqual(
+    router(press("Ctrl+Shift+Period"), "linux", { [MAXIMIZE]: "Ctrl+Shift+Period" }),
+    { id: MAXIMIZE },
+    "named punctuation routes to KeyboardEvent.key",
+  );
   assert.equal(router(press("Ctrl+Cmd+Shift+Y"), "darwin", one), null);
   assert.equal(router(press("Ctrl+Cmd+Shift+Y"), "linux", one), null);
   assert.deepEqual(
@@ -837,7 +877,7 @@ test("shortcut-overrides apply: an empty map leaves the catalog exactly as it is
     { [REOPEN]: "Ctrl+Shift+Y", [FOCUS]: "Ctrl+Shift+J" },
     { [REOPEN]: "Ctrl+Shift+M", [MAXIMIZE]: "Ctrl+Shift+H" },
   ];
-  const defaultsOf = { [REOPEN]: "H", [MAXIMIZE]: "M", [FOCUS]: "D" };
+  const defaultsOf = Object.fromEntries(ov.OVERRIDABLE_IDS.map((id) => [id, ov.defaultChord(id).split("+").at(-1)]));
   for (let run = 0; run < 600; run++) {
     const m = maps[rand(maps.length)];
     const platform = PLATFORMS[rand(3)];
@@ -859,11 +899,9 @@ test("shortcut-overrides apply: an empty map leaves the catalog exactly as it is
     const base = primary && event.shiftKey && !event.altKey;
     let expected = null;
     if (Object.keys(m).length > 0 && base) {
-      const live =
-        !event.isComposing && !event.repeat && !event.defaultPrevented;
       const l = event.key.toUpperCase();
       const hit = Object.keys(m).find((id) => m[id].slice(-1) === l);
-      if (live && hit) expected = { id: hit };
+      if (!event.isComposing && !event.defaultPrevented && hit) expected = { id: hit };
       else if (Object.keys(m).some((id) => defaultsOf[id] === l))
         expected = { id: null };
     }
@@ -909,7 +947,7 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
     "a;b",
     "a<b>",
     "a" + String.fromCharCode(10) + "b",
-    "x".repeat(301),
+    "x".repeat(1001),
   ])
     assert.throws(
       () => settings.validateOverrides({ "shortcuts.overrides": value }),
@@ -1025,13 +1063,13 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
     "the catalog module exports only its known names",
   );
 
-  // App.tsx: one import, one memo, one block between the help key and the reopen chord.
+  // App.tsx: one import, one memo, and one map-driven block after terminal-owned controls.
   const app = tight(stripComments(read("src/App.tsx")));
   const has = (text, part) => text.includes(tight(part));
   assert.ok(
     has(
       app,
-      'import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";',
+      'import { chordHint, defaultChord, parseOverrideText, routeOverriddenKey, withEffectiveHints, type OverridableId } from "./shortcut-overrides";',
     ),
   );
   assert.ok(
@@ -1046,10 +1084,8 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
   );
   const order = [
     "if (isHelpKey(",
+    "if (terminalOwnsKey(",
     "const rebound = routeOverriddenKey(",
-    "if (isReopenPanelKey(event, window.hrig.platform)) {",
-    "if (isMaximizePanelKey(event, window.hrig.platform)) {",
-    "if (isFocusModeKey(event, window.hrig.platform)) {",
     "if (event.ctrlKey || event.metaKey) {",
   ].map((needle) => handler.indexOf(tight(needle)));
   assert.ok(
@@ -1059,7 +1095,7 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
   assert.ok(
     has(
       handler,
-      'const rebound = routeOverriddenKey(event, window.hrig.platform, shortcutOverrides); if (rebound !== null) { if (rebound.id === null) return; event.preventDefault(); event.stopPropagation(); if (modal === null && !hasOpenDialog(event.target)) { if (rebound.id === "workspace.reopenPanel") reopenClosedPanel(); else if (rebound.id === "workspace.maximizePanel") toggleMaximize("toggle", event.target); else toggleFocusMode(); } return; }',
+      'const rebound = routeOverriddenKey(event, window.hrig.platform, shortcutOverrides); if (rebound !== null) { if (rebound.id === null) return; event.preventDefault(); event.stopPropagation(); if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target); return; }',
     ),
     "the whole block",
   );
@@ -1083,6 +1119,9 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
   assert.equal(count(app, "pickFirst(commands"), 0);
   assert.equal(count(app, "filterCommands(commands"), 0);
   assert.equal(count(app, "parseOverrideText("), 1);
+  const actions = app.slice(app.indexOf("const runShortcut = (id:"), app.indexOf("useEffect(() => {", app.indexOf("const runShortcut = (id:")));
+  for (const id of ov.OVERRIDABLE_IDS)
+    assert.ok(actions.includes('case "' + id + '":') || actions.includes('case "' + id + '":{'), "App action for " + id);
   const files = fs
     .readdirSync(path.join(root, "src"))
     .filter((n) => /\.(ts|tsx)$/.test(n))
@@ -1094,10 +1133,8 @@ test("shortcut-overrides wiring: the setting is plain text with the generic rule
     ["App.tsx", "shortcut-overrides.ts"],
   );
   assert.deepEqual(
-    files.filter((n) =>
-      stripComments(read("src/" + n)).includes("isReopenPanelKey("),
-    ),
-    ["App.tsx", "shortcuts.ts"],
+    files.filter((n) => stripComments(read("src/" + n)).includes("isReopenPanelKey(")),
+    ["shortcuts.ts"],
   );
   assert.equal(
     count(app, 'addEventListener("keydown"'),
@@ -1121,7 +1158,7 @@ test("shortcut-overrides docs: SETTINGS.md has the row and one paragraph that sa
   );
   for (const part of [
     "| empty |",
-    "three shortcuts that can be rebound",
+    "up to 14 app shortcuts that can be rebound",
     "`workspace.reopenPanel=Ctrl+Shift+J`",
     "Empty (the default) keeps every shortcut as it is",
     "see Shortcut overrides below",
@@ -1139,27 +1176,19 @@ test("shortcut-overrides docs: SETTINGS.md has the row and one paragraph that sa
     1,
   );
   assert.ok(lines[at - 1] === "" && lines[at + 1] === "");
-  assert.ok(
-    lines[at + 2].startsWith("Terminal zoom: Ctrl/Cmd"),
-    "before the Terminal zoom paragraph",
-  );
+  assert.ok(lines[at + 2].startsWith("Saved snippet transfer:"));
+  assert.equal(lines[at + 3], "");
+  assert.ok(lines[at + 4].startsWith("Terminal zoom: Ctrl/Cmd"));
   assert.ok(lines[at - 2] === rows[0], "directly after the table row");
   assert.ok(/^[\x20-\x7e]*$/.test(lines[at]), "printable ASCII on one line");
-  assert.ok(
-    !/focus-?mode/i.test(raw),
-    "SETTINGS.md still never names the focus mode",
-  );
   for (const part of [
     "comma-separated `id=keys` pairs",
     "a setting holds a single value and the settings checks refuse braces, semicolons and angle brackets",
-    "Only the three shortcuts listed in NAVIGATION.md under Shortcut overrides can be rebound",
-    "every other row in the sheet is fixed",
-    "Ctrl, Cmd or Mod (each means the main modifier of your computer, so one saved text works everywhere)",
-    "Shift is required and Alt is refused",
-    "(Shift with F, C, V or K)",
-    "(Shift with A, G, I, K, L, O, R or Z)",
-    "(for example Shift with P or T)",
-    "The old keys of a moved shortcut are released and go back to the terminal",
+    "The app shortcut rows with Edit buttons listed in NAVIGATION.md under Shortcut overrides can be rebound",
+    "terminal and editor commands remain fixed",
+    "Use Ctrl, Cmd or Mod for the main modifier of your computer",
+    "Shift is optional",
+    "The old keys of a moved shortcut are released to the focused panel",
     "ignored, never an error, and the sheet lists it",
     "Empty (the default) leaves every key and label exactly as before",
     "in the user scope or, when the project already has its own value, in the project scope",
@@ -1167,11 +1196,7 @@ test("shortcut-overrides docs: SETTINGS.md has the row and one paragraph that sa
     "nothing is sent to the shell or the seat",
   ])
     assert.ok(lines[at].includes(part), "paragraph: " + part);
-  assert.ok(
-    lines.some((l) =>
-      l.includes("remappable shortcuts for the fixed keys, per-language"),
-    ),
-  );
+  assert.ok(lines.some((l) => l.startsWith("Saved snippet transfer:")));
   assert.equal(
     lines[0].replace(String.fromCharCode(0xfeff), ""),
     "# HRig settings",

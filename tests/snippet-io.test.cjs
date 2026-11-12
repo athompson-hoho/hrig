@@ -143,14 +143,14 @@ function dialogHarness(extra = {}) {
   };
 }
 
-test("snippet-io tracer: the real dialog exports name and text only, previews an import with counts, and adds nothing until Import is chosen", () => {
+test("snippet-io tracer: the real dialog exports name and text only, previews imports, and adds nothing until Import is chosen", () => {
   const saved = [
     { id: "a1", name: "status", text: "git status" },
     { id: "a2", name: "attach", text: "tmux attach" },
   ];
   const d = dialogHarness({ snippets: saved });
 
-  // Export: selectable read-only JSON with the format and version, no ids, nothing written or sent.
+  // Export: selectable JSON with the format and version, no ids or workspace data.
   d.button("Export snippets").props.onClick();
   const out = d.textarea();
   assert.equal(out.props.readOnly, true);
@@ -163,6 +163,8 @@ test("snippet-io tracer: the real dialog exports name and text only, previews an
     ],
   });
   assert.ok(!out.props.value.includes("a1"), "no ids in an export");
+  assert.ok(d.button("Copy JSON"));
+  assert.ok(d.button("Save to file"));
   assert.ok(d.all().some((n) => d.text(n).includes("do not keep passwords")));
   assert.deepEqual(d.calls.inserted, []);
   assert.deepEqual(d.calls.changed, []);
@@ -760,7 +762,53 @@ test("snippet-io export and merge: an export is name and text only and reads bac
   }
 });
 
-test("snippet-io wiring: the pure module and the import view touch no clipboard, file, window or terminal, and the dialog only switches views", () => {
+test("snippet-io direct transfer: copy/save export and chosen-file import preserve validation and explicit apply", async () => {
+  const d = dialogHarness({ snippets: [{ id: "saved", name: "status", text: "git status" }] });
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const written = [];
+  const saved = [];
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { hrig: { exportSnippets: async (text) => { saved.push(text); return { saved: true }; } } },
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: async (text) => written.push(text) } },
+  });
+  try {
+    d.button("Export snippets").props.onClick();
+    const expected = d.textarea().props.value;
+    await d.button("Copy JSON").props.onClick();
+    assert.deepEqual(written, [expected]);
+    assert.ok(d.statuses().some((status) => status.includes("copied")));
+    await d.button("Save to file").props.onClick();
+    assert.deepEqual(saved, [expected]);
+    assert.ok(d.statuses().some((status) => status.includes("saved")));
+
+    d.button("Back").props.onClick();
+    d.button("Import snippets").props.onClick();
+    const chosen = file([{ name: "build", text: "npm run build" }]);
+    const fileInput = d.all().find((node) => node.type === "input" && node.props.type === "file");
+    const target = { files: [{ size: Buffer.byteLength(chosen), text: async () => chosen }], value: "chosen.json" };
+    await fileInput.props.onChange({ currentTarget: target });
+    assert.equal(target.value, "");
+    assert.equal(d.textarea().props.value, chosen);
+    assert.ok(d.statuses().some((status) => status.includes("1 snippet can be imported")));
+    assert.deepEqual(d.calls.changed, [], "file selection only validates and previews");
+    d.button("Import 1 snippet").props.onClick();
+    assert.equal(d.calls.changed.length, 1);
+    assert.deepEqual(d.calls.changed[0].map((item) => item.name), ["status", "build"]);
+    assert.deepEqual(d.calls.inserted, [], "file import never sends to a terminal");
+  } finally {
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else delete globalThis.window;
+    if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+    else delete globalThis.navigator;
+  }
+});
+
+test("snippet-io wiring: the pure module stays isolated and the transfer view never calls a terminal", () => {
   const moduleSource = read("src/snippet-io.ts");
   const code = stripComments(moduleSource);
   assert.ok(!/[^ -~\n]/.test(moduleSource), "printable ASCII only");
@@ -828,12 +876,11 @@ test("snippet-io wiring: the pure module and the import view touch no clipboard,
     [...view.matchAll(/export function (\w+)/g)].map((m) => m[1]),
     ["SnippetExport", "SnippetImport"],
   );
-  assert.ok(
-    !/clipboard|writeText|readText|sendTerminalCommand|writeTerminal|exportTerminal|showSaveDialog|showOpenDialog|hrig|window\.|document\.|localStorage|sessionStorage|indexedDB|fetch\(|Blob|createObjectURL|FileReader|<a /.test(
-      view,
-    ),
-    "text transport only: no clipboard, file, window or terminal call",
-  );
+  assert.ok(view.includes("navigator.clipboard.writeText(out.json)"));
+  assert.ok(view.includes("window.hrig.exportSnippets(out.json)"));
+  assert.ok(view.includes('type="file"'));
+  assert.ok(view.includes("file.text()"));
+  assert.ok(!/sendTerminalCommand|writeTerminal|terminal\.paste|onInsert\(/.test(view));
   assert.equal(
     count(view, "onChange(merged.snippets)"),
     1,
@@ -922,14 +969,16 @@ test("snippet-io docs: TERMINALS.md and PRIVACY.md say what an export holds, tha
   for (const fragment of [
     "Export shows the saved snippets as plain JSON text with a format name and version and, for each snippet, only its name and text, exactly as saved",
     "it holds no ids, host names, paths or other workspace state",
-    "HRig does not write it to a file, copy it or send it anywhere, so you select it and copy it yourself",
+    "Copy JSON writes that text to your system clipboard",
+    "Save to file opens a native save dialog for a JSON file",
+    "Import accepts pasted text or a JSON file you choose",
     "keep passwords, tokens and other secrets out of snippets; HRig does not try to detect them",
-    "Import takes pasted export text and first checks it without changing anything",
+    "Import accepts pasted text or a JSON file you choose, and first checks it without changing anything",
     "it refuses text over 256 KB",
     "a file with more than 200 snippets",
     "whose name is empty, over 80 characters or holds control or invisible characters",
     "whose text is not one printable line under 10,000 characters",
-    "Check import then shows how many snippets can be imported, how many are already saved or repeated, and how many were rejected and why",
+    "The check shows how many snippets can be imported, how many are already saved or repeated, and how many were rejected and why",
     "Import adds them only when you choose it",
     "Imported snippets get new ids",
     "a snippet with the same name and text as one you already have is skipped",
@@ -957,9 +1006,11 @@ test("snippet-io docs: TERMINALS.md and PRIVACY.md say what an export holds, tha
   for (const fragment of [
     "Saved terminal snippets are stored locally in the workspace settings.",
     "only each snippet's name and text, exactly as saved",
-    "HRig does not write that text to a file, copy it or send it anywhere",
+    "Copy JSON writes that text to the system clipboard",
+    "Save to file writes it only to the path you choose in the native save dialog",
     "keep passwords and tokens out of snippets",
-    "Import reads only text you paste into the dialog",
+    "Import reads text you paste or a JSON file you choose",
+    "the file is read into the app for that check and is not uploaded",
     "adds nothing until you confirm",
     "never sends anything to a terminal",
   ])

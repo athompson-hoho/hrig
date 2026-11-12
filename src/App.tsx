@@ -173,13 +173,11 @@ import ShortcutSheet from "./ShortcutSheet";
 import {
   hasOpenDialog,
   isHelpKey,
-  isReopenPanelKey,
   reopenShortcutHint,
 } from "./shortcuts";
-import { isMaximizePanelKey, maximizeShortcutHint } from "./shortcuts";
-import { focusModeShortcutHint, isFocusModeKey } from "./shortcuts";
-import { parseOverrideText, routeOverriddenKey, withEffectiveHints } from "./shortcut-overrides";
-import { isPanelCycleKey } from "./shortcuts";
+import { maximizeShortcutHint } from "./shortcuts";
+import { focusModeShortcutHint } from "./shortcuts";
+import { chordHint, defaultChord, parseOverrideText, routeOverriddenKey, withEffectiveHints, type OverridableId } from "./shortcut-overrides";
 import { emptyMru, endCycle, noteActive, noteClosed, stepCycle } from "./panel-mru";
 import PanelContextMenu, { type PanelMenu } from "./PanelContextMenu";
 import { dirtyPrompt, panelKind } from "./panel-close-targets";
@@ -2188,7 +2186,7 @@ export default function App() {
       ...(["focus", "clear", "find", "reconnect"] as TerminalCommand[]).map(command => ({
         name: `Terminal: ${command[0].toUpperCase() + command.slice(1)}`,
         hint: `${target.name} · ${config.connection.name} · ${target.id}` +
-          (command === "clear" ? ` · ${clearShortcutLabel(window.hrig.platform)}` : ""),
+          (command === "clear" ? ` · ${clearShortcutLabel(window.hrig.platform)}` : command === "find" ? ` · ${chordHint(shortcutOverrides["terminal.find"] ?? defaultChord("terminal.find"), window.hrig.platform)}` : ""),
         icon: <Columns2 size={16} />,
         action: () => {
           model.doAction(Actions.selectTab(t.id!));
@@ -2521,11 +2519,44 @@ export default function App() {
       : []),
   ];
   const shownCommands = withEffectiveHints(commands, window.hrig.platform, shortcutOverrides);
+  const runShortcut = (id: OverridableId, source: EventTarget | null) => {
+    switch (id) {
+      case "workspace.palette": openPalette(); return;
+      case "workspace.quickOpen": openQuickOpen(); return;
+      case "workspace.sidebar": setSidebar((value) => !value); return;
+      case "workspace.newShell": openShell(); return;
+      case "workspace.closePanel": {
+        const selected = model.getActiveTabset()?.getSelectedNode();
+        if (selected) closePanels([selected.getId()]);
+        return;
+      }
+      case "workspace.cyclePanelsNext": cyclePanel(1, source); return;
+      case "workspace.cyclePanelsPrevious": cyclePanel(-1, source); return;
+      case "workspace.maximizePanel": toggleMaximize("toggle", source); return;
+      case "workspace.focusMode": toggleFocusMode(); return;
+      case "workspace.reopenPanel": reopenClosedPanel(); return;
+      case "workspace.focusTerminal":
+      case "workspace.focusEditor":
+      case "workspace.focusTasks": {
+        const wanted = id === "workspace.focusTerminal" ? ["terminal"] : id === "workspace.focusEditor" ? ["editor", "diff"] : ["queue"];
+        const tab = allTabs().find((item) => wanted.includes(item.component || "") && item.id);
+        if (tab?.id) focusPanel(tab.id);
+        else setToast(id === "workspace.focusTerminal" ? "No terminal panel is open" : id === "workspace.focusEditor" ? "No editor panel is open" : "No task queue is open");
+        return;
+      }
+      case "terminal.find": {
+        const selected = model.getActiveTabset()?.getSelectedNode();
+        const config = selected?.getConfig() as PanelConfig | undefined;
+        if (selected?.getComponent() === "terminal" && config?.terminalId && !config.rigControlToken)
+          sendTerminalCommand(config.terminalId, "find");
+        else setToast("Select a terminal first");
+        return;
+      }
+    }
+  };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.altKey) return;
-      // The focused terminal owns its clear shortcut; leave the key untouched.
-      if (terminalOwnsKey(event, window.hrig.platform, event.target)) return;
       // A bare ? outside fields, the editor and terminals opens the shortcut sheet.
       if (isHelpKey(event, event.target, modal !== null || hasOpenDialog(event.target))) {
         event.preventDefault();
@@ -2533,82 +2564,33 @@ export default function App() {
         openShortcuts();
         return;
       }
+      // Terminal-owned controls (notably Cmd+K clear on macOS) keep their owner.
+      if (terminalOwnsKey(event, window.hrig.platform, event.target)) return;
       // Overridden chords run their shortcut; the old keys of a moved one go back to the terminal.
       const rebound = routeOverriddenKey(event, window.hrig.platform, shortcutOverrides);
       if (rebound !== null) {
         if (rebound.id === null) return;
         event.preventDefault();
         event.stopPropagation();
-        if (modal === null && !hasOpenDialog(event.target)) {
-          if (rebound.id === "workspace.reopenPanel") reopenClosedPanel();
-          else if (rebound.id === "workspace.maximizePanel") toggleMaximize("toggle", event.target);
-          else toggleFocusMode();
-        }
-        return;
-      }
-      // Claimed always so it never reaches a shell; acts only with no dialog open.
-      if (isReopenPanelKey(event, window.hrig.platform)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (modal === null && !hasOpenDialog(event.target)) reopenClosedPanel();
-        return;
-      }
-      // Same rule: claimed so no shell sees it, and Escape never restores.
-      if (isMaximizePanelKey(event, window.hrig.platform)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (modal === null && !hasOpenDialog(event.target))
-          toggleMaximize("toggle", event.target);
-        return;
-      }
-      // Same rule: claimed so no shell sees it; focus mode never writes a preference.
-      if (isFocusModeKey(event, window.hrig.platform)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (modal === null && !hasOpenDialog(event.target)) toggleFocusMode();
-        return;
-      }
-      // Same rule: claimed (a shell would get a plain Tab), acts once per press and only with no dialog open.
-      if (isPanelCycleKey(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!event.repeat && modal === null && !hasOpenDialog(event.target))
-          cyclePanel(event.shiftKey ? -1 : 1, event.target);
+        if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target);
         return;
       }
       if (event.ctrlKey || event.metaKey) {
-        if (
-          [",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) ||
-          (event.shiftKey && event.key.toLowerCase() === "t")
-        ) {
+        if ([",", "o", "p"].includes(event.key.toLowerCase())) {
           event.preventDefault();
           event.stopPropagation();
-        }
-        if (event.key.toLowerCase() === "p") {
-          event.preventDefault();
-          event.stopPropagation();
-          event.shiftKey ? openPanelNavigator() : openQuickOpen();
-          return;
         }
         if (event.key === ",") {
           event.preventDefault();
           openSettings();
         }
-        if (event.key.toLowerCase() === "k") {
-          event.preventDefault();
-          openPalette();
-        }
         if (event.key.toLowerCase() === "o") {
           event.preventDefault();
           openProject();
         }
-        if (event.key.toLowerCase() === "b") {
+        if (event.shiftKey && event.key.toLowerCase() === "p") {
           event.preventDefault();
-          setSidebar((v) => !v);
-        }
-        if (event.shiftKey && event.key.toLowerCase() === "t") {
-          event.preventDefault();
-          openShell();
+          openPanelNavigator();
         }
       }
     };

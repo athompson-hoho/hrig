@@ -5,13 +5,24 @@ import { shortcutGroups, type Shortcut, type ShortcutGroup } from "./shortcuts";
 export const OVERRIDES_SETTING = "shortcuts.overrides";
 
 /** The longest overrides text: the same limit the generic text setting rule has. */
-export const MAX_OVERRIDES_TEXT = 300;
+export const MAX_OVERRIDES_TEXT = 1000;
 
 /** The catalog ids whose key press already goes through a classifier in the App handler. */
 export const OVERRIDABLE_IDS = [
+  "workspace.palette",
+  "workspace.quickOpen",
+  "workspace.cyclePanelsNext",
+  "workspace.cyclePanelsPrevious",
+  "workspace.sidebar",
+  "workspace.newShell",
+  "workspace.closePanel",
+  "workspace.focusTerminal",
+  "workspace.focusEditor",
+  "workspace.focusTasks",
   "workspace.reopenPanel",
   "workspace.maximizePanel",
   "workspace.focusMode",
+  "terminal.find",
 ] as const;
 
 export type OverridableId = (typeof OVERRIDABLE_IDS)[number];
@@ -73,17 +84,8 @@ export const EDITOR_SHIFT_LETTERS = [
   "Z",
 ] as const;
 
-const PRIMARY_WORDS = ["ctrl", "control", "cmd", "command", "mod"];
-const ALT_WORDS = [
-  "alt",
-  "option",
-  "opt",
-  "altgr",
-  "meta",
-  "win",
-  "windows",
-  "super",
-];
+const PRIMARY_WORDS = ["ctrl", "cmd", "command", "mod"];
+const RESERVED_WORDS = ["alt", "option", "opt", "altgr", "meta", "win", "windows", "super"];
 const EXAMPLE = "Ctrl+Shift+Y";
 
 function fail(error: string): ChordResult {
@@ -91,10 +93,9 @@ function fail(error: string): ChordResult {
 }
 
 /**
- * Checks one typed chord and answers its canonical form, Ctrl+Shift+LETTER.
- * Ctrl, Cmd and Mod all mean the main modifier of the computer, so one saved
- * text works everywhere; Shift is required and the key is one letter A to Z.
- * Alt chords, bare letters and Ctrl plus a letter alone are refused.
+ * Checks one typed chord and answers its canonical form. Ctrl, Cmd and Mod
+ * mean the main modifier of the computer. Control explicitly means the
+ * physical Control key on every platform (used for Ctrl+Tab on macOS).
  */
 export function parseChord(text: unknown): ChordResult {
   if (typeof text !== "string" || text.trim() === "")
@@ -109,33 +110,45 @@ export function parseChord(text: unknown): ChordResult {
         ".",
     );
   let primary = 0;
+  let control = 0;
   let shift = 0;
   const others: string[] = [];
   for (const token of tokens) {
     const word = token.toLowerCase();
-    if (ALT_WORDS.includes(word))
+    if (RESERVED_WORDS.includes(word))
       return fail(
         "Alt, Option, Windows and Meta combinations cannot be used here.",
       );
     if (PRIMARY_WORDS.includes(word)) primary++;
+    else if (word === "control") control++;
     else if (word === "shift") shift++;
     else others.push(token);
   }
-  if (primary === 0)
-    return fail("Start with Ctrl or Cmd, for example " + EXAMPLE + ".");
-  if (primary > 1)
-    return fail("Use Ctrl or Cmd once; they mean the same key here.");
-  if (shift === 0)
-    return fail(
-      "Add Shift: Ctrl or Cmd with a letter alone belongs to terminals and the editor.",
-    );
+  if (primary + control === 0)
+    return fail("Start with Ctrl, Cmd or Control, for example " + EXAMPLE + ".");
+  if (primary + control > 1)
+    return fail("Use the main modifier or physical Control once.");
   if (shift > 1) return fail("Use Shift once.");
   if (others.length !== 1)
-    return fail("Use exactly one letter key, for example " + EXAMPLE + ".");
-  const key = others[0];
-  if (!/^[A-Za-z]$/.test(key))
-    return fail("Only the letters A to Z can be used.");
-  return { ok: true, chord: "Ctrl+Shift+" + key.toUpperCase() };
+    return fail("Use exactly one key, for example " + EXAMPLE + ".");
+  const rawKey = others[0];
+  const namedKeys: Record<string, string> = {
+    tab: "Tab", escape: "Escape", enter: "Enter", space: "Space",
+    comma: "Comma", period: "Period", slash: "Slash", backslash: "Backslash",
+    minus: "Minus", equal: "Equal", plus: "Plus", semicolon: "Semicolon",
+    quote: "Quote", bracketleft: "BracketLeft", bracketright: "BracketRight",
+    backquote: "Backquote",
+  };
+  for (let i = 1; i <= 12; i++) namedKeys[`f${i}`] = `F${i}`;
+  const key = /^[A-Za-z]$/.test(rawKey)
+    ? rawKey.toUpperCase()
+    : /^\d$/.test(rawKey)
+      ? rawKey
+      : namedKeys[rawKey.toLowerCase()];
+  if (!key) return fail("Use a letter, number, Tab, Enter, Escape, Space, punctuation key or F1-F12.");
+  const prefix = control ? "Control" : "Ctrl";
+  const chord = `${prefix}+${shift ? "Shift+" : ""}${key}`;
+  return { ok: true, chord };
 }
 
 /** The canonical form of a chord, or null when parseChord refuses it. */
@@ -146,6 +159,8 @@ export function normalizeChord(text: unknown): string | null {
 
 /** A canonical chord as the catalog shows it: Cmd on macOS, Ctrl everywhere else. */
 export function chordLabel(chord: string, platform: string): string {
+  const physical = chord.startsWith("Control+");
+  if (physical) return chord.replace(/^Control/, "Ctrl");
   return platform === "darwin" ? chord.replace(/^Ctrl/, "Cmd") : chord;
 }
 
@@ -155,6 +170,7 @@ export function chordHint(chord: string, platform: string): string {
 }
 
 function named(chord: string): string {
+  if (chord.startsWith("Control+")) return chord.replace(/^Control/, "Ctrl");
   return chord.replace(/^Ctrl\+/, "Ctrl/Cmd+");
 }
 
@@ -207,11 +223,17 @@ function terminalLetters(): Set<string> {
 
 /** Why a chord can never be rebound to, or an empty string when no terminal or editor key uses it. */
 export function reservedReason(chord: string): string {
-  const letter = chord.slice(-1);
-  if (terminalLetters().has(letter))
+  const key = chord.split("+").at(-1) || "";
+  if (chord.startsWith("Ctrl+Shift+") && terminalLetters().has(key))
     return named(chord) + " is a terminal key (find, copy, paste or clear).";
-  if ((EDITOR_SHIFT_LETTERS as readonly string[]).includes(letter))
+  if (chord.startsWith("Ctrl+Shift+") && (EDITOR_SHIFT_LETTERS as readonly string[]).includes(key))
     return named(chord) + " is used by the code editor.";
+  if (chord.startsWith("Ctrl+") && ["Q", "W", "H", "M", "Space", "Tab"].includes(key) && !chord.startsWith("Ctrl+Shift+"))
+    return named(chord) + " is reserved by the operating system on some computers.";
+  if (chord === "Ctrl+Shift+Tab")
+    return named(chord) + " is reserved by the operating system on some computers.";
+  if (chord === "Ctrl+Shift+Escape")
+    return named(chord) + " is reserved by the operating system.";
   return "";
 }
 
@@ -319,7 +341,7 @@ export function parseOverrideText(
       ignored: [
         {
           entry: text.slice(0, 40),
-          reason: "The saved text is longer than 300 characters.",
+    reason: `The saved text is longer than ${MAX_OVERRIDES_TEXT} characters.`,
         },
       ],
     };
@@ -444,41 +466,41 @@ function matches(
   chord: string,
   platform: string,
 ): boolean {
-  if (event.altKey || !event.shiftKey || typeof event.key !== "string")
-    return false;
+  if (event.altKey || typeof event.key !== "string") return false;
   const parsed = parseChord(chord);
   if (!parsed.ok) return false;
-  if (event.key.toLowerCase() !== parsed.chord.slice(-1).toLowerCase())
-    return false;
+  const parts = parsed.chord.split("+");
+  const key = parts[parts.length - 1];
+  const shift = parts.includes("Shift");
+  if (event.shiftKey !== shift) return false;
+  const eventKey = ({
+    Space: " ", Comma: ",", Period: ".", Slash: "/", Backslash: "\\",
+    Minus: "-", Equal: "=", Plus: "+", Semicolon: ";", Quote: "'",
+    BracketLeft: "[", BracketRight: "]", Backquote: "`",
+  } as Record<string, string>)[key] ?? key;
+  if (event.key.toLowerCase() !== eventKey.toLowerCase()) return false;
+  if (parts[0] === "Control") return event.ctrlKey && !event.metaKey;
   return platform === "darwin"
     ? event.metaKey && !event.ctrlKey
     : event.ctrlKey && !event.metaKey;
 }
 
 /**
- * Decides what a key press means when overrides exist. A press of an
- * overridden chord answers its id; a press of the default chord of a
- * shortcut that has been moved answers {id: null}, so the old keys are
- * released and reach the terminal again. Held, composing or already handled
- * presses never run a shortcut. An empty map always answers null, leaving
- * the default classifiers untouched. Pass the map from parseOverrideText.
+ * Resolves an app shortcut from its current chord. A press of the default
+ * chord after it has moved answers {id: null}, releasing it to the panel.
+ * Held, composing or already handled presses never run an action.
  */
 export function routeOverriddenKey(
   event: RouteKeyEvent,
   platform: string,
   map: OverrideMap,
 ): KeyRoute | null {
-  if (!event.shiftKey || formatOverrideText(map) === "") return null;
-  const live = !event.isComposing && !event.repeat && !event.defaultPrevented;
-  if (live) {
-    for (const id of OVERRIDABLE_IDS) {
-      const chord = map[id];
-      if (chord !== undefined && matches(event, chord, platform)) return { id };
-    }
-  }
+  if (event.altKey || event.isComposing || event.defaultPrevented) return null;
   for (const id of OVERRIDABLE_IDS) {
-    if (map[id] !== undefined && matches(event, defaultChord(id), platform))
-      return { id: null };
+    const overridden = map[id] !== undefined;
+    const chord = map[id] ?? defaultChord(id);
+    if (matches(event, chord, platform)) return { id };
+    if (overridden && matches(event, defaultChord(id), platform)) return { id: null };
   }
   return null;
 }

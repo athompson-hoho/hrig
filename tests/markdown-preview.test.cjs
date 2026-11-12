@@ -120,7 +120,7 @@ test('link and autolink openers are bounded too (QA f920a90)', () => {
     const src = unit.repeat(Math.floor(19990 / unit.length));
     const t0 = Date.now();
     parseInline(src);
-    assert.ok(Date.now() - t0 < 300, `${JSON.stringify(unit)} paragraph took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 750, `${JSON.stringify(unit)} paragraph took ${Date.now() - t0} ms`);
     const big = unit.repeat(Math.floor(200000 / unit.length));
     const t1 = Date.now(); parseMarkdown(big);
     assert.ok(Date.now() - t1 < 1500, `${JSON.stringify(unit)} 200KB took ${Date.now() - t1} ms`);

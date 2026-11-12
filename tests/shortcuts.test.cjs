@@ -77,6 +77,7 @@ function chord(text) {
   for (const part of parts) {
     if (part === "Ctrl") event.ctrlKey = true;
     else if (part === "Cmd") event.metaKey = true;
+    else if (part === "Control") event.ctrlKey = true;
     else if (part === "Shift") event.shiftKey = true;
     else if (part === "Plus") key = "+";
     else if (part === "minus") key = "-";
@@ -140,7 +141,8 @@ test("shortcuts catalog shape is complete on every platform", () => {
       "workspace.palette",
       "workspace.quickOpen",
       "workspace.panels",
-      "workspace.cyclePanels",
+      "workspace.cyclePanelsNext",
+      "workspace.cyclePanelsPrevious",
       "workspace.sidebar",
       "workspace.settings",
       "workspace.newShell",
@@ -162,7 +164,12 @@ test("shortcuts labels follow the platform", () => {
     "workspace.palette": ["Cmd+K"],
     "workspace.quickOpen": ["Cmd+P"],
     "workspace.panels": ["Cmd+Shift+P"],
-    "workspace.cyclePanels": ["Ctrl+Tab", "Ctrl+Shift+Tab"],
+    "workspace.cyclePanelsNext": ["Control+Tab"],
+    "workspace.cyclePanelsPrevious": ["Control+Shift+Tab"],
+    "workspace.closePanel": ["Cmd+Shift+W"],
+    "workspace.focusTerminal": ["Cmd+Shift+1"],
+    "workspace.focusEditor": ["Cmd+Shift+2"],
+    "workspace.focusTasks": ["Cmd+Shift+3"],
     "workspace.settings": ["Cmd+comma"],
     "workspace.openProject": ["Cmd+O"],
     "workspace.sidebar": ["Cmd+B"],
@@ -186,7 +193,12 @@ test("shortcuts labels follow the platform", () => {
     "workspace.palette": ["Ctrl+K"],
     "workspace.quickOpen": ["Ctrl+P"],
     "workspace.panels": ["Ctrl+Shift+P"],
-    "workspace.cyclePanels": ["Ctrl+Tab", "Ctrl+Shift+Tab"],
+    "workspace.cyclePanelsNext": ["Control+Tab"],
+    "workspace.cyclePanelsPrevious": ["Control+Shift+Tab"],
+    "workspace.closePanel": ["Ctrl+Shift+W"],
+    "workspace.focusTerminal": ["Ctrl+Shift+1"],
+    "workspace.focusEditor": ["Ctrl+Shift+2"],
+    "workspace.focusTasks": ["Ctrl+Shift+3"],
     "workspace.settings": ["Ctrl+comma"],
     "workspace.openProject": ["Ctrl+O"],
     "workspace.sidebar": ["Ctrl+B"],
@@ -1026,18 +1038,19 @@ test("shortcuts panel switch chord is Ctrl+Tab with or without Shift, the Contro
       );
     for (const text of ["Ctrl+K", "Ctrl+Shift+P", "Ctrl+Shift+H", "Ctrl+P"])
       assert.equal(isPanelCycleKey(chord(text)), false, platform + " " + text);
-    const keys = byId(platform)["workspace.cyclePanels"];
-    assert.deepEqual(keys, ["Ctrl+Tab", "Ctrl+Shift+Tab"], platform);
+    const keys = ["Control+Tab", "Control+Shift+Tab"];
+    assert.deepEqual(byId(platform)["workspace.cyclePanelsNext"], [keys[0]], platform);
+    assert.deepEqual(byId(platform)["workspace.cyclePanelsPrevious"], [keys[1]], platform);
     for (const key of keys)
       assert.equal(isPanelCycleKey(chord(key)), true, key);
     const group = shortcutGroups(platform).find((g) => g.id === "workspace");
     const ids = group.shortcuts.map((s) => s.id);
     assert.equal(
       ids[ids.indexOf("workspace.panels") + 1],
-      "workspace.cyclePanels",
+      "workspace.cyclePanelsNext",
       platform + " listed right after Find open panels",
     );
-    assert.equal(ids.filter((id) => id === "workspace.cyclePanels").length, 1);
+    assert.equal(ids.filter((id) => id.startsWith("workspace.cyclePanels")).length, 2);
     // No terminal, zoom, help or other app chord claims it.
     for (const key of keys) {
       for (const selected of [false, true])
@@ -1058,24 +1071,24 @@ test("shortcuts panel switch chord is Ctrl+Tab with or without Shift, the Contro
     assert.deepEqual(
       all.filter(([, key]) => /tab$/i.test(key)),
       [
-        ["workspace.cyclePanels", "Ctrl+Tab"],
-        ["workspace.cyclePanels", "Ctrl+Shift+Tab"],
+        ["workspace.cyclePanelsNext", "Control+Tab"],
+        ["workspace.cyclePanelsPrevious", "Control+Shift+Tab"],
       ],
       platform + " the only Tab chords",
     );
     for (const [id, key] of all) {
-      if (id === "workspace.cyclePanels") continue;
+      if (id.startsWith("workspace.cyclePanels")) continue;
       assert.equal(isPanelCycleKey(chord(key)), false, id + " " + key);
     }
   }
   assert.equal(
-    labelOf("darwin", "workspace.cyclePanels"),
-    "Switch panels in most recently used order (the Control key; Shift goes back)",
+    labelOf("darwin", "workspace.cyclePanelsNext"),
+    "Switch to the next panel",
   );
   for (const platform of ["win32", "linux", "freebsd", ""])
     assert.equal(
-      labelOf(platform, "workspace.cyclePanels"),
-      "Switch panels in most recently used order (Shift goes back)",
+      labelOf(platform, "workspace.cyclePanelsPrevious"),
+      "Switch to the previous panel",
       platform,
     );
 

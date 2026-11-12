@@ -449,9 +449,10 @@ test("goto-line adds nothing of its own: the app claims no Ctrl+G, so a terminal
   assert.ok(!handler.includes('"g"'), "the key handler never looks at G");
   assert.ok(!handler.includes("goToLine"));
   assert.ok(
-    has(handler, '[",", "k", "o", "b", "p"].includes(event.key.toLowerCase())'),
-    "the claimed letters are unchanged",
+    has(handler, "routeOverriddenKey(event, window.hrig.platform, shortcutOverrides)"),
+    "app shortcuts route through the override catalog",
   );
+  assert.ok(!handler.includes('"workspace.gotoLine"'));
 
   // Ctrl+G and its relatives pass every layer that could take them.
   const chords = [

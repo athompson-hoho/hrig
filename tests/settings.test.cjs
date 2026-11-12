@@ -976,7 +976,7 @@ test("terminal.wordSeparator relaxes the text rule for its own key only, and the
     ["a lone space", " "],
     ["empty text", ""],
     ["a line feed inside", "a" + String.fromCharCode(10) + "b"],
-    ["301 x characters", "x".repeat(301)],
+    ["1001 x characters", "x".repeat(1001)],
   ];
   for (const other of others) {
     for (const [name, value] of samples) {
@@ -1210,6 +1210,11 @@ test("shortcuts.overrides is plain text with the generic rule, empty by default,
   assert.deepEqual(settings.validateOverrides({ [key]: text }), {
     [key]: text,
   });
+  assert.equal(settings.validateOverrides({ [key]: "x".repeat(1000) })[key].length, 1000);
+  assert.throws(
+    () => settings.validateOverrides({ [key]: "x".repeat(1001) }),
+    (error) => error.message === "Invalid text for " + key,
+  );
   for (const value of ["", "{}", "a;b", "a<b>"]) {
     assert.throws(
       () => settings.validateOverrides({ [key]: value }),

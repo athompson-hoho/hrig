@@ -57,6 +57,42 @@ test("terminal export cancels cleanly and preserves write errors", async () => {
   );
 });
 
+test("snippet export uses a JSON save dialog, writes only after selection, and enforces a bound", async () => {
+  const handlers = {};
+  let canceled = true;
+  const dialogs = [];
+  const writes = [];
+  registerTerminalTools({
+    handle: (name, fn) => (handlers[name] = fn),
+    getWindow: () => "main-window",
+    dialog: {
+      showSaveDialog: async (window, options) => {
+        dialogs.push([window, options]);
+        return { canceled, filePath: "/tmp/snippets.json" };
+      },
+    },
+    fs: { writeFile: async (...args) => writes.push(args) },
+  });
+  assert.deepEqual(
+    await handlers["snippets:export"]({}, '{"format":"hrig-snippets"}'),
+    { saved: false },
+  );
+  assert.equal(writes.length, 0);
+  canceled = false;
+  assert.deepEqual(
+    await handlers["snippets:export"]({}, '{"format":"hrig-snippets"}'),
+    { saved: true },
+  );
+  assert.deepEqual(writes, [["/tmp/snippets.json", '{"format":"hrig-snippets"}', "utf8"]]);
+  assert.equal(dialogs[1][0], "main-window");
+  assert.equal(dialogs[1][1].defaultPath, "terminal-snippets.json");
+  assert.deepEqual(dialogs[1][1].filters[0].extensions, ["json"]);
+  await assert.rejects(
+    handlers["snippets:export"]({}, "x".repeat(32 * 1024 * 1024 + 1)),
+    /32 MiB/,
+  );
+});
+
 test("plain text export rejoins soft wraps, preserves interior blank lines and trims unused rows", () => {
   const ts = require("typescript"),
     fs = require("node:fs"),

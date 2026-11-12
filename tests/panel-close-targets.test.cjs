@@ -1005,8 +1005,8 @@ test("panel-close-targets wiring: two pure modules, one Layout hook that only op
   assert.equal(count(app, "onContextMenu="), 1);
   assert.equal(
     count(app, "closePanels("),
-    1,
-    "only the deferred continuation calls it",
+    2,
+    "the deferred continuation and rebindable close-panel action call it",
   );
   assert.equal(count(app, "closePanels}"), 1);
   const hook = tight(

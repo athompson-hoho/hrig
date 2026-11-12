@@ -731,25 +731,12 @@ test("sidebar-width collapse shortcut: Ctrl+B (Cmd+B on macOS) already shows and
     handler.indexOf(tight("if (event.ctrlKey || event.metaKey) {")),
   );
   assert.ok(generic.length < handler.length, "the generic Ctrl or Cmd branch");
-  assert.ok(
-    has(
-      generic,
-      'if ([",", "k", "o", "b", "p"].includes(event.key.toLowerCase()) || (event.shiftKey && event.key.toLowerCase() === "t")) { event.preventDefault(); event.stopPropagation(); }',
-    ),
-    "b is claimed so no terminal or editor sees it",
-  );
-  assert.ok(
-    has(
-      generic,
-      'if (event.key.toLowerCase() === "b") { event.preventDefault(); setSidebar((v) => !v); }',
-    ),
-  );
-  assert.equal(count(handler, 'toLowerCase() === "b"'), 1);
-  assert.equal(count(handler, "setSidebar("), 1);
+  assert.ok(handler.includes("routeOverriddenKey(event, window.hrig.platform, shortcutOverrides)"), "the b chord is claimed by the shared shortcut router");
+  assert.ok(between(app, "const runShortcut =", "useEffect(() => {\n    const handler").includes('case "workspace.sidebar": setSidebar((value) => !value); return;'));
 
   // The other ways to the same toggle are untouched, and there are exactly
   // three call sites: the chord, the command center entry and the toolbar button.
-  assert.equal(count(app, "setSidebar((v) => !v)"), 3);
+  assert.equal(count(app, "setSidebar((v) => !v)"), 2);
   assert.equal(count(app, 'name: "Toggle sidebar"'), 1);
   const entry = between(
     app,

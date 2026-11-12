@@ -15,9 +15,9 @@ import {
 } from "./shortcut-overrides";
 
 /**
- * Overlay listing the keyboard shortcuts with the keys now in use. Three rows
- * can be given other keys, typed in a small field and checked for clashes before
- * anything is saved, and put back with Reset; every other row is fixed. Closed by
+ * Overlay listing the keyboard shortcuts with the keys now in use. Rebindable
+ * rows can be given other keys, typed in a small field and checked for clashes
+ * before anything is saved, and put back with Reset. Closed by
  * Escape, the close button, a backdrop click or a bare question mark. Sends
  * nothing anywhere.
  */
@@ -72,7 +72,7 @@ export default function ShortcutSheet({
   return (
     <Modal
       title="Keyboard shortcuts"
-      subtitle="Press Escape to close. A row with an Edit button can be given other keys; every other shortcut is fixed."
+      subtitle="Press Escape to close. Edit a shortcut to change its keys; clashes and operating-system shortcuts are refused."
       onClose={onClose}
       wide
     >
@@ -151,7 +151,7 @@ export default function ShortcutSheet({
                       {shortcut.keys.map((key, index) => (
                         <Fragment key={key}>
                           {index > 0 && " or "}
-                          <kbd>{key}</kbd>
+                          <kbd>{key.replace(/^Control\+/, "Ctrl+")}</kbd>
                         </Fragment>
                       ))}
                       {rebindable(shortcut.id) && (
@@ -164,7 +164,11 @@ export default function ShortcutSheet({
                               setError("");
                               setEditing({
                                 id: shortcut.id,
-                                draft: shortcut.keys[0],
+                                  draft: chordLabel(
+                                    parsed.map[shortcut.id as OverridableId] ??
+                                      defaultChord(shortcut.id as OverridableId),
+                                    platform,
+                                  ),
                               });
                             }}
                           >

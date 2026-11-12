@@ -148,6 +148,7 @@ export interface HrigAPI {
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;
   exportTerminal(text: string): Promise<{saved: boolean}>;
+  exportSnippets(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
   readClipboardText(): Promise<string>;
   pathForFile(file: File): string;

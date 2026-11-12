@@ -66,13 +66,15 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           label: "Find open panels",
           keys: [`${mod}+Shift+P`],
         },
-        // The Control key on every platform: Cmd+Tab is the macOS app switcher.
         {
-          id: "workspace.cyclePanels",
-          label: mac
-            ? "Switch panels in most recently used order (the Control key; Shift goes back)"
-            : "Switch panels in most recently used order (Shift goes back)",
-          keys: ["Ctrl+Tab", "Ctrl+Shift+Tab"],
+          id: "workspace.cyclePanelsNext",
+          label: "Switch to the next panel",
+          keys: ["Control+Tab"],
+        },
+        {
+          id: "workspace.cyclePanelsPrevious",
+          label: "Switch to the previous panel",
+          keys: ["Control+Shift+Tab"],
         },
         {
           id: "workspace.settings",
@@ -93,6 +95,26 @@ export function shortcutGroups(platform: string): ShortcutGroup[] {
           id: "workspace.newShell",
           label: "Open a new shell",
           keys: [`${mod}+Shift+T`],
+        },
+        {
+          id: "workspace.closePanel",
+          label: "Close the selected panel",
+          keys: [`${mod}+Shift+W`],
+        },
+        {
+          id: "workspace.focusTerminal",
+          label: "Focus an open terminal",
+          keys: [`${mod}+Shift+1`],
+        },
+        {
+          id: "workspace.focusEditor",
+          label: "Focus an open editor",
+          keys: [`${mod}+Shift+2`],
+        },
+        {
+          id: "workspace.focusTasks",
+          label: "Focus the task queue",
+          keys: [`${mod}+Shift+3`],
         },
         {
           id: "workspace.reopenPanel",
