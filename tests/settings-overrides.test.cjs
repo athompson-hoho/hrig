@@ -923,7 +923,7 @@ test("settings-overrides wiring: the module is pure and reads only the settings 
   assert.equal(count(page, "context.update("), 2);
   assert.equal(count(page, "context.reset("), 3);
   assert.equal(count(page, "context.replace("), 1);
-  assert.equal(count(page, "validateOverrides("), 2);
+  assert.equal(count(page, "validateOverrides("), 1); // the import check (X09) replaced the second call
   assert.equal(count(page, "useSettings()"), 2);
   assert.equal(count(page, "setScope("), 2);
   // The added JSX writes no handler, address, style or raw-markup property.

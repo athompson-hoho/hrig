@@ -117,6 +117,8 @@ const loadFactory = compile(
     "normalizeSidebarWidth",
     "normalizeReviewChecks",
     "normalizeSeatNotes",
+    "normalizePinnedSeats",
+    "normalizeCollapsedPods",
   ],
   "load",
 );
@@ -132,6 +134,9 @@ function loadWith(saved, found = []) {
     },
     (text) => out.logs.push(text),
     normalizeSidebarWidth,
+    (value) => value,
+    (value) => value,
+    // Pins and collapsed pods (long-list chain) are repaired in the same callback; they pass through here.
     (value) => value,
     (value) => value,
   );

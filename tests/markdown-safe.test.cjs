@@ -14,6 +14,13 @@ const stripComments = (text) =>
 const count = (text, part) => text.split(part).length - 1;
 const char = (code) => String.fromCharCode(code);
 
+// The virtualized list of the long-list chain, drawn here as every row at once: this test is about the board's own
+// behavior, and the list's windowing has its own tests.
+function inlineList(props) {
+  return { type: "div", props: { className: props.className, children: props.rows.map((row, i) => props.renderRow(row, i)) } };
+}
+inlineList.inline = true;
+
 function bundle(entry, external = []) {
   return buildSync({
     entryPoints: [path.join(root, entry)],
@@ -302,7 +309,8 @@ function boardHarness({ details = [DETAIL], rows = ROWS, seats = SEATS } = {}) {
       }
     },
   };
-  const jsx = (type, props) => ({ type, props });
+  const jsx = (type, props) =>
+    typeof type === "function" && type.inline ? type(props) : { type, props };
   const Board = load("src/TaskBoard.tsx", {
     react,
     "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
@@ -312,6 +320,7 @@ function boardHarness({ details = [DETAIL], rows = ROWS, seats = SEATS } = {}) {
       RefreshCw: "RefreshCw",
       ArrowUpRight: "ArrowUpRight",
     },
+    "./VirtualList": { VirtualList: inlineList },
     "./components": {
       ErrorBox: "ErrorBox",
       Loading: "Loading",
@@ -961,7 +970,9 @@ test("markdown-safe wiring: the module is pure, the component only uses react an
     ),
     1,
   );
-  assert.equal(count(board, "JSON.stringify("), 1);
+  // The detail dump is still the one place that prints a task as JSON; the other calls build list keys (long-list chain).
+  assert.equal(count(board, "JSON.stringify(detail"), 1);
+  assert.equal(count(board, "JSON.stringify("), 4);
   const bridge = [
     ...stripComments(boardSource).matchAll(/window\s*\.hrig\s*\.(\w+)/g),
   ]

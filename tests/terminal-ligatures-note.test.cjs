@@ -178,7 +178,8 @@ test("terminal-ligatures guard: no ligature dependency, no terminal ligature set
     .filter((name) => /\.tsx?$/.test(name))
     .filter((name) => /ligature/i.test(read("src/" + name)))
     .sort();
-  assert.deepEqual(mentioning, ["EditorPanel.tsx", "settings.ts"]);
+  // The editor option now lives in editor-options.ts (long-list chain); terminals still have none.
+  assert.deepEqual(mentioning, ["editor-options.ts", "settings.ts"]);
   assert.ok(!/ligature/i.test(read("src/TerminalPanel.tsx")));
   assert.ok(!/ligature/i.test(read("src/TerminalTools.tsx")));
   assert.ok(

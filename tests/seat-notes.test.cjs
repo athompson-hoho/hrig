@@ -78,6 +78,8 @@ const loadFactory = compile(
     "normalizeSidebarWidth",
     "normalizeReviewChecks",
     "normalizeSeatNotes",
+    "normalizePinnedSeats",
+    "normalizeCollapsedPods",
   ],
   "load",
 );
@@ -144,6 +146,9 @@ function appWorld(connection = CONNECTION) {
       (width) => width,
       (value) => value,
       lib.normalizeSeatNotes,
+      // Pins and collapsed pods (long-list chain) pass through here.
+      (value) => value,
+      (value) => value,
     )([saved, []]);
     w.state = out[0];
     return w.state;
@@ -959,7 +964,7 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   // The two places the load callback is run from still pin the old lines in front of the new one.
   assert.ok(
     app.includes(
-      "projectHistory: normalizeHistory(base.projectHistory), reviewChecks: normalizeReviewChecks(base.reviewChecks), connections,",
+      "projectHistory: normalizeHistory(base.projectHistory), reviewChecks: normalizeReviewChecks(base.reviewChecks),",
     ),
   );
 
@@ -970,10 +975,11 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
     count(sidebar, 'import type { SeatNotes } from "./seat-notes";'),
     1,
   );
-  assert.ok(sidebar.includes("fileRevision, notes, onNote, }: {"));
+  // activeFile (long-list chain) follows the two note props.
+  assert.ok(sidebar.includes("fileRevision, notes, onNote, activeFile, }: {"));
   assert.ok(
     sidebar.includes(
-      "notes?: SeatNotes; onNote?: (seat: Seat, text: string) => void; }) {",
+      "notes?: SeatNotes; onNote?: (seat: Seat, text: string) => void; activeFile?: ActiveFileTarget | null; }) {",
     ),
   );
   assert.equal(

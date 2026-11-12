@@ -447,7 +447,7 @@ test("seat-visibility wiring: the setting is off by default and sits after the r
     1,
   );
   // The existing filter keeps its own const, untouched, and the new one composes after it.
-  const own = sidebar.indexOf("const seats = (inventory?.seats || []).filter(");
+  const own = sidebar.indexOf("const statusSeats = filterSeatsByStatus(searchResult.seats, statusFilter);"); // the search and status filters of the long-list chain
   const hide = sidebar.indexOf(
     'const hideStopped = settings.user?.["workspace.hideStoppedSeats"] === true;',
   );
@@ -456,14 +456,14 @@ test("seat-visibility wiring: the setting is off by default and sits after the r
   assert.equal(
     count(
       sidebar,
-      "const shownSeats = visibleSeats(seats, rigs, hideStopped);",
+      "visibleSeats(statusSeats, rigs, hideStopped),", // inside the sort and pin partition of the long-list chain
     ),
     1,
   );
   assert.equal(
     count(
       sidebar,
-      "const hiddenSeats = hideStopped ? hiddenCount(seats, rigs) : 0;",
+      "const hiddenSeats = hideStopped ? hiddenCount(statusSeats, rigs) : 0;",
     ),
     1,
   );
@@ -478,15 +478,14 @@ test("seat-visibility wiring: the setting is off by default and sits after the r
   assert.equal(count(sidebar, "workspace.hideStoppedSeats"), 2);
   // The label, the list and the empty states.
   assert.ok(
-    /<span>SESSIONS<\/span> <span className="section-tools"> <span className="count"> \{seatCountText\(shownSeats\.length, seats\.length, hideStopped\)\} <\/span> <HideStoppedButton hiding=\{hideStopped\} onToggle=\{\(\) => setHideStopped\(!hideStopped\)\} \/> <\/span> <\/div>/.test(
+    /<span title="[^"]*">SESSIONS<\/span> <span className="section-tools"> <span className="count"> \{seatCountText\(seats\.length, statusSeats\.length, hideStopped\)\} <\/span> <HideStoppedButton hiding=\{hideStopped\} onToggle=\{\(\) => setHideStopped\(!hideStopped\)\} \/> <\/span> <\/div>/.test(
       sidebar,
     ),
     "the SESSIONS label",
   );
-  assert.equal(count(sidebar, "shownSeats.length ? ("), 1);
-  assert.equal(count(sidebar, "shownSeats.map((s) =>"), 1);
-  assert.equal(count(sidebar, "seats.map("), 0);
-  assert.equal(count(sidebar, "seats.length ?"), 0);
+  // The list is the long-list chain's windowed list over the already filtered seats; the notice branch follows it.
+  assert.equal(count(sidebar, ") : seats.length ? ("), 1);
+  assert.equal(count(sidebar, "<VirtualList rows={sessionRows}"), 1);
   assert.ok(
     /\) : hiddenSeats \? \( <HiddenSeatsNotice count=\{hiddenSeats\} onShow=\{\(\) => setHideStopped\(false\)\} \/> \) : \( <div className="connection-empty"> <Bot size=\{26\} \/> <h4>\{busy \? "Discovering seats\u2026" : "No seats yet"\}<\/h4>/.test(
       sidebar,

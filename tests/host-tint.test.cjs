@@ -974,7 +974,9 @@ test("host-tint docs: TERMINALS.md and SETTINGS.md say it is opt-in, header only
     "after the bell paragraph",
   );
   assert.ok(
-    settings[row + 2].startsWith("## Follow-up ideas"),
+    // The notification section of the long-list chain closes the catalog, between this paragraph and the follow-up ideas.
+    settings[row + 2].startsWith("### Desktop needs-input notifications") &&
+      settings.findIndex((l) => l.startsWith("## Follow-up ideas")) > row + 2,
     "before the follow-up ideas",
   );
   for (const part of [

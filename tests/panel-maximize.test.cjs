@@ -497,9 +497,12 @@ test("panel-maximize is a session-only view state: withoutMaximized and restoreM
   assert.equal(Model.fromJson(json).getMaximizedTabset().getId(), "right");
   const restored = restoreModel(json);
   assert.equal(restored.getMaximizedTabset(), undefined);
+  // Restoring also marks editor, diff and settings tabs render-on-demand (the long-list chain); that is not under test here.
+  const dropLazy = (value) =>
+    JSON.parse(JSON.stringify(value), (key, item) => (key === "enableRenderOnDemand" ? undefined : item));
   assert.deepEqual(
-    plain(restored.toJson()),
-    before,
+    dropLazy(plain(restored.toJson())),
+    dropLazy(before),
     "nothing but the flag is dropped",
   );
   assert.equal(restored.getNodeById("right").isEnableMaximize(), true);
@@ -557,8 +560,8 @@ test("panel-maximize is a session-only view state: withoutMaximized and restoreM
   );
   assert.equal(count(app, "restoreModel("), 3);
   assert.ok(
-    has(app, "const next = Model.fromJson(json, model);"),
-    "undo keeps the exact snapshot",
+    has(app, "const next = Model.fromJson(normalizeOptionalPanels(json), model);"),
+    "undo keeps the exact snapshot (it only marks optional panels render-on-demand, never maximize)",
   );
   const sources = fs
     .readdirSync(path.join(root, "src"))

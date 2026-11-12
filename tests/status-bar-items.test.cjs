@@ -237,11 +237,9 @@ const MARKERS = {
   accounts: (tree) =>
     allNodes(tree).some((n) => n.type && n.type.name === "AccountStatus"),
   connection: (tree) =>
-    allNodes(tree).some((n) => n.props && n.props.className === "status-brand"),
+    allNodes(tree).some((n) => n.type === "span" && n.props && n.props.className === "status-connection"),
   "source-control": (tree) =>
-    allNodes(tree).some(
-      (n) => n.type === "button" && textOf(n).trim() === "Source control",
-    ),
+    allNodes(tree).some((n) => n.type && n.type.name === "GitInfoStatus"),
   reconnect: (tree) =>
     allNodes(tree).some(
       (n) =>
@@ -256,56 +254,59 @@ const MARKERS = {
   activity: (tree) => allNodes(tree).some((n) => n.type === "Activity"),
 };
 
-// The outlines the footer printed at the base commit 66da441 (before this
-// item), for the three shapes a person sees by default.
+// The outlines the footer prints for the three shapes a person sees by default. They were pinned at the base commit
+// 66da441 (the old brand span and Source control button) and now follow the merged footer: the connection menu button,
+// the Git info status and the rig health status of the long-list chain, under the same visibility rules.
 const GOLDEN_LOCAL = [
   "footer.statusbar",
-  '  AccountStatus connection={"kind":"local","name":"box"}',
+  "  AccountStatus connection={\"kind\":\"local\",\"name\":\"box\"}",
   "  div",
-  "    span.status-brand",
-  "      Network size=11",
-  '      "Local workspace"',
-  "    button onClick=fn",
-  "      GitBranch size=11",
-  '      "Source control"',
+  "    span.status-connection",
+  "      button.status-brand status-connection-button title=\"Connection: box. Choose another configured connection.\" type=\"button\" aria-haspopup=\"menu\" aria-expanded=false onClick=fn",
+  "        Network size=11",
+  "        \"Local workspace\"",
+  "        ChevronDown size=10 aria-hidden=\"true\"",
+  "    GitInfoStatus connection={\"kind\":\"local\",\"name\":\"box\"} root=\"/synthetic/project\" revision=0 onOpen=fn",
+  "    RigHealthStatus scope={\"ready\":false} rigId=\"\" onOpen=fn",
   "  div",
   "    span",
-  '      "3"',
-  '      " "',
-  '      "sessions"',
-  '      " open"',
+  "      \"3\"",
+  "      \" \"",
+  "      \"sessions\"",
+  "      \" open\"",
   "    span.status-divider",
   "    span",
   "      Check size=11",
-  '      "Layout autosaved"',
+  "      \"Layout autosaved\"",
   "    button onClick=fn",
   "      Activity size=12",
 ];
 const GOLDEN_DROPPED = [
   "footer.statusbar",
-  '  AccountStatus connection={"kind":"ssh","name":"box"}',
+  "  AccountStatus connection={\"kind\":\"ssh\",\"name\":\"box\"}",
   "  div",
-  "    span.status-brand",
-  "      Network size=11",
-  '      "SSH: box"',
-  "    button onClick=fn",
-  "      GitBranch size=11",
-  '      "Source control"',
+  "    span.status-connection",
+  "      button.status-brand status-connection-button title=\"Connection: box. Choose another configured connection.\" type=\"button\" aria-haspopup=\"menu\" aria-expanded=false onClick=fn",
+  "        Network size=11",
+  "        \"SSH: box\"",
+  "        ChevronDown size=10 aria-hidden=\"true\"",
+  "    GitInfoStatus connection={\"kind\":\"ssh\",\"name\":\"box\"} root=\"/synthetic/project\" revision=0 onOpen=fn",
+  "    RigHealthStatus scope={\"ready\":false} rigId=\"\" onOpen=fn",
   "  div",
   "    fragment",
-  '      button title="Re-attach every ended or errored terminal. Connected terminals are not touched." onClick=fn',
+  "      button title=\"Re-attach every ended or errored terminal. Connected terminals are not touched.\" onClick=fn",
   "        RefreshCw size=11",
-  '        "Reconnect all dropped (2)"',
+  "        \"Reconnect all dropped (2)\"",
   "      span.status-divider",
   "    span",
-  '      "3"',
-  '      " "',
-  '      "sessions"',
-  '      " open"',
+  "      \"3\"",
+  "      \" \"",
+  "      \"sessions\"",
+  "      \" open\"",
   "    span.status-divider",
   "    span",
   "      Check size=11",
-  '      "Layout autosaved"',
+  "      \"Layout autosaved\"",
   "    button onClick=fn",
   "      Activity size=12",
 ];
@@ -329,7 +330,7 @@ test("status-bar-items tracer: the real footer of App.tsx draws exactly what it 
   assert.deepEqual(lines(), GOLDEN_LOCAL);
   assert.deepEqual(lines({ kind: "ssh", dropped: ["a", "b"] }), GOLDEN_DROPPED);
   const wsl = lines({ kind: "wsl", tabs: 1 });
-  assert.ok(wsl.includes('      "WSL: box"'));
+  assert.ok(wsl.includes('        "WSL: box"'));
   assert.ok(wsl.includes('      "session"'), "one session is singular");
   assert.deepEqual(
     lines({ hidden: "unknown, SESSIONSX, ;, <>" }),
@@ -374,7 +375,13 @@ test("status-bar-items tracer: the real footer of App.tsx draws exactly what it 
 
   // Every id hidden: an empty strip with the footer and its two groups.
   const empty = lines({ hidden: IDS.join(" "), dropped: ["a"] });
-  assert.deepEqual(empty, ["footer.statusbar", "  div", "  div"]);
+  // The rig health status has no switch, so it is the one thing left in the strip.
+  assert.deepEqual(empty, [
+    "footer.statusbar",
+    "  div",
+    '    RigHealthStatus scope={"ready":false} rigId="" onOpen=fn',
+    "  div",
+  ]);
 
   // Clicks still do what they did: the handlers are the app's own.
   const calls = [];
@@ -383,7 +390,7 @@ test("status-bar-items tracer: the real footer of App.tsx draws exactly what it 
     allNodes(tree)
       .find((n) => n.type === "button" && match(n))
       .props.onClick();
-  press((n) => textOf(n).trim() === "Source control");
+  allNodes(tree).find((n) => n.type && n.type.name === "GitInfoStatus").props.onOpen();
   press((n) => textOf(n).startsWith("Reconnect"));
   press((n) => allNodes(n.props.children).some((c) => c.type === "Activity"));
   assert.deepEqual(calls, [
@@ -778,8 +785,9 @@ test("status-bar-items wiring: the module is pure with named exports, App.tsx im
   const text = collapse(footerText());
   for (const part of [
     "<AccountStatus connection={connection} />",
-    '<span className="status-brand">',
-    "Source control",
+    // The brand span and the Source control button became the connection menu button and the Git info status.
+    'className="status-brand status-connection-button"',
+    "<GitInfoStatus connection={connection}",
     "onClick={reconnectDropped}",
     "{droppedLabel(droppedNow.length)}",
     '{tabCount} {tabCount === 1 ? "session" : "sessions"} open',

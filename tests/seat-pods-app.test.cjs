@@ -103,6 +103,8 @@ test('actual boot callback normalizes legacy malformed and mixed pods alongside 
     let loaded = false;
     const saved = workspace({ collapsedPods: pins, sidebarWidth: 310, preferences: { 'editor.fontSize': 17 } });
     const run = evaluate(boot, { ...helpers, normalizeHistory,
+      // The other chains' load-time repairs are not under test here; they pass their value through.
+      normalizeSidebarWidth: value => value, normalizeReviewChecks: value => value, normalizeSeatNotes: value => value,
       defaultState: workspace(), setDetected() {}, setState(value) { state = value; },
       setLoaded(value) { loaded = value; }, log() {} });
     run([saved, [local]]);

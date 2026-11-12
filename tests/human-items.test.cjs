@@ -1204,7 +1204,7 @@ test("human-items docs: TASKS.md says what counts as addressed to a person, that
     "a new queue item addressed to a person",
     "It is off by default",
     "Notify about queue items for me under Notifications in Settings (`notifications.humanItems`)",
-    "separate from Desktop attention notifications and needs nothing else turned on",
+    "separate from Desktop needs-input notifications and needs nothing else turned on",
     "`human@host`, `human@kernel`, `human-name@host`, `human-name@kernel` or `name@external`",
     "which is how OpenRig names a person",
     "still pending, in-progress or blocked",
@@ -1249,7 +1249,7 @@ test("human-items docs: TASKS.md says what counts as addressed to a person, that
   );
   assert.equal(
     schema("notifications.desktop").label,
-    "Desktop attention notifications",
+    "Desktop needs-input notifications",
   );
   assert.ok(schema("workspace.refreshInterval"));
   for (const example of [

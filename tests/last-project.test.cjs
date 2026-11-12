@@ -681,7 +681,7 @@ test("last-project module: it is pure, imports only the history rules and the co
 
 test("last-project docs: SETTINGS.md and NAVIGATION.md say that it is off by default, what it opens and when it does not, which checks it reuses and what it never does", () => {
   const settings = read("SETTINGS.md");
-  assert.ok(!/[^\n -~…↑↓·→–]/.test(settings), "plain ASCII (plus the symbols the notification docs use)");
+  assert.ok(isAscii(settings), "plain ASCII");
   const parts = settings.split("\n\n");
   const mine = parts.filter((part) =>
     part.startsWith("Reopen last project: `workspace.restoreLastProject`"),

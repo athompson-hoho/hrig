@@ -392,7 +392,7 @@ test("seat-badges wiring: the setting is off by default and sits after the windo
   );
   assert.equal(count(sidebar, "const settings = useSettings();"), 1);
   const guard =
-    /<small> \{s\.rigName\} \u00b7 \{s\.runtime\} <\/small> \{settings\.effective\["appearance\.seatBadges"\] && \(? ?<SeatBadgeRow seat=\{s\} \/> ?\)?\} <\/span> <StatusDot status=\{s\.status\} \/>/;
+    /<\/small> \{settings\.effective\["appearance\.seatBadges"\] && \(? ?<SeatBadgeRow seat=\{s\} \/> ?\)?\} <\/span>[^]{0,160}<StatusDot status=\{s\.status\} \/>/;
   assert.ok(
     guard.test(sidebar),
     "the row sits under the small text, behind the setting",

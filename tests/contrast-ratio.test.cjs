@@ -813,7 +813,7 @@ test("contrast-ratio terminal: the colors High Contrast hands to the terminal an
 
 test("contrast-ratio docs: SETTINGS.md has one High Contrast paragraph, after the theme notes, that says what is measured, the two thresholds, what was changed and what is left to a person", () => {
   const raw = read("SETTINGS.md");
-  assert.ok(!/[^\n -~…↑↓·→–]/.test(raw), "plain ASCII (plus the symbols the Git info and notification docs use)");
+  assert.ok(!/[^\n -~]/.test(raw), "plain ASCII");
   assert.ok(raw.endsWith("\n") && !raw.endsWith("\n\n"), "one final line feed");
   const lines = raw.split("\n");
   const at = lines.findIndex((l) => l.startsWith("High Contrast: "));
@@ -846,7 +846,9 @@ test("contrast-ratio docs: SETTINGS.md has one High Contrast paragraph, after th
     ),
   );
   const host = lines.findIndex((l) => l.startsWith("Host label and tint: "));
-  assert.ok(lines[host + 2].startsWith("## Follow-up ideas"));
+  // The notification section of the long-list chain closes the catalog, between this paragraph and the follow-up ideas.
+  assert.ok(lines[host + 2].startsWith("### Desktop needs-input notifications"));
+  assert.ok(lines.findIndex((l) => l.startsWith("## Follow-up ideas")) > host + 2);
   // No setting was added for it.
   assert.ok(
     !lines.some(

@@ -1807,7 +1807,7 @@ test("undo-toast callers: Open all rig sessions and a role template offer Undo t
   );
   assert.equal(
     count(app, "remember();"),
-    9,
+    10, // the nine callers of the build chain plus the one history step the long-list chain added
     "the callers of remember are the ones there were",
   );
   assert.ok(

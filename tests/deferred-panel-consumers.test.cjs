@@ -45,12 +45,14 @@ function harness(selected, options = {}) {
   const events = [], propsSeen = [];
   const app = parse('src/App.tsx');
   const layoutSource = fs.readFileSync('src/layout.ts', 'utf8');
-  const layout = evaluate(`${layoutSource}\nresult = exports;`, {
-    exports: {}, require(id) {
-      assert.equal(id, 'flexlayout-react', 'layout dependency is allowlisted');
-      return { Model };
-    },
-  });
+  // layout.ts also uses the local rule modules of both chains (maximize, panel titles), loaded for real.
+  const requireForLayout = (id) => {
+    if (id.startsWith('./'))
+      return evaluate(`${fs.readFileSync('src/' + id.slice(2) + '.ts', 'utf8')}\nresult = exports;`, { exports: {}, require: requireForLayout });
+    assert.equal(id, 'flexlayout-react', 'layout dependency is allowlisted');
+    return { Model };
+  };
+  const layout = evaluate(`${layoutSource}\nresult = exports;`, { exports: {}, require: requireForLayout });
   const json = fixture(selected);
   options.configure?.(json);
   let model = layout.restoreModel(json);

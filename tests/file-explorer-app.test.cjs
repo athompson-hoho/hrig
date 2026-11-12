@@ -63,7 +63,8 @@ function appFixture(component = 'editor') {
   scope.modelOwners = { current: new WeakMap([[model, 'synthetic-workspace']]) };
   scope.workspaceRef = { current: 'synthetic-workspace' };
   scope.setRevision = update => { scope.revision = update(scope.revision); };
-  scope.setState = update => { scope.state = update(scope.state); scope.stateRef.current = scope.state; };
+  // A functional update applies to the latest state (as React does), which the test replaces through stateRef.
+  scope.setState = update => { scope.state = update(scope.stateRef.current); scope.stateRef.current = scope.state; };
   scope.openFile = evaluate(openFile, scope);
   const changed = unique(n => ts.isVariableDeclaration(n) && n.name.getText(app) === 'modelChanged');
   const fixture = { model, config, events, scope, modelChanged: evaluate(changed.initializer, scope), render() {

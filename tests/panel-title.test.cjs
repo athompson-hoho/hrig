@@ -1257,14 +1257,17 @@ test("panel-title restore: a damaged or hostile stored workspace opens with clea
   clean.layout.children[0].children[1].name = "Build";
   clean.layout.children[0].children[1].config.customTitle = "Build";
   clean.layout.children[0].children[1].config.defaultTitle = "Shell";
+  // Restoring also marks editor, diff and settings tabs render-on-demand (the long-list chain); not under test here.
+  const dropLazy = (value) =>
+    JSON.parse(JSON.stringify(value), (key, item) => (key === "enableRenderOnDemand" ? undefined : item));
   assert.deepEqual(
-    plain(real.restoreModel(plain(clean)).toJson()),
-    plain(
+    dropLazy(plain(real.restoreModel(plain(clean)).toJson())),
+    dropLazy(plain(
       Model.fromJson({
         ...plain(clean),
         global: { ...real.globalLayout },
       }).toJson(),
-    ),
+    )),
   );
 
   // Only an unreadable layout is refused: it falls back to the welcome tab like any other.
@@ -1464,16 +1467,16 @@ test("panel-title wiring: the module is pure, the menu only passes text, App cha
   assert.equal(count(app, "Actions.RENAME_TAB"), 1);
   assert.equal(
     count(app, "Actions.updateNodeAttributes("),
-    5,
-    "the arranger, a file line, the dirty flag and the two title edits",
+    6,
+    "the arranger, a file line, the dirty flag, the two title edits and the initial command of a reopened terminal (relaunch chain)",
   );
   assert.equal(count(app, "applyCustomTitle("), 2);
   assert.equal(count(app, "resetTitle("), 1);
   assert.equal(count(app, "titledTab("), 4);
   assert.equal(
     count(app, "remember();"),
-    9,
-    "a title change is not an arrangement and adds no history step",
+    10,
+    "a title change is not an arrangement and adds no history step (10: the base eight plus one new history step from each chain)",
   );
   assert.equal(
     count(app, "announceLayout("),

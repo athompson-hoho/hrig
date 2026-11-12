@@ -10,6 +10,13 @@ const repo = path.join(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(repo, file), "utf8");
 const char = (code) => String.fromCharCode(code);
 
+// The virtualized list of the long-list chain, drawn here as every row at once: this test is about the board's own
+// behavior, and the list's windowing has its own tests.
+function inlineList(props) {
+  return { type: "div", props: { className: props.className, children: props.rows.map((row, i) => props.renderRow(row, i)) } };
+}
+inlineList.inline = true;
+
 function bundle(entry, external = []) {
   return buildSync({
     entryPoints: [path.join(repo, entry)],
@@ -101,7 +108,8 @@ function runtime(entry, props, bridge) {
       }
     },
   };
-  const jsx = (type, p) => ({ type, props: p });
+  const jsx = (type, p) =>
+    typeof type === "function" && type.inline ? type(p) : { type, props: p };
   const Component = load(entry, {
     react,
     "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
@@ -112,6 +120,7 @@ function runtime(entry, props, bridge) {
       ArrowUpRight: "ArrowUpRight",
       Download: "Download",
     },
+    "./VirtualList": { VirtualList: inlineList },
     "./components": {
       ErrorBox: "ErrorBox",
       Loading: "Loading",

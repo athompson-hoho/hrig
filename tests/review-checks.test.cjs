@@ -1244,7 +1244,7 @@ test("review-checks wiring: the module is pure, only the list, App and the state
   assert.ok(
     has(
       app,
-      "projectHistory: normalizeHistory(base.projectHistory), reviewChecks: normalizeReviewChecks(base.reviewChecks), connections,",
+      "projectHistory: normalizeHistory(base.projectHistory), reviewChecks: normalizeReviewChecks(base.reviewChecks),",
     ),
     "normalized on load next to the project history",
   );

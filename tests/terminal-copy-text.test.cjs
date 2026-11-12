@@ -572,7 +572,10 @@ test("terminal.copytrim source tripwire: every write of terminal text to the cli
   const tools = tight(stripComments(read("src/TerminalTools.tsx")));
   assert.deepEqual(
     filesWith(/\.writeText\(/),
-    ["TeamAssessment.tsx", "TerminalTools.tsx"],
+    // The long-list chain's panels also copy: an error message (PanelBoundary), a rig log (RigPanels) and the read-only
+    // snapshot of a needs-input seat or of a transcript (SeatPrompt, SeatTranscript). None is the terminal selection this
+    // setting trims.
+    ["PanelBoundary.tsx", "RigPanels.tsx", "SeatPrompt.tsx", "SeatTranscript.tsx", "TeamAssessment.tsx", "TerminalTools.tsx"],
     "a new file writes to the clipboard: route terminal text through copyTextForClipboard",
   );
   const assessment = tight(stripComments(read("src/TeamAssessment.tsx")));
