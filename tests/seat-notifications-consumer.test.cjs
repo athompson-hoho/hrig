@@ -216,7 +216,7 @@ module.exports.privacyAuthorityScenario = privacyAuthorityScenario;
 function preferenceHarness(user = {}, project = {}) {
   const app = source('src/App.tsx'), prefs = source('src/settings.ts');
   const react = { createElement(type, props, ...children) { return { type, props: { ...props, children } }; } };
-  const context = vm.createContext({ React: react, isWindows: false, projectId: 'synthetic-project',
+  const context = vm.createContext({ React: react, isWindows: false, DEFAULT_WORD_SEPARATOR: loadLocal('src/terminal-words.ts').DEFAULT_WORD_SEPARATOR, projectId: 'synthetic-project', recentFor: () => [], recentChanges: {}, noteRecent() {}, ownSettings: () => ({}),
     state: { preferences: user, projectPreferences: { 'synthetic-project': project } },
   });
   const declaration = name => find(app, n => ts.isVariableDeclaration(n) && n.name.getText(app) === name);
@@ -246,7 +246,9 @@ function preferenceHarness(user = {}, project = {}) {
     const rowFn = find(page, n => ts.isFunctionDeclaration(n) && n.name?.text === 'Row');
     const rowContext = vm.createContext({ React: react, defaults: context.defaults,
       validateOverrides: context.validateOverrides, useSettings: () => context.settingsContext,
-      useState: value => [value, () => {}], useEffect() {}, RotateCcw: 'RotateCcw' });
+      useState: value => [value, () => {}], useEffect() {}, RotateCcw: 'RotateCcw',
+      // The project override note of the build chain: not under test here.
+      overrideNote: () => null, marked: (text) => text });
     return evaluate(rowFn, page, rowContext)({ row: context.schema[0], scope });
   }
   refresh(); return { context, refresh, attentionToggle, settingsRow };

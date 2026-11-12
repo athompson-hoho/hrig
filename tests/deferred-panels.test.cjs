@@ -166,7 +166,7 @@ test('actual saved-layout onClick executes restoreModel policy and owner callbac
   const saved = { model: fixture(), name: 'synthetic saved' }, selected = [], changed = [];
   const node = unique(n => ts.isJsxAttribute(n) && n.name.getText(app) === 'onClick' && n.getText(app).includes('restoreModel(saved.model)'));
   const fn = evaluate(`result = (${node.initializer.expression.getText(app)});`, { ...policy, saved,
-    protect: run => run(), setModel: next => selected.push(next), modelChanged: next => changed.push(next), setMenu() {}, notify() {},
+    protect: run => run(), setModel: next => selected.push(next), modelChanged: next => changed.push(next), setMenu() {}, notify() {}, announceLayout() {},
   });
   fn();
   assert.equal(selected.length, 1);
@@ -182,7 +182,7 @@ test('actual role-template callback restores after real role substitution', () =
   evaluate(`result = (${node.initializer.expression.getText(app)});`, { ...policy, state: { activeRig: 'synthetic' },
     connection: { id: 'synthetic', name: 'Fixture' }, root: '.',
     seats: [{ id: 'builder', name: 'builder', session: 'synthetic-session' }],
-    protect: run => run(), remember() {}, notify() {}, setModel: next => selected.push(next), modelChanged: next => changed.push(next),
+    protect: run => run(), remember() {}, notify() {}, announceLayout() {}, setModel: next => selected.push(next), modelChanged: next => changed.push(next),
   })({ model: json });
   assert.equal(selected.length, 1);
   assert.equal(selected[0], changed[0]);
@@ -194,7 +194,7 @@ test('actual role-template callback restores after real role substitution', () =
 for (const name of ['applyPreset', 'openAll']) test(`actual App ${name} retains arrangement constructor link`, () => {
   const selected = [], changed = [], tabs = [tab('edit'), tab('term', 'terminal')];
   callback(name, { allTabs: () => tabs, remember() {}, seats: [], connection: { id: 'synthetic' }, root: '.',
-    setModel: next => selected.push(next), modelChanged: next => changed.push(next), setMenu() {}, notify() {},
+    setModel: next => selected.push(next), modelChanged: next => changed.push(next), setMenu() {}, notify() {}, announceLayout() {},
   })('Focus');
   assert.equal(selected.length, 1);
   assert.equal(selected[0], changed[0]);

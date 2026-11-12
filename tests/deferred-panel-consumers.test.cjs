@@ -107,7 +107,7 @@ function harness(selected, options = {}) {
   const scope = {
     React, DeferredPanel, SettingsPage, Loading: 'loading', root: '.',
     TerminalPanel: props => { events.push('terminal-mount'); propsSeen.push(props); return null; },
-    Welcome: () => null, openConnect() {}, openProject() {}, openShell() {}, openAll() {}, seats: [],
+    Welcome: () => null, welcomeRecents: () => [], projectHistory: [], state: { connections: [] }, openRecentProject() {}, setModal() {}, openConnect() {}, openProject() {}, openShell() {}, openAll() {}, seats: [],
     connection: fixture(0).layout.children[0].children[1].config.connection,
     inventory: null, freshSeats: () => [], markDirty() {}, setFileRevision() {}, notify() {},
     pendingFileFocus: { current: null }, modalRef: { current: null }, modelRef: { current: model },

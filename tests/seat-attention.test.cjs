@@ -1148,14 +1148,14 @@ test("seat-attention wiring: the setting is off by default and sits right after 
     "directly before the workspace save effect",
   );
   assert.equal(
-    count(app, "notifyAttention("),
+    count(app, "advanceSeatNotifications("),
     1,
     "App's own call is unchanged",
   );
   assert.equal(
     count(app, "attentionSeen"),
-    3,
-    "the attention effect is untouched",
+    0,
+    "the build chain's per-seat attention bookkeeping is gone: the long-list chain's advanceSeatNotifications owns the effect",
   );
   assert.equal(count(app, "notifications.seatNeedsInputSound"), 1);
   assert.equal(count(read("src/settings.ts"), KEY), 2);
