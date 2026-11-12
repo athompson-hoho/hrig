@@ -613,7 +613,7 @@ test("host-tint wiring: the tint lives in the saved workspace state and the term
   );
   const loader = between(
     app,
-    ".then(([saved, found]) => {",
+    ".then(async ([saved, found]) => {",
     ".catch((e) => setBootError",
   );
   assert.ok(

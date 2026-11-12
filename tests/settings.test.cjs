@@ -1925,7 +1925,7 @@ test("terminal.pasteHistory is an off-by-default Terminal boolean listed once ri
   for (const part of [...claims, "See TERMINALS.md"])
     assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
   assert.ok(!/[^\n -~]/.test(lines[at]), "the row is printable ASCII");
-
+});
 
 test("seat sort settings validate three modes and preserve scope through serialization and reset", () => {
   assert.equal(settings.resolveSettings()["rig.seatSort"], "name");

@@ -681,7 +681,7 @@ test("last-project module: it is pure, imports only the history rules and the co
 
 test("last-project docs: SETTINGS.md and NAVIGATION.md say that it is off by default, what it opens and when it does not, which checks it reuses and what it never does", () => {
   const settings = read("SETTINGS.md");
-  assert.ok(isAscii(settings), "plain ASCII");
+  assert.ok(!/[^\n -~…↑↓·→–]/.test(settings), "plain ASCII (plus the symbols the notification docs use)");
   const parts = settings.split("\n\n");
   const mine = parts.filter((part) =>
     part.startsWith("Reopen last project: `workspace.restoreLastProject`"),
@@ -726,7 +726,7 @@ test("last-project docs: SETTINGS.md and NAVIGATION.md say that it is off by def
   const raw = read("NAVIGATION.md");
   assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark stays");
   const nav = raw.slice(1);
-  assert.ok(isAscii(nav), "plain ASCII");
+  assert.ok(!/[^\n -~…↑↓·→–]/.test(nav), "plain ASCII (plus the symbols the Git info docs use)");
   assert.ok(nav.endsWith("\n") && !nav.endsWith("\n\n"));
   const lines = nav
     .split("\n")

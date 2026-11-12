@@ -96,6 +96,21 @@ const FOOTER_NAMES = [
   "isVisible",
   "hiddenStatusItems",
   "statusSeparators",
+  // The connection menu, the Git info and the rig health items of the long-list chain, which the same
+  // visibility rules now wrap or sit beside. They are inert here; their own tests cover them.
+  "menu",
+  "setMenu",
+  "ChevronDown",
+  "state",
+  "chooseConnection",
+  "GitInfoStatus",
+  "root",
+  "fileRevision",
+  "RigHealthStatus",
+  "attentionScope",
+  "inventory",
+  "inventoryHealth",
+  "inventoryError",
 ];
 function compileFooter() {
   const source =
@@ -149,6 +164,19 @@ function footer({
     isVisible: lib.isVisible,
     hiddenStatusItems,
     statusSeparators: lib.statusDividers(hiddenStatusItems),
+    menu: null,
+    setMenu: () => {},
+    ChevronDown: "ChevronDown",
+    state: { connections: [], activeRig: "" },
+    chooseConnection: () => {},
+    GitInfoStatus: function GitInfoStatus() {},
+    root: "/synthetic/project",
+    fileRevision: 0,
+    RigHealthStatus: function RigHealthStatus() {},
+    attentionScope: () => ({ ready: false }),
+    inventory: null,
+    inventoryHealth: { current: null },
+    inventoryError: "",
   });
 }
 function outline(node, depth = 0, out = []) {

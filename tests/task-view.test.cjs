@@ -40,7 +40,9 @@ test('TaskBoard wiring: group select, search placeholder, existing filter label 
   const s = fs.readFileSync('src/TaskBoard.tsx', 'utf8');
   assert.match(s, /aria-label="Group tasks by"/);
   assert.match(s, /aria-label="Filter tasks"/);
-  assert.match(s, /searchTasks\(items \|\| \[\], filter\)/);
-  assert.match(s, /groupTasks\(visible, groupBy\)/);
-  assert.match(s, /stateFilter, groupBy\]/);
+  // After the merge with the build chain's saved filters: the text search runs first, the saved filters narrow
+  // what it finds, the grouping applies to that result, and the list scope resets when any of them changes.
+  assert.match(s, /searchTasks\(items \|\| \[\], filters\.text\)/);
+  assert.match(s, /groupTasks\(visible, "seat"\)/);
+  assert.match(s, /filters, groupBy\]/);
 });

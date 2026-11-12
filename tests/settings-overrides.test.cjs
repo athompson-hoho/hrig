@@ -916,7 +916,7 @@ test("settings-overrides wiring: the module is pure and reads only the settings 
     "context.update(scope, row.key, next);",
     'own = scope === "user" ? context.user : context.project;',
     "context.reset(scope);",
-    "context.replace(scope, next);",
+    "context.replace(scope, report.valid);", // the import check (X09) decides what is applied
   ])
     assert.ok(page.includes(part), "SettingsPage still has: " + part);
   // The saving and scope code is counted exactly as it was.

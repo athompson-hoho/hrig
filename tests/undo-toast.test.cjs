@@ -144,6 +144,8 @@ const makeHistory = compile(
     "offerFor",
     "markOffer",
     "offerValid",
+    // The restore path also repairs optional panels (the long-list chain); the history rules do not depend on it.
+    "normalizeOptionalPanels",
   ],
   ["remember", "travel", "announceLayout", "undoFromToast"],
 );
@@ -341,6 +343,7 @@ function world(options = {}) {
       lib.offerFor,
       lib.markOffer,
       lib.offerValid,
+      (json) => json,
     );
     const allTabs = () => {
       const tabs = [];

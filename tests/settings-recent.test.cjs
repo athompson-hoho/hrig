@@ -1062,7 +1062,7 @@ test("settings-recent wiring: the module is pure and reads only the settings mod
     "validateOverrides({ [row.key]: next });",
     "context.update(scope, row.key, next);",
     "context.reset(scope);",
-    "context.replace(scope, next);",
+    "context.replace(scope, report.valid);", // the import check (X09) decides what is applied
     "settings: own",
     'a.download = "hrig-" + scope + "-settings.json";',
   ])

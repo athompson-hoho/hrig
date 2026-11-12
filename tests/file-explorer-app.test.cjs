@@ -50,6 +50,8 @@ function appFixture(component = 'editor') {
   const scope = { connection, root: config.root, state, stateRef: { current: state },
     model, modelRef: { current: model }, revision: 0, Actions, fileTreeOwner,
     pendingFileFocus: { current: null },
+    // The recent-files bookkeeping the build chain added to openFile; this test is about the sidebar owner, not the history.
+    recordRecent: (list) => list || [], recentKey: (id, rootPath) => id + '::' + rootPath,
     addPanel(...args) { events.push(args); },
     focusPanel() { assert.fail('new explicit file must not focus an existing panel'); },
     Sidebar: 'Sidebar', React: { createElement(type, props) { return { type, props }; } },

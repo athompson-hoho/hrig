@@ -91,8 +91,15 @@ function sidebar(overrides = {}, context = preferences()) {
       render();
     },
     rows: () => nodes().filter(n => n.props?.className === 'session-row'),
-    count: () => nodes().find(n => n.props?.className === 'section-label' &&
-      n.props.children[0]?.props.children === 'SESSIONS').props.children[1].props.children,
+    // The count sits in the header's tools span (next to the hide-stopped button) since the build chain's change.
+    count: () => {
+      const tools = nodes().find(n => n.props?.className === 'section-label' &&
+        n.props.children[0]?.props.children === 'SESSIONS').props.children[1];
+      const count = tools.props.className === 'count' ? tools : tools.props.children[0];
+      const text = count.props.children;
+      // The count is text now ("2", or "2 of 3" while stopped sessions are hidden); a plain number reads as one.
+      return typeof text === 'string' && /^\d+$/.test(text) ? Number(text) : text;
+    },
   };
 }
 

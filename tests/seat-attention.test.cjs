@@ -1133,7 +1133,8 @@ test("seat-attention wiring: the setting is off by default and sits right after 
   const sound = app.indexOf("useSeatNeedsInputSound({");
   const items = app.indexOf("useHumanItemNotices({");
   const attentionEnd = app.indexOf(
-    '}, [inventory, preferences["notifications.desktop"], connection.id]);',
+    // The long-list chain's notification effect, which depends on the pin owner, the error and the inventory health too.
+    "inventoryHealth.current.failures]);",
   );
   assert.ok(attentionEnd > 0 && items > attentionEnd && sound > items);
   assert.ok(

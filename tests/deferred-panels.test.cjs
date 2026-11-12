@@ -15,8 +15,16 @@ function evaluate(source, scope = {}) {
   }).outputText, context);
   return context.result;
 }
-const policy = evaluate(fs.readFileSync('src/layout.ts', 'utf8') + '\nresult = exports;', {
+// layout.ts also uses the maximize rules (withoutMaximized), so that module is loaded for real as well.
+const maximizeRules = evaluate(fs.readFileSync('src/panel-maximize.ts', 'utf8') + '\nresult = exports;', {
   require(id) { assert.equal(id, 'flexlayout-react'); return { Model }; },
+});
+const policy = evaluate(fs.readFileSync('src/layout.ts', 'utf8') + '\nresult = exports;', {
+  require(id) {
+    if (id === './panel-maximize') return maximizeRules;
+    assert.equal(id, 'flexlayout-react');
+    return { Model };
+  },
 });
 const app = ts.createSourceFile('src/App.tsx', fs.readFileSync('src/App.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function unique(predicate) {

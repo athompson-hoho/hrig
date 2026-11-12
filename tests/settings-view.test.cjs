@@ -828,7 +828,7 @@ test("settings-view wiring: the module is pure and reads only the settings modul
     'setNotice("Reset " + scope + " settings.");',
     "Cancel reset",
     "onClick={() => context.reset(scope, row.key)}",
-    "context.replace(scope, next);",
+    "context.replace(scope, report.valid);", // the import check (X09) decides what is applied
   ])
     assert.ok(page.includes(part), "SettingsPage still has: " + part);
   assert.equal(count(page, "context.update("), 2);

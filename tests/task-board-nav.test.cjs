@@ -20,6 +20,13 @@ const between = (text, from, to) => {
   return text.slice(start, end);
 };
 
+// The virtualized list of the long-list chain, drawn here as every row at once: these tests are about the board's
+// own behavior (keys, filters, exports), and the list's windowing has its own tests.
+function inlineList(props) {
+  return { type: "div", props: { className: props.className, children: props.rows.map((row, i) => props.renderRow(row, i)) } };
+}
+inlineList.inline = true;
+
 function bundle(entry, external = []) {
   return buildSync({
     entryPoints: [path.join(root, entry)],
@@ -126,7 +133,8 @@ function boardHarness({ rows = ROWS } = {}) {
       }
     },
   };
-  const jsx = (type, props, key) => ({ type, props, key });
+  const jsx = (type, props, key) =>
+    typeof type === "function" && type.inline ? type(props) : { type, props, key };
   const Board = load("src/TaskBoard.tsx", {
     react,
     "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
@@ -136,6 +144,7 @@ function boardHarness({ rows = ROWS } = {}) {
       RefreshCw: "RefreshCw",
       ArrowUpRight: "ArrowUpRight",
     },
+    "./VirtualList": { VirtualList: inlineList },
     "./components": {
       ErrorBox: "ErrorBox",
       Loading: "Loading",

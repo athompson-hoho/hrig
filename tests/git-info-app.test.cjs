@@ -13,7 +13,7 @@ function mountGitInfoApp(options = {}) {
   const matches = [];
   function visit(n) {
     if (ts.isJsxExpression(n) && n.expression &&
-        n.expression.getText(app).startsWith('preferences["appearance.statusBar"] &&')) matches.push(n.expression);
+        n.expression.getText(app).startsWith('showStatusBar(focusMode, preferences["appearance.statusBar"]) &&')) matches.push(n.expression);
     ts.forEachChild(n, visit);
   }
   visit(app); assert.equal(matches.length, 1, 'actual conditional footer seam is unique');
@@ -40,6 +40,10 @@ function mountGitInfoApp(options = {}) {
           inventoryError: '', state: { activeRig: '', connections: [] },
           // Inert stand-ins for the status-bar connection switcher.
           menu: null, setMenu() {}, chooseConnection() {}, ChevronDown: 'chevron-icon',
+          // The build chain's footer rules: focus mode off, every item shown, nothing dropped.
+          focusMode: false, showStatusBar: (focus, pref) => pref !== false && !focus,
+          isVisible: () => true, hiddenStatusItems: new Set(), statusSeparators: {},
+          droppedNow: [], reconnectDropped() {}, RefreshCw: 'refresh-icon', droppedLabel: n => 'Reconnect all dropped (' + n + ')',
           setSection: value => events.push(['section', value]),
           setSidebar: value => events.push(['sidebar', value]),
           addPanel: (...args) => events.push(['panel', ...args]),

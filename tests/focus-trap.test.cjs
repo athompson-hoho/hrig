@@ -774,7 +774,7 @@ test("focus-trap docs: NAVIGATION.md has one Accessibility paragraph after the l
   const raw = read("NAVIGATION.md");
   assert.equal(raw.charCodeAt(0), 0xfeff, "the byte order mark stays");
   const nav = raw.slice(1);
-  assert.ok(/^[\t\n -~]*$/.test(nav), "plain ASCII");
+  assert.ok(/^[\t\n -~…↑↓·→–]*$/.test(nav), "plain ASCII (plus the symbols the Git info docs use)");
   assert.ok(nav.endsWith(".\n") && !nav.endsWith("\n\n"));
   const lines = nav.split("\n");
   const mine = lines.filter((line) => line.startsWith("Accessibility: "));

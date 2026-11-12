@@ -449,7 +449,7 @@ test("seat-visibility wiring: the setting is off by default and sits after the r
   // The existing filter keeps its own const, untouched, and the new one composes after it.
   const own = sidebar.indexOf("const seats = (inventory?.seats || []).filter(");
   const hide = sidebar.indexOf(
-    'const hideStopped = settings.user["workspace.hideStoppedSeats"] === true;',
+    'const hideStopped = settings.user?.["workspace.hideStoppedSeats"] === true;',
   );
   assert.ok(own > 0 && hide > own);
   assert.equal(count(sidebar, "const hideStopped = "), 1);

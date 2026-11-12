@@ -62,12 +62,12 @@ function compile(code, params, result) {
 }
 // The boot effect's load callback, as the sidebar width test cuts it.
 const loadCut = cut(
-  "\n      .then(([saved, found]) => {\n",
+  "\n      .then(async ([saved, found]) => {\n",
   "\n      })\n      .catch((e) => setBootError(e.message));",
   "the workspace load callback",
 );
 const loadFactory = compile(
-  "const load = ([saved, found]) => {" + loadCut.body + "\n};",
+  "const load = async ([saved, found]) => {" + loadCut.body + "\n};",
   [
     "setDetected",
     "defaultState",

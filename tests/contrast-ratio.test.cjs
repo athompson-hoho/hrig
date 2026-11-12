@@ -813,7 +813,7 @@ test("contrast-ratio terminal: the colors High Contrast hands to the terminal an
 
 test("contrast-ratio docs: SETTINGS.md has one High Contrast paragraph, after the theme notes, that says what is measured, the two thresholds, what was changed and what is left to a person", () => {
   const raw = read("SETTINGS.md");
-  assert.ok(!/[^\n -~]/.test(raw), "plain ASCII");
+  assert.ok(!/[^\n -~…↑↓·→–]/.test(raw), "plain ASCII (plus the symbols the Git info and notification docs use)");
   assert.ok(raw.endsWith("\n") && !raw.endsWith("\n\n"), "one final line feed");
   const lines = raw.split("\n");
   const at = lines.findIndex((l) => l.startsWith("High Contrast: "));

@@ -1143,14 +1143,15 @@ test("human-items wiring: the module is pure, the hook reads the queue list and 
   assert.ok(
     app.indexOf("useHumanItemNotices({") >
       app.indexOf(
-        '}, [inventory, preferences["notifications.desktop"], connection.id]);',
+        // The long-list chain's seat notification effect (it replaced the build chain's per-seat call).
+        "inventoryHealth.current.failures]);",
       ),
     "right after the seat attention effect",
   );
   assert.equal(
-    count(app, "notifyAttention("),
+    count(app, "advanceSeatNotifications("),
     1,
-    "App's own call is unchanged",
+    "App's own seat notification call is the one the long-list chain made",
   );
   assert.equal(count(app, "notifications.humanItems"), 1);
   assert.equal(count(read("src/settings.ts"), "notifications.humanItems"), 2);

@@ -45,7 +45,7 @@ function loadLocal(file, cache = new Map()) {
 }
 function settings() {
   const root = source('src/settings.ts');
-  const context = vm.createContext({ isWindows: false });
+  const context = vm.createContext({ isWindows: false, DEFAULT_WORD_SEPARATOR: loadLocal('src/terminal-words.ts').DEFAULT_WORD_SEPARATOR });
   context.defaults = evaluate(find(root, n => ts.isVariableDeclaration(n) &&
     n.name.getText(root) === 'defaults').initializer, root, context);
   const resolver = find(root, n => ts.isFunctionDeclaration(n) && n.name?.text === 'resolveSettings');

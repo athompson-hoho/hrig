@@ -9,7 +9,7 @@ const { mountComponent } = require('./helpers/virtual-list-harness.cjs');
 const app = ts.createSourceFile('src/App.tsx', fs.readFileSync('src/App.tsx', 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const matches = [];
 (function visit(n) {
-  if (ts.isJsxExpression(n) && n.expression && n.expression.getText(app).startsWith('preferences["appearance.statusBar"] &&')) matches.push(n.expression);
+  if (ts.isJsxExpression(n) && n.expression && n.expression.getText(app).startsWith('showStatusBar(focusMode, preferences["appearance.statusBar"]) &&')) matches.push(n.expression);
   ts.forEachChild(n, visit);
 })(app);
 assert.equal(matches.length, 1);
@@ -30,7 +30,11 @@ function mount(activeId = 'a') {
       Network: 'network-icon', ChevronDown: 'chevron-icon', Check: 'check-icon', Activity: 'activity-icon', tabCount: 1,
       state: { activeRig: '', connections: conns },
       menu, setMenu: v => { menu = v; }, chooseConnection: id => { chosen.push(id); menu = null; },
-      setSection() {}, setSidebar() {}, addPanel() {} });
+      setSection() {}, setSidebar() {}, addPanel() {},
+      // The build chain's footer rules (focus mode hides the bar, every item shown, nothing dropped); the connection menu is what this test drives.
+      focusMode: false, showStatusBar: (focus, pref) => pref !== false && !focus,
+      isVisible: () => true, hiddenStatusItems: new Set(), statusSeparators: {},
+      droppedNow: [], reconnectDropped() {}, RefreshCw: 'refresh-icon', droppedLabel: n => 'Reconnect all dropped (' + n + ')' });
     vm.runInContext(ts.transpileModule(`result = (${matches[0].getText(app)});`, {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React } }).outputText, scope);
     return scope.result;
