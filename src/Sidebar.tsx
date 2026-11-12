@@ -159,7 +159,7 @@ export default function Sidebar({
   const pins = new Set(pinsAvailable ? normalizePinnedSeats(pinnedSeats) : []);
   const statusSeats = filterSeatsByStatus(searchResult.seats, statusFilter);
   // Hide stopped sessions (off by default) leaves stopped, exited and archived-rig sessions out of the list after the filters.
-  const hideStopped = settings.user["workspace.hideStoppedSeats"] === true;
+  const hideStopped = settings.user?.["workspace.hideStoppedSeats"] === true;
   const hiddenSeats = hideStopped ? hiddenCount(statusSeats, rigs) : 0;
   const setHideStopped = (value: boolean) =>
     settings.update("user", "workspace.hideStoppedSeats", value);

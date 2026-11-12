@@ -1395,6 +1395,32 @@ export default function App() {
       (element || panel)?.focus();
     });
   };
+  attentionContext.current = { connection, inventory, inventoryError, openSeat, focusPanel };
+  const jumpAttention = (captured: Connection, seat: Seat, diagnostic = false): string => {
+    const latest = attentionContext.current;
+    const current = stateRef.current.connections.find((c) => c.id === stateRef.current.activeConnection) || stateRef.current.connections[0] || local;
+    const scope = attentionScope(captured, current, latest.inventory, inventoryHealth.current, latest.inventoryError);
+    if (!scope.ready) return scope.reason;
+    if (pinConnectionIdentity(latest.connection) !== pinConnectionIdentity(current)) return "Current connection inventory is unavailable. Existing terminal preserved.";
+    const reason = attentionJumpEligibility(scope.inventory, seat, diagnostic);
+    if (reason) return reason;
+    const id = `seat:${current.id}:${seat.id}`;
+    try {
+    const node = modelRef.current.getNodeById(id) as TabNode | undefined;
+    if (node) {
+      const config = node.getConfig?.();
+      if (node.getComponent?.() !== "terminal" || !config?.connection ||
+        pinConnectionIdentity(config.connection) !== pinConnectionIdentity(current) ||
+        config.terminalId !== id || config.seat?.id !== seat.id || config.seat?.session !== seat.session ||
+        !node.getDocument?.() || !node.getWindow?.() || node.getWindow()?.closed)
+        return "Jump is unavailable because an existing terminal belongs to a different or unverified target, or cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window, its connection and session before trying again.";
+      latest.focusPanel(id);
+    } else latest.openSeat(scope.inventory!.seats.find((row) => row.id === seat.id)!);
+    return "";
+    } catch {
+      return "This terminal cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window before trying again.";
+    }
+  };
   // Ctrl+Tab order, newest first. Kept apart from the navigator's recent list; frozen while Control is held; selecting never touches terminal input.
   const panelMru = useRef(emptyMru());
   useEffect(() => {
@@ -1441,32 +1467,6 @@ export default function App() {
     );
     panelMru.current = step.state;
     if (step.target !== null) focusPanel(step.target);
-  };
-  attentionContext.current = { connection, inventory, inventoryError, openSeat, focusPanel };
-  const jumpAttention = (captured: Connection, seat: Seat, diagnostic = false): string => {
-    const latest = attentionContext.current;
-    const current = stateRef.current.connections.find((c) => c.id === stateRef.current.activeConnection) || stateRef.current.connections[0] || local;
-    const scope = attentionScope(captured, current, latest.inventory, inventoryHealth.current, latest.inventoryError);
-    if (!scope.ready) return scope.reason;
-    if (pinConnectionIdentity(latest.connection) !== pinConnectionIdentity(current)) return "Current connection inventory is unavailable. Existing terminal preserved.";
-    const reason = attentionJumpEligibility(scope.inventory, seat, diagnostic);
-    if (reason) return reason;
-    const id = `seat:${current.id}:${seat.id}`;
-    try {
-    const node = modelRef.current.getNodeById(id) as TabNode | undefined;
-    if (node) {
-      const config = node.getConfig?.();
-      if (node.getComponent?.() !== "terminal" || !config?.connection ||
-        pinConnectionIdentity(config.connection) !== pinConnectionIdentity(current) ||
-        config.terminalId !== id || config.seat?.id !== seat.id || config.seat?.session !== seat.session ||
-        !node.getDocument?.() || !node.getWindow?.() || node.getWindow()?.closed)
-        return "Jump is unavailable because an existing terminal belongs to a different or unverified target, or cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window, its connection and session before trying again.";
-      latest.focusPanel(id);
-    } else latest.openSeat(scope.inventory!.seats.find((row) => row.id === seat.id)!);
-    return "";
-    } catch {
-      return "This terminal cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window before trying again.";
-    }
   };
   const movePanel = (id: string, target: string, direction: string) => {
     const current = modelRef.current;
