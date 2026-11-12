@@ -64,7 +64,7 @@ A text longer than 100,000 characters or 2,000 blocks (a list item counts as a b
 
 ## Task board filters
 
-Four filters narrow the board: Filter tasks (text in the task title, ignoring case), the owner (the seat a task is assigned to), the state (pending, in-progress, blocked or failed) and the tag. A task shows only when it passes every filter that is set; with no filter set every task shows.
+Four filters narrow the board: Filter tasks (text in the task title, the seat it is assigned to, its state or its id, ignoring case), the owner (the seat a task is assigned to), the state (pending, in-progress, blocked or failed) and the tag. A task shows only when it passes every filter that is set; with no filter set every task shows.
 
 The tag list holds the tags found on the tasks that are loaded, up to the 100 most used, sorted. HRig reads them from the task's tags field as OpenRig reports it (a list of names, or comma separated text) and compares them without case or surrounding spaces, so Mission:Alpha and mission:alpha are one tag. A task without tags never matches a tag filter.
 

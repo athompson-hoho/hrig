@@ -1426,7 +1426,7 @@ test("task-filters docs: TASKS.md says what the four filters do, where the tags 
   };
   say(paragraphs[0], [
     "Four filters narrow the board",
-    "text in the task title, ignoring case",
+    "text in the task title, the seat it is assigned to, its state or its id, ignoring case",
     "the owner (the seat a task is assigned to)",
     "the state (pending, in-progress, blocked or failed)",
     "the tag",
