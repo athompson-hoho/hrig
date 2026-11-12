@@ -11,7 +11,7 @@ function externalUrl(value) {
     );
   return url.href;
 }
-function registerTerminalTools({ handle, dialog, shell, getWindow, fs, clipboard }) {
+function registerTerminalTools({ handle, dialog, shell, getWindow, fs, clipboard, getTerminal }) {
   handle("terminal:read-clipboard", async () => {
     const text = clipboard ? clipboard.readText() : "";
     return typeof text === "string" ? text : "";
@@ -30,6 +30,40 @@ function registerTerminalTools({ handle, dialog, shell, getWindow, fs, clipboard
     if (result.canceled || !result.filePath) return { saved: false };
     await fs.writeFile(result.filePath, text, "utf8");
     return { saved: true };
+  });
+  handle("terminal:save-log", async (_event, request) => {
+    const { id, text } = request || {};
+    if (typeof id !== "string" || !id || typeof text !== "string" || !text)
+      throw new Error("Choose a connected terminal with retained output.");
+    const bytes = Buffer.byteLength(text, "utf8");
+    if (bytes > 32 * 1024 * 1024)
+      throw new Error("Terminal log exceeds the 32 MiB limit.");
+    const terminal = typeof getTerminal === "function" ? getTerminal(id) : null;
+    if (!terminal) throw new Error("Connect this terminal before saving its log.");
+    const lines = text.split(/\r\n|\r|\n/).length;
+    const confirmation = await dialog.showMessageBox(getWindow(), {
+      type: "question",
+      title: "Save terminal log",
+      message: "Save this terminal's retained output to a local file?",
+      detail: `${bytes} bytes · ${lines} lines\nWarning: terminal text can contain secrets.`,
+      buttons: ["Cancel", "Choose file"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (confirmation.response !== 1) return { saved: false };
+    if (getTerminal(id) !== terminal)
+      throw new Error("Terminal changed while confirming. Choose Save terminal log again.");
+    const result = await dialog.showSaveDialog(getWindow(), {
+      title: "Save terminal log",
+      defaultPath: "terminal-log.txt",
+      filters: [{ name: "Plain text log", extensions: ["txt", "log"] }],
+    });
+    if (result.canceled || !result.filePath) return { saved: false };
+    if (getTerminal(id) !== terminal)
+      throw new Error("Terminal changed while choosing a file. Choose Save terminal log again.");
+    await fs.writeFile(result.filePath, text, "utf8");
+    return { saved: true, bytes, lines };
   });
   handle("snippets:export", async (_event, text) => {
     if (typeof text !== "string" || Buffer.byteLength(text, "utf8") > 32 * 1024 * 1024)

@@ -496,6 +496,7 @@ export default function TerminalPanel({
         host={host}
         terminal={terminalRef}
         connection={config.connection}
+        terminalId={config.terminalId!}
         rigControl={!!config.rigControlToken}
         ready={ready}
         ended={ended}

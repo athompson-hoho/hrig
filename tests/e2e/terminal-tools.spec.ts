@@ -136,6 +136,30 @@ test("terminal tools search, copy and export without sending search text or repl
     await expect(
       page.getByText("Export canceled.", { exact: true }),
     ).toBeVisible();
+    const savedLog = path.join(dir, "terminal-log.txt");
+    await app.evaluate(({ dialog }, file) => {
+      (dialog as any).showMessageBox = async (_window: unknown, options: any) => {
+        (globalThis as any).saveLogConfirm = options;
+        return { response: 1 };
+      };
+      (dialog as any).showSaveDialog = async () => ({ canceled: false, filePath: file });
+    }, savedLog);
+    await page.getByRole("button", { name: "Save terminal log" }).click();
+    await expect(page.getByText("Terminal log saved locally.", { exact: true })).toBeVisible();
+    const confirmation = await app.evaluate(() => (globalThis as any).saveLogConfirm);
+    expect(confirmation.detail).toMatch(/bytes · \d+ lines/);
+    expect(confirmation.detail).toMatch(/text can contain secrets/);
+    expect(await fs.readFile(savedLog, "utf8")).toBe(output.replace(/\r\n/g, "\n"));
+    let choseFile = false;
+    await app.evaluate(({ dialog }) => {
+      (dialog as any).showMessageBox = async () => ({ response: 0 });
+      (dialog as any).showSaveDialog = async () => { (globalThis as any).saveLogChoseFile = true; return { canceled: false, filePath: "/tmp/should-not-exist.txt" }; };
+      (globalThis as any).saveLogChoseFile = false;
+    });
+    await page.getByRole("button", { name: "Save terminal log" }).click();
+    await expect(page.getByText("Terminal log save canceled.", { exact: true })).toBeVisible();
+    choseFile = await app.evaluate(() => (globalThis as any).saveLogChoseFile);
+    expect(choseFile).toBe(false);
     await input.focus();
     await input.pressSequentially("echo VERIFY_%HRIG_TOOLS_SESSION%");
     await input.press("Enter");

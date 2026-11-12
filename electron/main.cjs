@@ -40,7 +40,7 @@ function handle(channel, fn) {
   });
 }
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
-require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
+require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard,getTerminal:id=>terminals.get(id)});
 require('./window-title.cjs').registerWindowTitle({handle,getWindow:()=>mainWindow});
 require('./diagnostics-export.cjs').registerDiagnosticsExport({
   handle, dialog, getWindow: () => mainWindow, fs,
@@ -463,6 +463,7 @@ handle("files:git", (_event, connection, root) =>
   backend.git(connection, root),
 );
 const terminalImages=require('./terminal-images.cjs');
+require('./terminal-upload.cjs').registerTerminalUpload({handle,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)});
 handle('terminal:clipboard-image', () => !clipboard.readImage().isEmpty());
 handle('terminal:paste-image', async (_event,id) => {
  const item=terminals.get(id);if(!item)throw Error('Connect the terminal before pasting an image.');

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { Terminal } from "@xterm/xterm";
 import { SearchAddon } from "@xterm/addon-search";
-import { ArrowDown, ArrowUp, Copy, Download, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Download, Save, Search, X } from "lucide-react";
 import { IconButton } from "./components";
 import { terminalText } from "./terminal-output";
 import { pasteClipboard, pastePreview, endsWithLineBreak } from "./terminal-paste";
@@ -294,14 +294,27 @@ export default function TerminalTools({
         return;
       }
       if (action === "export") {
-        const saved = await window.hrig.exportTerminal(text);
-        setNotice(saved.saved ? "Output exported." : "Export canceled.");
+        const result = await window.hrig.exportTerminal(text);
+        setNotice(result.saved ? "Output exported." : "Export canceled.");
       } else {
         await navigator.clipboard.writeText(clipboardText(text));
-        setNotice(
-          action === "selection" ? "Selection copied." : "Output copied.",
-        );
+        setNotice(action === "selection" ? "Selection copied." : "Output copied.");
       }
+    } catch (e) {
+      setNotice((e as Error).message);
+    }
+  };
+  const saveTerminalLog = async () => {
+    const term = terminal.current;
+    if (!term) return;
+    const text = terminalText(term);
+    if (!text) {
+      setNotice("No retained terminal output to save.");
+      return;
+    }
+    try {
+      const result = await window.hrig.saveTerminalLog({ id: terminalId, text });
+      setNotice(result.saved ? "Terminal log saved locally." : "Terminal log save canceled.");
     } catch (e) {
       setNotice((e as Error).message);
     }
@@ -419,11 +432,14 @@ export default function TerminalTools({
           <Copy size={13} />
         </IconButton>
         <button onClick={() => void output("all")}>Copy output</button>
-        <IconButton
-          title="Export terminal output"
-          onClick={() => void output("export")}
-        >
+        <IconButton title="Export terminal output" onClick={() => void output("export")}>
           <Download size={13} />
+        </IconButton>
+        <IconButton
+          title="Save terminal log"
+          onClick={() => void saveTerminalLog()}
+        >
+          <Save size={13} />
         </IconButton>
         <span>Retained output only</span>
       </div>

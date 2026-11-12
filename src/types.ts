@@ -138,6 +138,9 @@ export interface HrigAPI {
   onTerminalLog(callback: (state: TerminalLogState) => void): () => void;
   clipboardHasImage(): Promise<boolean>;
   pasteClipboardImage(id: string): Promise<string|null>;
+  uploadTerminalFile(request: {id: string; source: string}): Promise<{target: string; quotedPath: string}|null>;
+  cleanupTerminalUpload(request: {id: string; target: string}): Promise<void>;
+  keepTerminalUpload(request: {id: string; target: string}): Promise<void>;
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
   updateFrequency(hours: number): Promise<{ hours: number }>;
   updates(request:{op:string;confirmed?:boolean;allowUnsigned?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
@@ -148,6 +151,7 @@ export interface HrigAPI {
   integrate(request: Record<string,unknown>): Promise<any>;
   openWorkLink(url: string): Promise<void>;
   exportTerminal(text: string): Promise<{saved: boolean}>;
+  saveTerminalLog(request: {id: string; text: string}): Promise<{saved: boolean; bytes?: number; lines?: number}>;
   exportSnippets(text: string): Promise<{saved: boolean}>;
   openTerminalLink(url: string): Promise<void>;
   readClipboardText(): Promise<string>;

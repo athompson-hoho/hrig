@@ -57,6 +57,36 @@ test("terminal export cancels cleanly and preserves write errors", async () => {
   );
 });
 
+test("Save terminal log previews local retained output, confirms before choosing a file, and refuses a stale terminal", async () => {
+  const handlers = {}, dialogs = [], saveOptions = [], writes = [];
+  let response = 0, current = {}, changeAfterConfirm = false;
+  const terminal = {};
+  current = terminal;
+  registerTerminalTools({
+    handle: (name, fn) => (handlers[name] = fn),
+    getWindow: () => "main-window",
+    getTerminal: () => current,
+    dialog: {
+      showMessageBox: async (_window, options) => { dialogs.push(options); if (changeAfterConfirm) current = {}; return { response }; },
+      showSaveDialog: async (_window, options) => { saveOptions.push(options); return { canceled: false, filePath: "/tmp/log.txt" }; },
+    },
+    fs: { writeFile: async (...args) => writes.push(args) },
+  });
+  assert.deepEqual(await handlers["terminal:save-log"]({}, { id: "term", text: "one\ntwo" }), { saved: false });
+  assert.equal(writes.length, 0);
+  assert.match(dialogs[0].detail, /7 bytes · 2 lines/);
+  assert.match(dialogs[0].detail, /terminal text can contain secrets/);
+  response = 1;
+  current = terminal;
+  assert.deepEqual(await handlers["terminal:save-log"]({}, { id: "term", text: "one\ntwo" }), { saved: true, bytes: 7, lines: 2 });
+  assert.deepEqual(writes, [["/tmp/log.txt", "one\ntwo", "utf8"]]);
+  assert.equal(saveOptions[0].defaultPath, "terminal-log.txt");
+  current = terminal;
+  changeAfterConfirm = true;
+  await assert.rejects(handlers["terminal:save-log"]({}, { id: "term", text: "x" }), /Terminal changed while confirming/);
+  assert.equal(writes.length, 1);
+});
+
 test("snippet export uses a JSON save dialog, writes only after selection, and enforces a bound", async () => {
   const handlers = {};
   let canceled = true;

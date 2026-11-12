@@ -245,6 +245,7 @@ function dropRig(overrides = {}, platform = "linux", bridge = undefined) {
     host: { current: element },
     terminal: { current: terminal },
     connection: local,
+    terminalId: "term-test",
     rigControl: false,
     ready: true,
     ended: null,
@@ -363,10 +364,6 @@ test("terminal-drop-path tracer: a file dropped on a local terminal flows from t
 
   // Every refusal: nothing pasted, the drop is still cancelled, the notice says why.
   const refusals = [
-    [
-      { connection: { id: "s", kind: "ssh" } },
-      "Dropped paths are local; remote upload is not supported. Nothing was inserted.",
-    ],
     [
       { connection: { id: "w", kind: "wsl" } },
       "Dropped paths are local; remote upload is not supported. Nothing was inserted.",
@@ -495,7 +492,7 @@ test("terminal-drop-path tracer: a file dropped on a local terminal flows from t
   assert.equal(
     count(
       panel,
-      "<TerminalFileDrop host={host} terminal={terminalRef} connection={config.connection} rigControl={!!config.rigControlToken} ready={ready} ended={ended} localShell={localShell} />",
+      "<TerminalFileDrop host={host} terminal={terminalRef} connection={config.connection} terminalId={config.terminalId!} rigControl={!!config.rigControlToken} ready={ready} ended={ended} localShell={localShell} />",
     ),
     1,
   );
@@ -923,6 +920,37 @@ test("terminal-drop-path quoting: a bounded POSIX, PowerShell and Command Prompt
   );
 });
 
+test("SSH file drop confirms through the main-process bridge, inserts only the quoted returned path, and cleans up if the terminal changes", async () => {
+  const ssh = { id: "remote", name: "Build", host: "build.example", kind: "ssh" };
+  const calls = [];
+  let result = null;
+  const bridge = {
+    pathForFile: (file) => file.path,
+    uploadTerminalFile: async (request) => { calls.push(["upload", request]); return result; },
+    cleanupTerminalUpload: async (request) => calls.push(["cleanup", request]),
+    keepTerminalUpload: async (request) => calls.push(["keep", request]),
+  };
+  const rig = dropRig({ connection: ssh }, "linux", bridge);
+  const events = dropOn(rig, "/home/me/notes.txt");
+  assert.equal(events.drop.prevented, 1);
+  assert.deepEqual(rig.terminal.pasted, []);
+  assert.deepEqual(calls[0], ["upload", { id: "term-test", source: "/home/me/notes.txt" }]);
+  assert.equal(rig.terminal.focused, 0);
+  result = { target: "/tmp/hrig-upload-12345678-1234-4234-9234-123456789abc/notes.txt", quotedPath: "'/tmp/hrig-upload-12345678-1234-4234-9234-123456789abc/notes.txt'" };
+  dropOn(rig, "/home/me/notes.txt");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(rig.terminal.pasted, [result.quotedPath]);
+  assert.equal(rig.terminal.focused, 1);
+  assert.deepEqual(calls.at(-1), ["keep", { id: "term-test", target: result.target }]);
+
+  dropOn(rig, "/home/me/notes.txt");
+  rig.props.terminal.current = fakeTerminal();
+  rig.rerender({ terminal: rig.props.terminal });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls.at(-1), ["cleanup", { id: "term-test", target: result.target }]);
+  assert.equal(rig.terminal.pasted.length, 1);
+});
+
 test("terminal-drop-path wiring: the drop lives in one pure module, one component and one preload helper, inserts only through the terminal paste, and leaves tab drags, the settings, the main process and the terminal write path alone", () => {
   // The pure module: ASCII, no imports, no clock, bridge or storage, the exact exports.
   const moduleSource = read("src/terminal-drop-path.ts");
@@ -980,10 +1008,10 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
     ["react", "@xterm/xterm", "./types", "./terminal-drop-path"],
   );
   assert.equal(count(component, "term.paste(result.text);"), 1);
-  assert.equal(count(component, ".paste("), 1);
-  assert.equal(count(component, "term.focus();"), 1);
-  assert.equal(count(component, "window.hrig."), 2);
-  assert.equal(count(component, "window.hrig.pathForFile(file)"), 1);
+  assert.equal(count(component, ".paste("), 2);
+  assert.equal(count(component, "term.focus();"), 2);
+  assert.equal(count(component, "window.hrig."), 6);
+  assert.equal(count(component, "window.hrig.pathForFile(files[0])"), 1);
   assert.equal(
     count(component, "preventDefault()"),
     2,
@@ -1076,7 +1104,7 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
         !/pathForFile|getPathForFile|webUtils|terminal:drop|file-drop/.test(
           read("electron/" + file),
         ),
-        "the main process has no drop code: " + file,
+        "the main process never reads renderer File objects: " + file,
       );
 
   // One CSS rule: an outline that is painted over the terminal and takes no space.
@@ -1140,125 +1168,24 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
     );
 });
 
-test("terminal-drop-path docs: TERMINALS.md says what a drop inserts and where it refuses, and the design note says remote upload is not implemented and why", () => {
-  const mod = pure();
-  for (const file of ["TERMINALS.md", "docs/terminal-file-drop.md"]) {
-    const text = read(file);
-    assert.ok(!text.startsWith(char(0xfeff)), file + " has no byte order mark");
-    assert.ok(
-      text.endsWith("\n") && !text.endsWith("\n\n"),
-      file + " ends with one line feed",
-    );
-    assert.ok(!text.includes("\r"), file + " has no carriage return");
-  }
-
-  // TERMINALS.md: one paragraph in the paste group, one line, printable ASCII.
-  const lines = read("TERMINALS.md").split("\n");
-  const at = lines.findIndex((line) =>
-    line.startsWith(
-      "Dropping a file from your computer onto a local terminal inserts its path at the prompt and never presses Enter.",
-    ),
-  );
-  assert.ok(at > 0, "TERMINALS.md has the paragraph");
-  assert.equal(
-    lines.filter((line) => line.startsWith("Dropping a file")).length,
-    1,
-    "exactly one such paragraph",
-  );
-  assert.ok(
-    lines[at - 1] === "" && lines[at + 1] === "",
-    "blank lines around the paragraph",
-  );
-  assert.ok(
-    lines[at - 2].startsWith(
-      "The terminal.confirmMultilinePaste setting is off by default",
-    ),
-    "right after the paste confirmation paragraph",
-  );
-  assert.ok(
-    lines[at + 2].startsWith(
-      "The terminal.showSizeOnResize setting is on by default",
-    ),
-    "right before the size paragraph",
-  );
-  assert.ok(!/[^ -~]/.test(lines[at]), "the paragraph is printable ASCII");
-  for (const part of [
-    "single quotes for Bash, Zsh and PowerShell, double quotes for Command Prompt",
-    "several files go in as several quoted paths separated by spaces",
-    "the text goes in through the terminal's normal paste, so nothing runs until you press Enter yourself",
-    "a dashed outline marks a terminal that accepts the drop",
-    "Only local terminals accept it",
-    'says "Dropped paths are local; remote upload is not supported"',
-    "terminals that are not connected and OpenRig action terminals refuse too",
-    "longer than " + mod.MAX_DROP_PATH.toLocaleString("en-US") + " characters",
-    "holds a control, line-break or invisible character",
-    "as is a drop of more than " + mod.MAX_DROP_FILES + " files",
-    "Command Prompt also refuses a path with %, !, ^ or a double quote",
-    "a dropped path never triggers the terminal.confirmMultilinePaste dialog",
-    "Dragging a panel tab is not affected, and there is no setting for this",
-    "nothing happens unless you drop a file from outside HRig",
-    "whether the agent reads a quoted path as a file reference depends on the agent",
-    "Uploading the file to a remote host is not implemented",
-    "docs/terminal-file-drop.md holds the design note",
-  ])
-    assert.ok(lines[at].includes(part), "TERMINALS.md must say: " + part);
-  assert.ok(
-    lines[at].includes(mod.DROP_REMOTE_NOTICE.split(". ")[0]),
-    "the documented notice is the one the code shows",
-  );
-
-  // The design note: short, honest about the status, and names what the existing channel does and what an upload would need.
+test("terminal drop and upload docs describe local insert, confirmed SSH uploads, and manual cleanup", () => {
+  const terminals = read("TERMINALS.md");
+  const paragraph = terminals.split("\n").find((line) => line.startsWith("Dropping files from your computer onto a local terminal"));
+  assert.ok(paragraph);
+  for (const phrase of ["without Enter", "connected SSH terminal", "native confirmation", "10 MiB", "Cancel sends nothing", "WSL", "/tmp/hrig-upload-<uuid>/<filename>", "remove the uploaded file"])
+    assert.ok(paragraph.includes(phrase), phrase);
   const note = read("docs/terminal-file-drop.md");
-  const noteLines = note.split("\n");
-  assert.equal(noteLines[0], "# Dropping files onto terminals");
-  assert.ok(noteLines.length <= 40, "the design note stays short");
-  assert.ok(!/[^\n -~]/.test(note), "the note is printable ASCII");
-  for (const heading of [
-    "## What exists",
-    "## Why the image-paste channel does not carry it",
-    "## What a remote upload would need",
-    "## Decision",
-  ])
-    assert.equal(
-      noteLines.filter((line) => line === heading).length,
-      1,
-      heading,
-    );
-  for (const part of [
-    "Remote upload is a design note only. Not implemented.",
-    "`webUtils.getPathForFile`",
-    "`window.hrig.pathForFile`",
-    "`src/terminal-drop-path.ts`",
-    "`terminal:paste-image`",
-    "[terminal-image-paste.md](terminal-image-paste.md)",
-    "caps it at 10 MiB",
-    "native confirmation",
-    "It never receives a path from the renderer",
-    "The renderer is untrusted",
-    "a private 0700 directory and a 0600 file",
-    "Not implemented. The safe local insert ships first",
-  ])
-    assert.ok(note.includes(part), "the design note must say: " + part);
-  assert.ok(
-    fs.existsSync(path.join(root, "docs", "terminal-image-paste.md")),
-    "the linked image-paste note exists",
-  );
-  // What the note says about the image channel is what the main process does.
+  for (const phrase of ["10 MiB", "native confirmation", "existing SSH connection", "Cancel sends no bytes", "private 0700 directory", "exclusive 0600 file", "terminal:paste-image", "real SSH host"])
+    assert.ok(note.includes(phrase), phrase);
+  const privacy = read("PRIVACY.md");
+  assert.ok(privacy.includes("Save terminal log asks before saving"));
+  assert.ok(privacy.includes("never added to the diagnostics bundle or uploaded"));
+  const settings = read("SETTINGS.md");
+  assert.ok(settings.includes("Terminal log saving: Save terminal log is a per-terminal action"));
   const main = read("electron/main.cjs");
-  assert.ok(
-    main.includes("handle('terminal:paste-image', async (_event,id) =>"),
-  );
-  assert.ok(
-    main.includes("terminalImages.saveImage(item.connection,target,png)"),
-  );
-  assert.equal(
-    require("../electron/terminal-images.cjs").MAX_IMAGE_BYTES,
-    10 * 1024 * 1024,
-  );
-  assert.ok(
-    !/fileDrop|file-drop|dropPath|terminal\.drop|Dropped paths/i.test(
-      read("SETTINGS.md"),
-    ),
-    "SETTINGS.md has no drop row",
-  );
+  assert.ok(main.includes("registerTerminalUpload({handle,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)})"));
+  assert.ok(main.includes("terminalImages.saveImage(item.connection,target,png)"));
+  assert.equal(require("../electron/terminal-images.cjs").MAX_IMAGE_BYTES, 10 * 1024 * 1024);
+  assert.equal(require("../electron/terminal-upload.cjs").MAX_UPLOAD_BYTES, 10 * 1024 * 1024);
+  assert.ok(fs.existsSync(path.join(root, "docs", "terminal-image-paste.md")));
 });

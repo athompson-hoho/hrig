@@ -143,6 +143,8 @@ Terminal bell and quiet alerts remain separate opt-ins, each defaulting to `fals
 
 Actual OS permission/display, keyboard and assistive-technology behavior, narrow/short layouts, themes/density and persistence across a real restart remain unobserved; source and inert tests do not establish those outcomes.
 
+Terminal log saving: Save terminal log is a per-terminal action, not a setting. It asks before writing that terminal's retained scrollback to a local file chosen by you, and previews its size and line count with a warning that output can contain secrets. It never sends the text or adds it to diagnostics. Continuous Start log recording remains a separate, off-by-default action. See TERMINALS.md and PRIVACY.md.
+
 ## Follow-up ideas
 
 Future candidates: custom VS Code/terminal theme imports, named profiles, remappable shortcuts for the fixed keys, per-language editor settings, settings-file synchronization, and signed automatic updates. These are not exposed as working controls in this release. Agent credentials, provider models, permissions, extension installation, and OpenRig policies stay under the owning harness rather than being silently changed by desktop preferences.

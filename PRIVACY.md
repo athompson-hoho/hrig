@@ -60,9 +60,13 @@ Observation uses the existing inventory cadence on the current connection. Hidde
 
 Separate terminal bell and quiet alerts require their own opt-ins (both default `false`) as well as `notifications.desktop`. They retain their existing generic notification endpoint and options contract, using seat/shell-label and host metadata without terminal text. The exact seat-name-only boundary for needs-input alerts does not describe all HRig notifications. See [settings](SETTINGS.md#desktop-needs-input-notifications) and [navigation](NAVIGATION.md#desktop-needs-input-notifications) for scope and controls.
 
+## Confirmed terminal uploads
+
+Dropping one file on an SSH terminal or choosing Paste image transfers its bytes to that terminal's existing remote connection only after a native confirmation shows the host, temporary destination, file name and size. Dropped files are capped at 10 MiB; clipboard images use their own 10 MiB cap and PNG conversion. The path is inserted without Enter. Cancel sends no file. Temporary files remain on the host until removed by the user (or the existing opportunistic image cleanup); do not put secrets in an upload unless you intend them to reach that host. See [terminal file drop](docs/terminal-file-drop.md) and [image paste](docs/terminal-image-paste.md).
+
 ## Optional terminal logs
 
-Continuous terminal recording is off by default. Start log requires choosing a local desktop file and visibly indicates when recording is active. Output from local or remote terminals is appended there until stopped or disconnected, with control sequences stripped and bounded file/queue sizes. Logs may contain sensitive output, including text a program later erases; stripping terminal controls does not redact secrets. HRig does not upload or automatically delete these user-chosen files. Terminal bookmarks remain in memory and expire when their retained output is discarded.
+Continuous terminal recording is off by default. Start log requires choosing a local desktop file and visibly indicates when recording is active. Output from local or remote terminals is appended there until stopped or disconnected, with control sequences stripped and bounded file/queue sizes. Logs may contain sensitive output, including text a program later erases; stripping terminal controls does not redact secrets. HRig does not upload or automatically delete these user-chosen files. Separately, Save terminal log asks before saving the current terminal's retained scrollback to a local file chosen by the user; it is never added to the diagnostics bundle or uploaded. Terminal bookmarks remain in memory and expire when their retained output is discarded.
 
 ## Snippet export and import
 
