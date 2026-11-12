@@ -11,8 +11,12 @@ The human chose Electron's built-in spellchecker (no new dependency, no bundled 
 - **Terminals** (xterm canvas) are not editable text either.
 - **Network.** On Windows and Linux Electron downloads a language dictionary (`.bdic`, a word list,
   never your text) from the Chromium CDN when the checker has a language. macOS uses the OS checker.
-  HRig starts with the checker **off and no language set**, so no dictionary is requested until the
-  user opts in. This is stated in the setting text, `SETTINGS.md` and `PRIVACY.md`.
+  HRig, when a session is created and again at app ready, disables the checker, clears its language and
+  points the dictionary download URL at an inert loopback address (`http://127.0.0.1:9/`); the real
+  Chromium CDN URL is restored only when the user opts in. Unit tests assert that OFF state and the ON/OFF
+  transitions (a display check still confirms a fresh run leaves `<userData>/Dictionaries` empty: HUMAN-UAT E15).
+  `webPreferences.spellcheck` stays `true` because it cannot be flipped at runtime; with it `false` an opt-in
+  would need a restart. This is stated in the setting text, `SETTINGS.md` and `PRIVACY.md`.
 
 ## What was built
 - Setting `workspace.nativeSpellcheck` (default off): "Spellcheck HRig text boxes".
