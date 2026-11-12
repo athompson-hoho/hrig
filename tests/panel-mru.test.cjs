@@ -726,7 +726,7 @@ test("panel-mru wiring: one pure module, one import each in App, the chord claim
     app.indexOf(tight("const windows = [")),
   );
   assert.ok(handler.includes("routeOverriddenKey(event, window.hrig.platform, shortcutOverrides)"));
-  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"));
+  assert.ok(handler.includes(`const worksWithDialogs = [ "workspace.palette", "workspace.quickOpen", "workspace.sidebar", ].includes(rebound.id); if (!event.repeat && (worksWithDialogs || (modal === null && !hasOpenDialog(event.target)))) runShortcut(rebound.id, event.target)`));
   const rawApp = stripComments(read("src/App.tsx"));
   const runStart = rawApp.indexOf("const runShortcut =");
   const runShortcut = rawApp.slice(runStart, rawApp.indexOf("useEffect(() => {\n    const handler", runStart));

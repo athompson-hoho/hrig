@@ -538,7 +538,9 @@ test("shortcut-sheet docs: NAVIGATION.md describes supported rebinding in one pa
   );
   for (const part of [
     "including the command center, Quick Open, sidebar, new terminal, close panel, next/previous panel, maximize, focus terminal/editor/task queue, terminal search, reopen, and focus mode",
-    "The main modifier is Ctrl on Windows/Linux and Cmd on macOS; Control means the physical Control key",
+    "The main modifier is Ctrl on Windows/Linux and Cmd on macOS; Meta is also an alias",
+    "Control is an alias except for physical Control+Tab panel cycling on every platform",
+    "Custom letter chords require Shift so bare Ctrl/Cmd letters remain available to terminals and the editor",
     "Letters, numbers, Tab, Enter, Escape, Space, punctuation and F1-F12 are supported",
     "a chord already used by a terminal, editor, fixed app shortcut or another shortcut, or reserved by the operating system, is refused",
     "Reset restores one default and Reset all restores every default",

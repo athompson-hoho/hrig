@@ -55,6 +55,7 @@ export type SaveResult =
 /** The shape of a key event the router reads; a DOM KeyboardEvent fits. */
 export interface RouteKeyEvent {
   key: string;
+  code?: string;
   ctrlKey: boolean;
   metaKey: boolean;
   shiftKey: boolean;
@@ -84,8 +85,8 @@ export const EDITOR_SHIFT_LETTERS = [
   "Z",
 ] as const;
 
-const PRIMARY_WORDS = ["ctrl", "cmd", "command", "mod"];
-const RESERVED_WORDS = ["alt", "option", "opt", "altgr", "meta", "win", "windows", "super"];
+const PRIMARY_WORDS = ["ctrl", "cmd", "command", "mod", "meta"];
+const RESERVED_WORDS = ["alt", "option", "opt", "altgr", "win", "windows", "super"];
 const EXAMPLE = "Ctrl+Shift+Y";
 
 function fail(error: string): ChordResult {
@@ -93,9 +94,9 @@ function fail(error: string): ChordResult {
 }
 
 /**
- * Checks one typed chord and answers its canonical form. Ctrl, Cmd and Mod
- * mean the main modifier of the computer. Control explicitly means the
- * physical Control key on every platform (used for Ctrl+Tab on macOS).
+ * Checks one typed chord and answers its canonical form. Ctrl, Cmd, Meta and
+ * Mod mean the main modifier of the computer. Physical Control+Tab is the
+ * deliberate exception; Control is otherwise a main-modifier alias.
  */
 export function parseChord(text: unknown): ChordResult {
   if (typeof text !== "string" || text.trim() === "")
@@ -116,16 +117,14 @@ export function parseChord(text: unknown): ChordResult {
   for (const token of tokens) {
     const word = token.toLowerCase();
     if (RESERVED_WORDS.includes(word))
-      return fail(
-        "Alt, Option, Windows and Meta combinations cannot be used here.",
-      );
+      return fail("Alt, Option and Windows combinations cannot be used here.");
     if (PRIMARY_WORDS.includes(word)) primary++;
     else if (word === "control") control++;
     else if (word === "shift") shift++;
     else others.push(token);
   }
   if (primary + control === 0)
-    return fail("Start with Ctrl, Cmd or Control, for example " + EXAMPLE + ".");
+    return fail("Start with Ctrl, Cmd, Meta or Control, for example " + EXAMPLE + ".");
   if (primary + control > 1)
     return fail("Use the main modifier or physical Control once.");
   if (shift > 1) return fail("Use Shift once.");
@@ -146,8 +145,10 @@ export function parseChord(text: unknown): ChordResult {
       ? rawKey
       : namedKeys[rawKey.toLowerCase()];
   if (!key) return fail("Use a letter, number, Tab, Enter, Escape, Space, punctuation key or F1-F12.");
-  const prefix = control ? "Control" : "Ctrl";
-  const chord = `${prefix}+${shift ? "Shift+" : ""}${key}`;
+  // Control is an alias for the platform's main modifier except for the
+  // deliberately physical Control+Tab panel switch.
+  const physicalControl = control && key === "Tab";
+  const chord = `${physicalControl ? "Control" : "Ctrl"}+${shift ? "Shift+" : ""}${key}`;
   return { ok: true, chord };
 }
 
@@ -218,51 +219,75 @@ function terminalLetters(): Set<string> {
       }
     }
   }
+  // Physical Control+C is a terminal signal (or copy) on every platform even
+  // though macOS reserves Cmd as the application's main modifier.
+  taken.add("C");
   return taken;
 }
 
 /** Why a chord can never be rebound to, or an empty string when no terminal or editor key uses it. */
 export function reservedReason(chord: string): string {
-  const key = chord.split("+").at(-1) || "";
-  if (chord.startsWith("Ctrl+Shift+") && terminalLetters().has(key))
-    return named(chord) + " is a terminal key (find, copy, paste or clear).";
-  if (chord.startsWith("Ctrl+Shift+") && (EDITOR_SHIFT_LETTERS as readonly string[]).includes(key))
-    return named(chord) + " is used by the code editor.";
-  if (chord.startsWith("Ctrl+") && ["Q", "W", "H", "M", "Space", "Tab"].includes(key) && !chord.startsWith("Ctrl+Shift+"))
-    return named(chord) + " is reserved by the operating system on some computers.";
-  if (chord === "Ctrl+Shift+Tab")
-    return named(chord) + " is reserved by the operating system on some computers.";
-  if (chord === "Ctrl+Shift+Escape")
-    return named(chord) + " is reserved by the operating system.";
+  if (chord === "Control+Tab" || chord === "Control+Shift+Tab") return "";
+  const normalized = chord.replace(/^Control\+/, "Ctrl+");
+  const key = normalized.split("+").at(-1) || "";
+  if (normalized.startsWith("Ctrl+Shift+") && terminalLetters().has(key))
+    return named(normalized) + " is a terminal key (find, copy, paste or clear).";
+  if (normalized.startsWith("Ctrl+Shift+") && (EDITOR_SHIFT_LETTERS as readonly string[]).includes(key))
+    return named(normalized) + " is used by the code editor.";
+  if (normalized.startsWith("Ctrl+") && ["Q", "W", "H", "M", "Space", "Tab"].includes(key) && !normalized.startsWith("Ctrl+Shift+"))
+    return named(normalized) + " is reserved by the operating system on some computers.";
+  if (normalized === "Ctrl+Shift+Tab")
+    return named(normalized) + " is reserved by the operating system on some computers.";
+  if (normalized === "Ctrl+Shift+Escape")
+    return named(normalized) + " is reserved by the operating system.";
   return "";
 }
 
-function effectiveChord(id: OverridableId, candidate: OverrideMap): string {
-  const own = candidate[id];
-  return own !== undefined ? own : defaultChord(id);
+function chordIdentity(chord: string): string {
+  // parseChord keeps only Control+Tab physical; all other modifier aliases are canonical.
+  return chord;
 }
 
+function bareLetter(chord: string): string | null {
+  const parts = chord.split("+");
+  const key = parts.at(-1) || "";
+  return /^[A-Z]$/.test(key) && !parts.includes("Shift") ? key : null;
+}
+
+/** Why a shortcut cannot share a chord with a terminal, editor or OS action. */
 function conflict(
   groups: ShortcutGroup[],
   id: OverridableId,
   chord: string,
   candidate: OverrideMap,
 ): string {
-  const reserved = reservedReason(chord);
+  const isOwnDefault = chord === defaultChord(id);
+  const letter = bareLetter(chord);
+  if (letter && !isOwnDefault)
+    return named(chord) + " needs Shift; unshifted Ctrl/Cmd letters belong to terminals and the editor.";
+  const reserved = isOwnDefault ? "" : reservedReason(chord);
   if (reserved !== "") return reserved;
   for (const entry of entries(groups)) {
     if (isOverridable(entry.id)) continue;
-    if (entry.keys.some((key) => normalizeChord(key) === chord))
+    if (entry.keys.some((key) => {
+      const normalized = normalizeChord(key);
+      return normalized !== null && chordIdentity(normalized) === chordIdentity(chord);
+    }))
       return named(chord) + " is already used by: " + entry.label + ".";
   }
   for (const other of OVERRIDABLE_IDS) {
     if (other === id) continue;
-    if (effectiveChord(other, candidate) === chord)
+    if (chordIdentity(effectiveChord(other, candidate)) === chordIdentity(chord))
       return (
         named(chord) + " is already used by: " + labelOf(groups, other) + "."
       );
   }
   return "";
+}
+
+function effectiveChord(id: OverridableId, candidate: OverrideMap): string {
+  const own = candidate[id];
+  return own !== undefined ? own : defaultChord(id);
 }
 
 /** Every entry of the map that cannot be applied, with the reason; defaults, each other, terminal and editor keys are checked. */
@@ -461,10 +486,21 @@ export function resetOverride(
   return formatOverrideText(next);
 }
 
+const EVENT_CODES: Record<string, string> = {
+  "0": "Digit0", "1": "Digit1", "2": "Digit2", "3": "Digit3", "4": "Digit4",
+  "5": "Digit5", "6": "Digit6", "7": "Digit7", "8": "Digit8", "9": "Digit9",
+  Tab: "Tab", Escape: "Escape", Enter: "Enter", Space: "Space",
+  Comma: "Comma", Period: "Period", Slash: "Slash", Backslash: "Backslash",
+  Minus: "Minus", Equal: "Equal", Plus: "Equal", Semicolon: "Semicolon",
+  Quote: "Quote", BracketLeft: "BracketLeft", BracketRight: "BracketRight", Backquote: "Backquote",
+};
+for (let i = 1; i <= 12; i++) EVENT_CODES[`F${i}`] = `F${i}`;
+
 function matches(
   event: RouteKeyEvent,
   chord: string,
   platform: string,
+  allowExtraShift = false,
 ): boolean {
   if (event.altKey || typeof event.key !== "string") return false;
   const parsed = parseChord(chord);
@@ -472,13 +508,17 @@ function matches(
   const parts = parsed.chord.split("+");
   const key = parts[parts.length - 1];
   const shift = parts.includes("Shift");
-  if (event.shiftKey !== shift) return false;
+  if (event.shiftKey !== shift && !(allowExtraShift && !shift && event.shiftKey)) return false;
   const eventKey = ({
     Space: " ", Comma: ",", Period: ".", Slash: "/", Backslash: "\\",
     Minus: "-", Equal: "=", Plus: "+", Semicolon: ";", Quote: "'",
     BracketLeft: "[", BracketRight: "]", Backquote: "`",
   } as Record<string, string>)[key] ?? key;
-  if (event.key.toLowerCase() !== eventKey.toLowerCase()) return false;
+  const physicalCode = EVENT_CODES[key];
+  const keyMatches = physicalCode && event.code
+    ? event.code === physicalCode
+    : event.key.toLowerCase() === eventKey.toLowerCase();
+  if (!keyMatches) return false;
   if (parts[0] === "Control") return event.ctrlKey && !event.metaKey;
   return platform === "darwin"
     ? event.metaKey && !event.ctrlKey
@@ -499,8 +539,11 @@ export function routeOverriddenKey(
   for (const id of OVERRIDABLE_IDS) {
     const overridden = map[id] !== undefined;
     const chord = map[id] ?? defaultChord(id);
-    if (matches(event, chord, platform)) return { id };
-    if (overridden && matches(event, defaultChord(id), platform)) return { id: null };
+    const legacyShift =
+      (id === "workspace.palette" || id === "workspace.sidebar") &&
+      chord === defaultChord(id);
+    if (matches(event, chord, platform, legacyShift)) return { id };
+    if (overridden && matches(event, defaultChord(id), platform, legacyShift)) return { id: null };
   }
   return null;
 }

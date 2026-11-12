@@ -685,7 +685,7 @@ test("closed-panels chord and docs: the shortcut is claimed before the generic c
     "const windows = [",
   );
   assert.ok(handler.indexOf("terminalOwnsKey(") < handler.indexOf("routeOverriddenKey("));
-  assert.ok(handler.includes("if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target)"), "the shared route is claimed but acts only outside dialogs");
+  assert.ok(handler.includes(`const worksWithDialogs = [ "workspace.palette", "workspace.quickOpen", "workspace.sidebar", ].includes(rebound.id); if (!event.repeat && (worksWithDialogs || (modal === null && !hasOpenDialog(event.target)))) runShortcut(rebound.id, event.target)`), "the shared route is claimed but acts only outside dialogs");
   assert.ok(between(app, "const runShortcut =", "useEffect(() => {\n    const handler").includes('case "workspace.reopenPanel": reopenClosedPanel(); return;'));
   assert.ok(
     has(

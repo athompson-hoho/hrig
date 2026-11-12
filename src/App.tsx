@@ -2572,7 +2572,13 @@ export default function App() {
         if (rebound.id === null) return;
         event.preventDefault();
         event.stopPropagation();
-        if (!event.repeat && modal === null && !hasOpenDialog(event.target)) runShortcut(rebound.id, event.target);
+        const worksWithDialogs = [
+          "workspace.palette",
+          "workspace.quickOpen",
+          "workspace.sidebar",
+        ].includes(rebound.id);
+        if (!event.repeat && (worksWithDialogs || (modal === null && !hasOpenDialog(event.target))))
+          runShortcut(rebound.id, event.target);
         return;
       }
       if (event.ctrlKey || event.metaKey) {
