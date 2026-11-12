@@ -739,6 +739,11 @@ export default function App() {
     if (loaded)
       void window.hrig.updateFrequency(Number(preferences["workspace.updateCheckHours"])).catch(() => {});
   }, [loaded, preferences["workspace.updateCheckHours"]]);
+  // Opt-in native spellcheck for HRig's own text boxes; the main process keeps it off until asked.
+  useEffect(() => {
+    if (loaded)
+      void window.hrig.setSpellcheck(preferences["workspace.nativeSpellcheck"] === true).catch(() => {});
+  }, [loaded, preferences["workspace.nativeSpellcheck"]]);
   useEffect(() => {
     // Turning the option off removes the stored copy (also on every start while off).
     if (loaded && !cacheInventoryOn)

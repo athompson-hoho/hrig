@@ -26,6 +26,7 @@ export const defaults = {
   "editor.diffSideBySide": true,
   "editor.largeFileWarnKb": 1024,
   "editor.breadcrumbs": false,
+  "workspace.nativeSpellcheck": false,
   "editor.formatOnSave": false,
   "editor.autoReload": true,
   "terminal.fontSize": 13,
@@ -310,6 +311,13 @@ export const schema: Setting[] = [
     label: "Breadcrumb path bar",
     description:
       "Show the open file's path as folder breadcrumbs in the editor toolbar. Display only: breadcrumbs do not navigate.",
+  },
+  {
+    key: "workspace.nativeSpellcheck",
+    category: "Workspace",
+    label: "Spellcheck HRig text boxes",
+    description:
+      "Underline misspelled words in HRig's own text boxes (task drafts, messages, filters) with Electron's built-in spellchecker. Off by default. It does not check the code editor or terminals, and HRig sends your text nowhere. On Windows and Linux, turning it on makes Electron download one language dictionary (a word list, not your text) from the Chromium CDN; macOS uses the system checker.",
   },
   {
     key: "editor.largeFileWarnKb",

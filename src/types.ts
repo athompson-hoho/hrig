@@ -140,6 +140,7 @@ export interface HrigAPI {
   pasteClipboardImage(id: string): Promise<string|null>;
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;
   updateFrequency(hours: number): Promise<{ hours: number }>;
+  setSpellcheck(enabled: boolean): Promise<{ enabled: boolean; language: string | null }>;
   updates(request:{op:string;confirmed?:boolean;allowUnsigned?:boolean}):Promise<import('./UpdateSettings').UpdateState>;
   onUpdates(callback:(state:import('./UpdateSettings').UpdateState)=>void):()=>void;
   onPrepareUpdate(callback:()=>{ready:boolean;error?:string}):()=>void;

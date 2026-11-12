@@ -24,6 +24,7 @@ An explicit AI assessment can send the project goal, constraints, current team a
 | Feature | Information and destination |
 |---|---|
 | GitHub release checks/downloads | Packaged HRig checks GitHub for updates after startup and every six hours; explicit downloads also contact GitHub download hosts. These services receive normal request metadata such as IP address. HRig does not automatically download or install an update at startup. |
+| Spellcheck (opt-in, off by default) | Only if you turn on Spellcheck HRig text boxes: on Windows and Linux, Electron downloads one language dictionary file (a word list) from the Chromium CDN once, and that request carries normal request metadata but none of your text. macOS uses the system spellchecker. HRig bundles no dictionary and sends no text anywhere; while the setting is off no dictionary is requested. |
 | GitHub boards | Selected repositories, issue/project queries, and explicitly submitted edits are sent through the configured GitHub CLI account. |
 | Linear boards | Requests and explicitly submitted work-item changes go to Linear using the configured account/token. |
 | Agent providers | Provider requests and project context go to the configured runtime/provider when an assessment, agent task or related operator action invokes it. |

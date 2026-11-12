@@ -78,6 +78,7 @@ app.on('before-quit', event => {
   Promise.race([terminalLogs.stopAll(),new Promise(resolve=>{timer=setTimeout(resolve,4000);})]).finally(() => {clearTimeout(timer);logShutdown = true; app.quit();});
 });
 
+require('./spellcheck.cjs').registerSpellcheck({app,ipcMain,getSession:()=>require('electron').session.defaultSession,trusted});
 require('./update-adapter.cjs').registerUpdates({app,ipcMain,shell,getWindow:()=>mainWindow,trusted});
 const drafts = require('./drafts.cjs').draftStore(app.getPath('userData'));
 const integrations = require('./integrations.cjs').integrationService({directory:app.getPath('userData'),safeStorage});
@@ -180,7 +181,9 @@ async function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
-      spellcheck: false,
+      // Enabled in the renderer, but the session starts with the checker OFF (electron/spellcheck.cjs); the
+      // Settings option 'Spellcheck HRig text boxes' turns it on. It cannot reach the code editor.
+      spellcheck: true,
     },
   });
   Menu.setApplicationMenu(process.platform==='darwin'?Menu.buildFromTemplate([{role:'appMenu'},{role:'editMenu'},{role:'windowMenu'}]):null);

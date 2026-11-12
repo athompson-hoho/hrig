@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("hrig", {
   rigControl: invoke("rig:control"),
   updates: invoke('updates:operation'),
   updateFrequency: invoke('updates:frequency'),
+  setSpellcheck: invoke('spellcheck:set'),
   onUpdates: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('updates:state',listener);return ()=>ipcRenderer.removeListener('updates:state',listener); },
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
   terminalLog: invoke('terminal:log'),
