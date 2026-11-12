@@ -90,7 +90,7 @@ function DeferredContent<P extends object>({ node, panelProps, loader, settings 
       {state.failed ? (
         <>
           <div role={visible ? "alert" : undefined}>
-            <ErrorBox error={errorText} />
+            <ErrorBox error={errorText} announce={false} />
           </div>
           <button type="button" className="small-button" ref={retry} onClick={() => {
             if (!node.isVisible()) return;
@@ -105,7 +105,7 @@ function DeferredContent<P extends object>({ node, panelProps, loader, settings 
         </>
       ) : (
         <div role={visible ? "status" : undefined} aria-live={visible ? "polite" : "off"} aria-atomic="true">
-          <div aria-hidden="true"><Loading text={loadingText} /></div>
+          <div aria-hidden="true"><Loading text={loadingText} announce={false} /></div>
           <span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}>{loadingText}</span>
         </div>
       )}

@@ -118,17 +118,19 @@ export function Modal({
     </div>
   );
 }
-export function Loading({ text = "Loading…" }: { text?: string }) {
+/** announce=false: the caller owns the live region (see ErrorBox). */
+export function Loading({ text = "Loading…", announce = true }: { text?: string; announce?: boolean }) {
   return (
-    <div className="panel-empty" role="status">
+    <div className="panel-empty" role={announce ? "status" : undefined}>
       <LoaderCircle size={22} className="spin" />
       <span>{text}</span>
     </div>
   );
 }
-export function ErrorBox({ error }: { error: string }) {
+/** announce=false lets a caller that already owns the live region (a deferred panel that is hidden must stay silent) turn the alert role off. */
+export function ErrorBox({ error, announce = true }: { error: string; announce?: boolean }) {
   return (
-    <div className="error-box" role="alert">
+    <div className="error-box" role={announce ? "alert" : undefined}>
       <AlertCircle size={15} />
       <span>{error}</span>
     </div>
