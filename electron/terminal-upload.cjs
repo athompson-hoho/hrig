@@ -5,6 +5,8 @@ const crypto = require('node:crypto');
 const core = require('./core.cjs');
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const UPLOAD_PATH_TTL_MS = 2 * 60 * 1000;
+const UPLOAD_PATH_LIMIT = 64;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
 function fileNameFor(source, platform = process.platform) {
@@ -62,13 +64,23 @@ async function readUploadFile(source, io = fs) {
   }
 }
 
+function middleTruncate(value, max = 180) {
+  if (value.length <= max) return value;
+  const marker = '...';
+  const remaining = Math.max(2, max - marker.length);
+  const head = Math.ceil(remaining / 2);
+  const tail = remaining - head;
+  return value.slice(0, head) + marker + value.slice(-tail);
+}
+
 const saveProgram = `import os,sys,shutil
 target=sys.argv[1]
+expected=int(sys.argv[2])
 root=os.path.dirname(target)
-data=sys.stdin.buffer.read(${MAX_UPLOAD_BYTES + 1})
-if len(data)>${MAX_UPLOAD_BYTES}: raise ValueError('Upload exceeds 10 MiB')
 os.mkdir(root,0o700)
 try:
+ data=sys.stdin.buffer.read(expected+1)
+ if expected<0 or expected>${MAX_UPLOAD_BYTES} or len(data)!=expected: raise ValueError('Upload length mismatch')
  fd=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
  with os.fdopen(fd,'wb') as out: out.write(data)
 except:
@@ -87,7 +99,13 @@ async function saveRemote(connection, target, data, remote = core.remote) {
   validateRemoteTarget(target);
   if (!Buffer.isBuffer(data) || data.length > MAX_UPLOAD_BYTES)
     throw new Error('Files must be no larger than 10 MiB.');
-  await remote(connection, `python3 -c ${core.quote(saveProgram)} ${core.quote(target)}`, { input: data });
+  const timeout = 25_000 + Math.ceil(data.length / (200 * 1024)) * 1_000;
+  try {
+    await remote(connection, `python3 -c ${core.quote(saveProgram)} ${core.quote(target)} ${data.length}`, { input: data, timeout });
+  } catch (error) {
+    await removeRemote(connection, target, remote).catch(() => {});
+    throw error;
+  }
 }
 
 const removeProgram = `import os,sys,stat
@@ -108,23 +126,42 @@ async function removeRemote(connection, target, remote = core.remote) {
   await remote(connection, `python3 -c ${core.quote(removeProgram)} ${core.quote(target)}`);
 }
 
-function registerTerminalUpload({ handle, dialog, getWindow, getTerminal, remote = core.remote }) {
+function registerTerminalUpload({ handle, ipcMain, trusted, dialog, getWindow, getTerminal, remote = core.remote }) {
   const cleanup = new Map();
-  handle('terminal:upload-file', async (_event, request) => {
+  const registered = new Map();
+  ipcMain?.on('terminal:register-upload-path', (event, source) => {
+    event.returnValue = '';
+    try {
+      trusted(event);
+      if (typeof source !== 'string' || source.length > 32768) return;
+      fileNameFor(source);
+      const now = Date.now();
+      for (const [token, entry] of registered) if (entry.expires < now) registered.delete(token);
+      if (registered.size >= UPLOAD_PATH_LIMIT) registered.delete(registered.keys().next().value);
+      const token = crypto.randomUUID();
+      registered.set(token, { source, sender: event.sender, expires: now + UPLOAD_PATH_TTL_MS });
+      event.returnValue = token;
+    } catch {}
+  });
+  handle('terminal:upload-file', async (event, request) => {
     if (!request || typeof request !== 'object' || Array.isArray(request) ||
-        Object.keys(request).sort().join(',') !== 'id,source' ||
-        typeof request.id !== 'string' || !request.id || typeof request.source !== 'string' || request.source.length > 32768)
+        Object.keys(request).sort().join(',') !== 'id,token' ||
+        typeof request.id !== 'string' || !request.id || typeof request.token !== 'string')
       throw new Error('Invalid file upload request.');
+    const registeredPath = registered.get(request.token);
+    registered.delete(request.token);
+    if (!registeredPath || registeredPath.expires < Date.now() || registeredPath.sender !== event.sender)
+      throw new Error('The dropped file was not registered by this window. Drop it again.');
     const terminal = getTerminal(request.id);
-    if (!terminal || terminal.connection?.kind !== 'ssh')
+    if (!terminal || terminal.sender !== event.sender || terminal.connection?.kind !== 'ssh')
       throw new Error('Connect an SSH terminal before uploading a file.');
-    const file = await readUploadFile(request.source);
+    const file = await readUploadFile(registeredPath.source);
     const target = uploadDestination(file.name);
     const host = [terminal.connection.name, terminal.connection.host].filter(Boolean).join(' (') + (terminal.connection.name && terminal.connection.host ? ')' : '');
     const choice = await dialog.showMessageBox(getWindow(), {
       type: 'question', title: 'Upload file to terminal host',
       message: `Upload ${file.name} to ${host || 'the SSH host'}?`,
-      detail: `${target}\n${file.data.length} bytes. The quoted path will be inserted without Enter. Temporary file; remove it when finished.`,
+      detail: `Local source: ${middleTruncate(registeredPath.source)}\n${target}\n${file.data.length} bytes. The quoted path will be inserted without Enter. Temporary file; remove it when finished.`,
       buttons: ['Cancel', 'Upload file'], defaultId: 0, cancelId: 0, noLink: true,
     });
     if (choice.response !== 1) return null;
@@ -166,5 +203,7 @@ module.exports = {
   saveRemote,
   removeRemote,
   quotedRemotePath,
+  middleTruncate,
+  saveProgram,
   registerTerminalUpload,
 };

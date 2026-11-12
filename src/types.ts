@@ -138,7 +138,8 @@ export interface HrigAPI {
   onTerminalLog(callback: (state: TerminalLogState) => void): () => void;
   clipboardHasImage(): Promise<boolean>;
   pasteClipboardImage(id: string): Promise<string|null>;
-  uploadTerminalFile(request: {id: string; source: string}): Promise<{target: string; quotedPath: string}|null>;
+  uploadTerminalFile(request: {id: string; token: string}): Promise<{target: string; quotedPath: string}|null>;
+  registerUploadFile(file: File): string;
   cleanupTerminalUpload(request: {id: string; target: string}): Promise<void>;
   keepTerminalUpload(request: {id: string; target: string}): Promise<void>;
   rigControl(connection: Connection, request: Record<string, unknown>): Promise<import("./rig-control-types").ControlResult>;

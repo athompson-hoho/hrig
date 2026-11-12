@@ -99,14 +99,14 @@ export default function TerminalFileDrop({
           say("Drop one file at a time to upload it to an SSH host. Nothing was uploaded.");
           return;
         }
-        let source: string;
-        try { source = window.hrig.pathForFile(files[0]); }
-        catch { source = ""; }
-        if (!source) {
+        let token: string;
+        try { token = window.hrig.registerUploadFile(files[0]); }
+        catch { token = ""; }
+        if (!token) {
           say("The dropped file's path could not be read. Nothing was uploaded.");
           return;
         }
-        void window.hrig.uploadTerminalFile({ id: now.terminalId, source }).then((result) => {
+        void window.hrig.uploadTerminalFile({ id: now.terminalId, token }).then((result) => {
           if (!result) { say("Upload canceled. Nothing was uploaded."); return; }
           if (terminal.current !== term) {
             void window.hrig.cleanupTerminalUpload({ id: now.terminalId, target: result.target }).then(

@@ -67,8 +67,9 @@ function realBridge(platform) {
       send() {
         throw new Error("nothing is sent by a drop");
       },
-      sendSync() {
-        throw new Error("nothing is sent by a drop");
+      sendSync(channel, ...args) {
+        if (channel === "terminal:register-upload-path") return args[0] === "/home/me/notes.txt" ? "opaque-token" : "";
+        throw new Error("unexpected synchronous IPC channel");
       },
       on() {},
       removeListener() {},
@@ -926,6 +927,7 @@ test("SSH file drop confirms through the main-process bridge, inserts only the q
   let result = null;
   const bridge = {
     pathForFile: (file) => file.path,
+    registerUploadFile: (file) => "token-for-" + file.path,
     uploadTerminalFile: async (request) => { calls.push(["upload", request]); return result; },
     cleanupTerminalUpload: async (request) => calls.push(["cleanup", request]),
     keepTerminalUpload: async (request) => calls.push(["keep", request]),
@@ -934,7 +936,7 @@ test("SSH file drop confirms through the main-process bridge, inserts only the q
   const events = dropOn(rig, "/home/me/notes.txt");
   assert.equal(events.drop.prevented, 1);
   assert.deepEqual(rig.terminal.pasted, []);
-  assert.deepEqual(calls[0], ["upload", { id: "term-test", source: "/home/me/notes.txt" }]);
+  assert.deepEqual(calls[0], ["upload", { id: "term-test", token: "token-for-/home/me/notes.txt" }]);
   assert.equal(rig.terminal.focused, 0);
   result = { target: "/tmp/hrig-upload-12345678-1234-4234-9234-123456789abc/notes.txt", quotedPath: "'/tmp/hrig-upload-12345678-1234-4234-9234-123456789abc/notes.txt'" };
   dropOn(rig, "/home/me/notes.txt");
@@ -1011,7 +1013,7 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
   assert.equal(count(component, ".paste("), 2);
   assert.equal(count(component, "term.focus();"), 2);
   assert.equal(count(component, "window.hrig."), 6);
-  assert.equal(count(component, "window.hrig.pathForFile(files[0])"), 1);
+  assert.equal(count(component, "window.hrig.registerUploadFile(files[0])"), 1);
   assert.equal(
     count(component, "preventDefault()"),
     2,
@@ -1059,7 +1061,7 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
     ),
     1,
   );
-  assert.equal(count(preload, "webUtils.getPathForFile(file)"), 1);
+  assert.equal(count(preload, "webUtils.getPathForFile(file)"), 2);
   assert.equal(count(preload, "pathForFile:"), 1);
   const bridge = realBridge("linux");
   assert.equal(bridge.pathForFile({ path: "/a/b c" }), "/a/b c");
@@ -1089,12 +1091,24 @@ test("terminal-drop-path wiring: the drop lives in one pure module, one componen
     /catch/.test(helper) && /return "";/.test(helper),
     "a non-file or a file that is not on disk gives an empty path",
   );
+  assert.equal(count(preload, "registerUploadFile:"), 1);
+  assert.ok(preload.includes("ipcRenderer.sendSync('terminal:register-upload-path', path)"));
+  const bridgeWithRegistration = realBridge("linux");
+  assert.equal(bridgeWithRegistration.registerUploadFile({ path: "/home/me/notes.txt" }), "opaque-token");
   const types = stripComments(read("src/types.ts"));
   assert.equal(count(types, "pathForFile(file: File): string;"), 1);
+  assert.equal(count(types, "registerUploadFile(file: File): string;"), 1);
   assert.equal(
     count(
       between(types, "export interface HrigAPI {", "declare global"),
       "pathForFile(file: File): string;",
+    ),
+    1,
+  );
+  assert.equal(
+    count(
+      between(types, "export interface HrigAPI {", "declare global"),
+      "registerUploadFile(file: File): string;",
     ),
     1,
   );
@@ -1175,7 +1189,7 @@ test("terminal drop and upload docs describe local insert, confirmed SSH uploads
   for (const phrase of ["without Enter", "connected SSH terminal", "native confirmation", "10 MiB", "Cancel sends nothing", "WSL", "/tmp/hrig-upload-<uuid>/<filename>", "remove the uploaded file"])
     assert.ok(paragraph.includes(phrase), phrase);
   const note = read("docs/terminal-file-drop.md");
-  for (const phrase of ["10 MiB", "native confirmation", "existing SSH connection", "Cancel sends no bytes", "private 0700 directory", "exclusive 0600 file", "terminal:paste-image", "real SSH host"])
+  for (const phrase of ["10 MiB", "native confirmation", "existing SSH connection", "Cancel sends no bytes", "private 0700 directory", "exclusive 0600 file", "terminal:paste-image", "real SSH host", "middle-truncated", "webUtils.getPathForFile", "BatchMode", "password, passphrase, 2FA and hardware-key-only", "hopped to another machine"])
     assert.ok(note.includes(phrase), phrase);
   const privacy = read("PRIVACY.md");
   assert.ok(privacy.includes("Save terminal log asks before saving"));
@@ -1183,7 +1197,7 @@ test("terminal drop and upload docs describe local insert, confirmed SSH uploads
   const settings = read("SETTINGS.md");
   assert.ok(settings.includes("Terminal log saving: Save terminal log is a per-terminal action"));
   const main = read("electron/main.cjs");
-  assert.ok(main.includes("registerTerminalUpload({handle,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)})"));
+  assert.ok(main.includes("registerTerminalUpload({handle,ipcMain,trusted,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)})"));
   assert.ok(main.includes("terminalImages.saveImage(item.connection,target,png)"));
   assert.equal(require("../electron/terminal-images.cjs").MAX_IMAGE_BYTES, 10 * 1024 * 1024);
   assert.equal(require("../electron/terminal-upload.cjs").MAX_UPLOAD_BYTES, 10 * 1024 * 1024);

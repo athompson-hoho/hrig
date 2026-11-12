@@ -463,7 +463,7 @@ handle("files:git", (_event, connection, root) =>
   backend.git(connection, root),
 );
 const terminalImages=require('./terminal-images.cjs');
-require('./terminal-upload.cjs').registerTerminalUpload({handle,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)});
+require('./terminal-upload.cjs').registerTerminalUpload({handle,ipcMain,trusted,dialog,getWindow:()=>mainWindow,getTerminal:id=>terminals.get(id)});
 handle('terminal:clipboard-image', () => !clipboard.readImage().isEmpty());
 handle('terminal:paste-image', async (_event,id) => {
  const item=terminals.get(id);if(!item)throw Error('Connect the terminal before pasting an image.');

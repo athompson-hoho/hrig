@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld("hrig", {
   clipboardHasImage: invoke('terminal:clipboard-image'),
   pasteClipboardImage: invoke('terminal:paste-image'),
   uploadTerminalFile: invoke('terminal:upload-file'),
+  registerUploadFile: (file) => {
+    try {
+      const path = webUtils.getPathForFile(file);
+      return typeof path === "string" ? ipcRenderer.sendSync('terminal:register-upload-path', path) : "";
+    } catch {
+      return "";
+    }
+  },
   cleanupTerminalUpload: invoke('terminal:cleanup-upload'),
   keepTerminalUpload: invoke('terminal:keep-upload'),
   readClipboardText: invoke('terminal:read-clipboard'),
