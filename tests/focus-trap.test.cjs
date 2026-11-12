@@ -522,10 +522,13 @@ test("focus-trap roles: an error box is an alert and a loading message a status,
   assert.equal(empty.props.role, undefined);
 
   const source = read("src/components.tsx");
-  assert.equal(count(source, 'role="alert"'), 1);
-  assert.equal(count(source, 'role="status"'), 1);
-  assert.equal(count(source, 'className="error-box" role="alert"'), 1);
-  assert.equal(count(source, 'className="panel-empty" role="status"'), 1);
+  // Both roles are on by default and one flag (announce) lets a caller that owns the live region turn its own off;
+  // the deferred panel does, so a hidden panel stays silent.
+  assert.equal(count(source, '"alert"'), 1);
+  assert.equal(count(source, '"status"'), 1);
+  assert.equal(count(source, 'className="error-box" role={announce ? "alert" : undefined}'), 1);
+  assert.equal(count(source, 'className="panel-empty" role={announce ? "status" : undefined}'), 1);
+  assert.equal(count(read("src/DeferredPanel.tsx"), "announce={false}"), 2);
   assert.equal(count(source, 'className="panel-empty"'), 2);
   // The sidebar's own stale-inventory box keeps its status role: it is its own element.
   assert.equal(
