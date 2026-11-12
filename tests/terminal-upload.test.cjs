@@ -80,6 +80,33 @@ test("source path display truncates in the middle and retains the identifying ta
   assert.ok(shown.includes("..."));
 });
 
+test("SSH upload confirmation escapes line and bidi controls in a directory path without changing the file name", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hrig-upload-dialog-path-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const hostileDir = path.join(dir, "safe\nLocal source: /etc/harmless\u202E");
+  await fs.mkdir(hostileDir, { recursive: true });
+  const source = path.join(hostileDir, "notes.txt");
+  await fs.writeFile(source, "contents");
+  const handlers = {}, listeners = {}, dialogs = [];
+  const sender = {};
+  const terminal = { sender, connection: { kind: "ssh", host: "host.example" } };
+  upload.registerTerminalUpload({
+    handle: (channel, fn) => handlers[channel] = fn,
+    ipcMain: { on: (channel, fn) => listeners[channel] = fn },
+    trusted: (event) => { if (event.sender !== sender) throw Error("Untrusted"); },
+    dialog: { showMessageBox: async (_window, options) => { dialogs.push(options); return { response: 0 }; } },
+    getWindow: () => "window",
+    getTerminal: () => terminal,
+    remote: async () => { assert.fail("cancel must not transfer"); },
+  });
+  const registration = { sender, returnValue: "" };
+  listeners["terminal:register-upload-path"](registration, source);
+  await handlers["terminal:upload-file"]({ sender }, { id: "t", token: registration.returnValue });
+  assert.match(dialogs[0].message, /^Upload notes\.txt to host\.example\?$/);
+  assert.match(dialogs[0].detail, /safe\\u000ALocal source: \/etc\/harmless\\u202E/);
+  assert.equal(dialogs[0].detail.split("\n").length, 3, "the source path cannot add native dialog lines");
+});
+
 test("terminal upload IPC requires native confirmation, binds the terminal owner, and supports cleanup on failed insertion", async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hrig-upload-ipc-"));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));

@@ -73,6 +73,14 @@ function middleTruncate(value, max = 180) {
   return value.slice(0, head) + marker + value.slice(-tail);
 }
 
+function escapeDialogPath(value) {
+  return value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, (character) => {
+    const point = character.codePointAt(0);
+    const hex = point.toString(16).toUpperCase();
+    return point <= 0xFFFF ? `\\u${hex.padStart(4, '0')}` : `\\u{${hex}}`;
+  });
+}
+
 const saveProgram = `import os,sys,shutil
 target=sys.argv[1]
 expected=int(sys.argv[2])
@@ -161,7 +169,7 @@ function registerTerminalUpload({ handle, ipcMain, trusted, dialog, getWindow, g
     const choice = await dialog.showMessageBox(getWindow(), {
       type: 'question', title: 'Upload file to terminal host',
       message: `Upload ${file.name} to ${host || 'the SSH host'}?`,
-      detail: `Local source: ${middleTruncate(registeredPath.source)}\n${target}\n${file.data.length} bytes. The quoted path will be inserted without Enter. Temporary file; remove it when finished.`,
+      detail: `Local source: ${middleTruncate(escapeDialogPath(registeredPath.source))}\n${target}\n${file.data.length} bytes. The quoted path will be inserted without Enter. Temporary file; remove it when finished.`,
       buttons: ['Cancel', 'Upload file'], defaultId: 0, cancelId: 0, noLink: true,
     });
     if (choice.response !== 1) return null;
@@ -204,6 +212,7 @@ module.exports = {
   removeRemote,
   quotedRemotePath,
   middleTruncate,
+  escapeDialogPath,
   saveProgram,
   registerTerminalUpload,
 };
