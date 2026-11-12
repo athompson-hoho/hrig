@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { useSettings } from "./SettingsContext";
+import { projectDiagnosticsRequest } from "../electron/diagnostics-bundle.mjs";
 import {
   Activity,
   AlertCircle,
@@ -17,6 +19,8 @@ import {
 } from "lucide-react";
 import type { Connection, Seat, Inventory, PanelConfig } from "./types";
 import { ErrorBox, Loading, StatusDot, Empty } from "./components";
+import { attentionSeats, attentionJumpEligibility } from "./attention-inbox";
+import { pinConnectionIdentity } from "./seat-pins";
 import RigDesigner, { DeleteRig } from "./RigDesigner";
 import {
   buildSearchRequest,
@@ -26,33 +30,77 @@ import {
   stopNote,
   type SearchOptions,
 } from "./content-search-view";
+import { VirtualList } from "./VirtualList";
+import { visibleInterval } from "./visible-interval";
 export function DoctorPanel({ connection }: { connection: Connection }) {
+  const { effective } = useSettings();
+  // Keep full raw identity internal. No display normalization grants authority.
+  const owner = JSON.stringify([connection.id, connection.name, connection.kind, connection.host, connection.port, connection.distro, connection.root, connection.rigBinary]);
+  const current = useRef({ owner, mounted: true, generation: 0 });
+  if (current.current.owner !== owner) {
+    current.current = { owner, mounted: current.current.mounted, generation: current.current.generation + 1 };
+  }
+  const reportOwner = useRef<{ owner: string; generation: number } | null>(null);
+  const inFlight = useRef(false);
+  const doctorRequest = useRef(0);
+  const [exportState, setExportState] = useState({ owner, generation: current.current.generation, busy: false, notice: '' });
+  const descriptionId = useId();
   const [report, setReport] = useState<any>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [checking, setChecking] = useState(false);
   useEffect(() => {
+    current.current.mounted = true;
+    return () => { current.current.mounted = false; current.current.generation++; };
+  }, []);
+  useEffect(() => {
     let active = true;
+    const generation = current.current.generation;
+    const request = ++doctorRequest.current;
+    const isCurrent = () => active && doctorRequest.current === request && current.current.mounted && current.current.owner === owner && current.current.generation === generation;
+    reportOwner.current = null;
     setReport(null);
     setError("");
     setChecking(true);
     window.hrig
       .doctor(connection)
       .then((r) => {
-        if (active) setReport(r);
+        if (isCurrent()) { reportOwner.current = { owner, generation }; setReport(r); }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (isCurrent()) setError(e.message);
       })
       .finally(() => {
-        if (active) setChecking(false);
+        if (isCurrent()) setChecking(false);
       });
     return () => {
       active = false;
     };
-  }, [connection.id, revision]);
+  }, [owner, revision]);
+  const eligible = reportOwner.current?.owner === owner && reportOwner.current.generation === current.current.generation && !checking && !error;
+  const available = JSON.parse(projectDiagnosticsRequest(report, effective, eligible)).checks.availability === 'available';
+  const exportCurrent = exportState.owner === owner && exportState.generation === current.current.generation;
+  const busy = exportCurrent && exportState.busy;
+  const exportDiagnostics = async () => {
+    if (inFlight.current || !current.current.mounted || current.current.owner !== owner) return;
+    inFlight.current = true;
+    const generation = current.current.generation;
+    const isCurrent = () => current.current.mounted && current.current.owner === owner && current.current.generation === generation;
+    setExportState({ owner, generation, busy: true, notice: 'Preparing diagnostics export…' });
+    let notice = 'Could not save diagnostics. The destination may already exist, or the filesystem may not support this export. Try a new file name on a supported, writable filesystem.';
+    try {
+      const request = projectDiagnosticsRequest(report, effective, eligible);
+      const result = await window.hrig.exportDiagnostics(request);
+      if (result?.status === 'saved') notice = 'Diagnostics saved.';
+      else if (result?.status === 'canceled') notice = 'Export canceled. No file was saved.';
+    } catch { /* Only fixed copy crosses into this region. */ }
+    finally {
+      inFlight.current = false;
+      if (isCurrent()) setExportState({ owner, generation, busy: false, notice });
+    }
+  };
   return (
-    <div className="tool-panel">
+    <div className="tool-panel doctor-panel">
       <div className="tool-panel-heading">
         <Network />
         <div>
@@ -62,6 +110,9 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
         <button
           className="small-button"
           onClick={() => {
+            doctorRequest.current++;
+            reportOwner.current = null;
+            setChecking(true);
             setError("");
             setRevision((n) => n + 1);
           }}
@@ -70,6 +121,18 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
           Run checks
         </button>
       </div>
+      <section className="diagnostics-export">
+        <div className="diagnostics-export-actions">
+          <button type="button" className="small-button diagnostics-export-action" disabled={busy} aria-busy={busy}
+            aria-describedby={`${descriptionId}-scope ${descriptionId}-new-file ${descriptionId}-snapshot`} onClick={exportDiagnostics}>
+            {busy ? 'Exporting…' : 'Export redacted diagnostics…'}
+          </button>
+        </div>
+        <p id={`${descriptionId}-scope`}>Includes represented Connection doctor check statuses, local HRig and runtime versions, and selected settings. Excludes check details, terminal text, connection names, host identities and free-form settings.</p>
+        <p id={`${descriptionId}-new-file`}>Choose a new file name. Existing files are not replaced.</p>
+        <p id={`${descriptionId}-snapshot`}>{available ? 'Uses the represented check-status snapshot; exporting does not run checks. Missing or invalid check statuses are recorded as unknown.' : 'Check statuses are unavailable. You can still export local versions and selected settings.'}</p>
+        <p className="diagnostics-export-result" role="status" aria-live="polite" aria-atomic={true}>{exportCurrent ? exportState.notice : ''}</p>
+      </section>
       {error && <ErrorBox error={error} />}{" "}
       {checking ? (
         <Loading text="Checking connection and dependencies…" />
@@ -83,7 +146,7 @@ export function DoctorPanel({ connection }: { connection: Connection }) {
               ? "Connection is ready"
               : "Some checks need attention"}
           </div>
-          {report.checks.map((check: any) => (
+          {(Array.isArray(report.checks) ? report.checks : []).filter((check: any) => check && typeof check === 'object').map((check: any) => (
             <div className="diagnostic-check" key={check.name}>
               {check.ok ? <Check size={16} /> : <AlertCircle size={16} />}
               <section>
@@ -106,19 +169,28 @@ export function AttentionPanel({
   connection,
   inventory,
   onSeat,
+  scope,
   notifications,
   onNotifications,
 }: {
   connection: Connection;
   inventory: Inventory | null;
-  onSeat: (seat: Seat) => void;
+  onSeat: (seat: Seat, diagnostic?: boolean) => string;
+  scope: { ready: boolean; reason: string };
   notifications: boolean;
   onNotifications: (value: boolean) => void;
 }) {
   const [blocked, setBlocked] = useState<any[] | null>(null);
   const [error, setError] = useState("");
+  const [refusal, setRefusal] = useState("");
+  const [blockedOwner, setBlockedOwner] = useState("");
+  const descriptionId = useId();
+  const owner = pinConnectionIdentity(connection);
   useEffect(() => {
     let active = true;
+    setBlockedOwner(owner);
+    setBlocked(null);
+    setError("");
     const load = () =>
       window.hrig
         .queue(connection)
@@ -136,75 +208,56 @@ export function AttentionPanel({
           if (active) setError(e.message);
         });
     load();
-    const timer = setInterval(load, 15000);
+    const stopPolling = visibleInterval(load, 15000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
-  }, [connection.id]);
-  const seats =
-    inventory?.seats.filter(
-      (s) => s.status === "attention" || (s.status === "failed" && s.error),
-    ) || [];
-  return (
-    <div className="tool-panel">
-      <div className="tool-panel-heading">
-        <AlertCircle />
-        <div>
-          <h3>Needs your attention</h3>
-          <p>Reported seat problems and blocked work; no inferred urgency.</p>
-        </div>
-      </div>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={notifications}
-          onChange={(e) => onNotifications(e.target.checked)}
-        />
-        Windows notifications when a seat newly needs input
-      </label>
-      {error && <ErrorBox error={error} />}{" "}
-      {blocked === null && !error && <Loading text="Checking attention" />}
-      {!seats.length && blocked !== null && !blocked.length && !error && (
-        <Empty
-          icon={<Check size={28} />}
-          title="Nothing needs your attention"
-          description="Seats needing input and blocked tasks will appear here."
-        />
-      )}
-      {seats.map((seat) => (
-        <button
-          className="attention-row"
-          key={seat.id}
-          onClick={() => onSeat(seat)}
-        >
-          <StatusDot status="attention" />
-          <section>
-            <strong>
-              {seat.name}@{seat.rigName}
-            </strong>
-            <p>
-              {seat.error ||
-                seat.activity ||
-                "OpenRig reports that this seat needs attention."}
-            </p>
-          </section>
-          <span>Open seat →</span>
-        </button>
-      ))}
-      {(blocked || []).map((item) => (
-        <div className="attention-row" key={String(item.id)}>
-          <StatusDot status="attention" />
-          <section>
-            <strong>{String(item.title)}</strong>
-            <p>
-              {String(item.destination)} · {String(item.status)}
-            </p>
-          </section>
-        </div>
-      ))}
-    </div>
-  );
+  }, [owner]);
+  const ownedBlocked = blockedOwner === owner ? blocked : null;
+  const ownedError = blockedOwner === owner ? error : "";
+  const seats = attentionSeats(inventory);
+  const problems = inventory?.seats.filter((seat) => seat.status === "failed" && seat.error) || [];
+  const context = (seat: Seat) => `${seat.name || "Seat name unavailable"} · ${seat.rigName || seat.rigId || "Rig unavailable"} · ${seat.pod || "Pod unavailable"} · ${connection.name}`;
+  const row = (seat: Seat, index: number, diagnostic = false) => {
+    const reason = !scope.ready ? scope.reason : attentionJumpEligibility(inventory, seat, diagnostic);
+    const reasonId = `${descriptionId}-${diagnostic ? "problem" : "input"}-${index}`;
+    return <div className="attention-row attention-inbox-row" key={`${seat.id}:${index}`}>
+      <StatusDot status={diagnostic ? "failed" : "attention"} />
+      <section><strong>{context(seat)}</strong>
+        <p>{diagnostic ? "Failed" : "Needs input"} · Session: {seat.session || "unavailable"}</p>
+        {seat.error && <p>{seat.error}</p>}
+        {reason && <p id={reasonId}>{reason}</p>}
+      </section>
+      <button className="small-button" disabled={!!reason} aria-describedby={reason ? reasonId : undefined}
+        aria-label={`${diagnostic ? "Open" : "Jump to"} ${seat.name || "Seat name unavailable"} in ${seat.rigName || seat.rigId || "Rig unavailable"}, pod ${seat.pod || "Pod unavailable"}, on ${connection.name}`}
+        onClick={() => setRefusal(onSeat(seat, diagnostic) || "")}>{diagnostic ? "Open seat →" : "Jump to seat →"}</button>
+    </div>;
+  };
+  return <div className="tool-panel attention-inbox">
+    <div className="tool-panel-heading"><AlertCircle /><div>
+      <h3>Needs your attention</h3><p>{connection.name} · {connection.kind} · {connection.host || connection.distro || "Local desktop"} · represented inventory only</p>
+    </div></div>
+    <label className="checkbox-label"><input type="checkbox" checked={notifications}
+      onChange={(e) => onNotifications(e.target.checked)} />Desktop notifications when a seat newly needs input</label>
+    <p>Seat name only. Applies to verified inventory for the current connection. Enabling starts silently; only later changes notify. Desktop notification support and OS settings may prevent display.</p>
+    <p>{scope.reason}</p>
+    {refusal && <ErrorBox error={refusal} />}
+    <h4>{inventory && !scope.ready ? "Last known needs input" : "Needs input"}{inventory ? ` (${seats.length})` : ""}</h4>
+    {inventory && scope.ready && !seats.length && <Empty icon={<Check size={28} />} title="No seats need input" description={`No seats in the represented inventory for ${connection.name} are marked as needing input. Sidebar filters do not hide seats here.`} />}
+    {seats.map((seat, index) => row(seat, index))}
+    <h4>Seat problems</h4>
+    {inventory && !problems.length && <p>No failed-seat diagnostics in the available represented inventory.</p>}
+    {problems.map((seat, index) => row(seat, index, true))}
+    <h4>Blocked work</h4>
+    {ownedError && <ErrorBox error={`Could not load blocked work for ${connection.name}: ${ownedError}. Check this connection using the existing connection controls.`} />}
+    {ownedBlocked === null && !ownedError && <Loading text="Checking blocked work" />}
+    {ownedBlocked !== null && !ownedBlocked.length && !ownedError && <p>{`No blocked or failed work was reported for ${connection.name}.`}</p>}
+    {(ownedBlocked || []).map((item, index) => <div className="attention-row" key={`${String(item.id)}:${index}`}>
+      <StatusDot status="attention" /><section><strong>{String(item.title || "Work title unavailable")}</strong>
+      <p>{String(item.destination || "Destination unavailable")} · {String(item.status)}</p></section>
+    </div>)}
+  </div>;
 }
 export function ProjectTools({
   connection,
@@ -222,6 +275,8 @@ export function ProjectTools({
   const [options, setOptions] = useState<SearchOptions>(defaultSearchOptions);
   const [stopped, setStopped] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [searchResult, setSearchResult] = useState({ scope: "", generation: 0 });
+  const searchScope = JSON.stringify([pinConnectionIdentity(connection), root]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
@@ -235,6 +290,7 @@ export function ProjectTools({
         const outcome = readSearchOutcome(result);
         setMatches(outcome.matches);
         setStopped(stopNote(outcome));
+        setSearchResult(previous => ({ scope: searchScope, generation: previous.generation + 1 }));
       } else {
         onChanged();
         if (request.op === "create") onFile(request.path);
@@ -344,16 +400,20 @@ export function ProjectTools({
         </p>
       )}
       {error && <ErrorBox error={error} />}
-      <div className="search-results">
-        {matches.map((m, i) => (
-          <button key={i} onClick={() => onFile(m.path, m.line)}>
+      {searchResult.scope === searchScope && matches.length === 0 && !busy && !error &&
+        <p>No matching text found. Try another search.</p>}
+      <VirtualList className="search-results" label="Project search results"
+        scopeKey={JSON.stringify([searchScope, searchResult.generation])}
+        rows={searchResult.scope === searchScope ? matches : []}
+        itemKey={(m, i) => JSON.stringify(["match", searchScope, searchResult.generation, m.path, m.line, i])}
+        renderRow={m => (
+          <button onClick={() => onFile(m.path, m.line)}>
             <strong>
               {m.path}:{m.line}
             </strong>
             <code>{m.text}</code>
           </button>
-        ))}
-      </div>
+        )} />
       <div className="tool-panel-heading">
         <FilePlus size={18} />
         <div>
@@ -575,6 +635,21 @@ export function RigManager({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [operation, setOperation] = useState<"start" | "stop">("start");
+  type TopologyRow =
+    | { kind: "heading"; rig: Inventory["rigs"][number] }
+    | { kind: "delete"; rig: Inventory["rigs"][number] }
+    | { kind: "seat"; rig: Inventory["rigs"][number]; seat: Seat; first: boolean; last: boolean };
+  const topologyRows: TopologyRow[] = (inventory?.rigs || []).flatMap(rig => {
+    const seats = inventory!.seats.filter(seat => seat.rigId === rig.id);
+    return [
+      { kind: "heading", rig } as TopologyRow,
+      { kind: "delete", rig } as TopologyRow,
+      ...seats.map((seat, index): TopologyRow => ({
+        kind: "seat", rig, seat, first: index === 0, last: index === seats.length - 1,
+      })),
+    ];
+  });
+  const topologyScope = pinConnectionIdentity(connection);
   useEffect(() => {
     let active = true;
     window.hrig
@@ -663,9 +738,16 @@ export function RigManager({
           }}
         />
       )}
-      <div className="topology-list">
-        {inventory?.rigs.map((r) => (
-          <div key={r.id}>
+      <VirtualList
+        rows={topologyRows}
+        scopeKey={topologyScope}
+        itemKey={row => JSON.stringify([topologyScope, row.kind, row.rig.id, row.kind === "seat" ? row.seat.id : null])}
+        label="Rig topology"
+        maxHeight={360}
+        className="topology-list topology-viewport"
+        renderRow={row => {
+          const r = row.rig;
+          if (row.kind === "heading") return (
             <button
               className="rig-topology-heading"
               onClick={() => change(r.name, true)}
@@ -676,6 +758,8 @@ export function RigManager({
                 {r.status} · {r.nodeCount} seats
               </span>
             </button>
+          );
+          if (row.kind === "delete") return (
             <button
               className="small-button danger"
               disabled={!!deleting}
@@ -686,23 +770,23 @@ export function RigManager({
             >
               Delete {r.name}
             </button>
-            <div className="topology-seats">
-              {inventory.seats
-                .filter((s) => s.rigId === r.id)
-                .map((s) => (
-                  <button key={s.id} onClick={() => onSeat(s)}>
-                    <StatusDot status={s.status} />
-                    <span>
-                      {s.pod ? s.pod + " / " : ""}
-                      {s.name}
-                    </span>
-                    <small>{s.runtime}</small>
-                  </button>
-                ))}
+          );
+          // Each measured segment is one original seat, including edge spacing.
+          const s = row.seat;
+          return (
+            <div className="topology-seats" data-first={row.first} data-last={row.last}>
+              <button onClick={() => onSeat(s)}>
+                <StatusDot status={s.status} />
+                <span>
+                  {s.pod ? s.pod + " / " : ""}
+                  {s.name}
+                </span>
+                <small>{s.runtime}</small>
+              </button>
             </div>
-          </div>
-        ))}
-      </div>
+          );
+        }}
+      />
       <label className="field-label">
         LIBRARY RIG SPEC
         <select

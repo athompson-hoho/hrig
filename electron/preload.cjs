@@ -6,6 +6,7 @@ const invoke =
 contextBridge.exposeInMainWorld("hrig", {
   rigControl: invoke("rig:control"),
   updates: invoke('updates:operation'),
+  updateFrequency: invoke('updates:frequency'),
   onUpdates: callback => { const listener=(_event,state)=>callback(state);ipcRenderer.on('updates:state',listener);return ()=>ipcRenderer.removeListener('updates:state',listener); },
   onPrepareUpdate: callback => { const listener=async(_event,token)=>{try{ipcRenderer.send('updates:restart-ready',{token,...await callback()});}catch(error){ipcRenderer.send('updates:restart-ready',{token,ready:false,error:error.message});}};ipcRenderer.on('updates:prepare-restart',listener);return ()=>ipcRenderer.removeListener('updates:prepare-restart',listener); },
   terminalLog: invoke('terminal:log'),
@@ -29,14 +30,20 @@ contextBridge.exposeInMainWorld("hrig", {
   openWorkLink: invoke('integrations:open'),
   drafts: (request) => ipcRenderer.sendSync('drafts:operation', request),
   doctor: invoke("connection:doctor"),
+  exportDiagnostics: invoke('diagnostics:export'),
   edit: invoke("editor:operation"),
   rigAction: invoke("rig:action"),
+  seatPrompt: invoke("seat:prompt"),
+  inventoryCache: invoke("inventory:cache"),
+  seatTranscript: invoke("seat:transcript"),
+  seatMessage: invoke("seat:message"),
   designRig: invoke("rig:design"),
   assessTeam: invoke("rig:assess"),
   ports: invoke("ports:list"),
   openPreview: invoke("preview:open"),
   closePreview: invoke("preview:close"),
   notifyAttention: invoke("attention:notify"),
+  notifySeatAttention: invoke("seat:notify-attention"),
   onResume: (callback) => {
     const listener = () => callback();
     ipcRenderer.on("connection:resume", listener);

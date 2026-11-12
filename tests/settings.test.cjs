@@ -1925,4 +1925,88 @@ test("terminal.pasteHistory is an off-by-default Terminal boolean listed once ri
   for (const part of [...claims, "See TERMINALS.md"])
     assert.ok(lines[at].includes(part), "SETTINGS.md says: " + part);
   assert.ok(!/[^\n -~]/.test(lines[at]), "the row is printable ASCII");
+
+
+test("seat sort settings validate three modes and preserve scope through serialization and reset", () => {
+  assert.equal(settings.resolveSettings()["rig.seatSort"], "name");
+  const row = settings.schema.find(row => row.key === "rig.seatSort");
+  assert.ok(row, "Seat sort order is exposed by the real settings schema");
+  assert.equal(row.category, "Connections & rigs");
+  assert.equal(row.label, "Seat sort order");
+  assert.equal(row.description, "Choose the default sidebar seat order. Activity puts working seats first; it does not use an activity timestamp.");
+  assert.deepEqual(row.options, [
+    { value: "name", label: "Name" },
+    { value: "activity", label: "Activity (working first)" },
+    { value: "attention-first", label: "Attention first" },
+  ]);
+  for (const mode of ["name", "activity", "attention-first"]) {
+    const overrides = { "rig.seatSort": mode };
+    assert.deepEqual(settings.validateOverrides(overrides), overrides);
+    const serialized = JSON.parse(JSON.stringify({ user: overrides, project: { "rig.seatSort": "name" } }));
+    const user = settings.safeOverrides(serialized.user);
+    const project = settings.safeOverrides(serialized.project);
+    assert.equal(settings.resolveSettings(user, project)["rig.seatSort"], "name");
+    delete project["rig.seatSort"];
+    assert.equal(settings.resolveSettings(user, project)["rig.seatSort"], mode);
+  }
+});
+
+test("seat sort imports reject unsupported modes and wrong types without applying them", () => {
+  for (const value of ["recent", "NAME", "Activity", "attention", "", 1, null, {}, [], true]) {
+    assert.throws(() => settings.validateOverrides({ "rig.seatSort": value }));
+    assert.deepEqual(settings.safeOverrides({ "rig.seatSort": value }), {});
+  }
+  assert.throws(() => settings.validateOverrides({ "rig.seatSort": "name", "unknown.sort": "activity" }));
+});
+
+test("seat sort Preferences Overrides and SettingKey have a narrow compiler checked contract", () => {
+  const ts = require("typescript");
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.resolve("src");
+  const fixture = path.join(root, "__seat_sort_contract__.ts");
+  const dependencies = path.join(root, "__seat_sort_dependencies__.ts");
+  // Compile the real settings contract (and real sorter if present), with only
+  // unrelated theme/platform and broad app Seat dependencies substituted. No
+  // app program, files emitted, repository tsc, or disk fixture is involved.
+  const sources = new Map([[dependencies, `
+    export const themes: Record<string, { name: string }> = {};
+    export const isWindows: boolean = false;
+    export interface Seat { name: string; status: string; }
+  `]]);
+  const options = { noEmit: true, strict: true, skipLibCheck: true, types: [],
+    target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS };
+  function check(source) {
+    sources.set(fixture, source);
+    const host = ts.createCompilerHost(options);
+    const readFile = host.readFile.bind(host);
+    const fileExists = host.fileExists.bind(host);
+    host.readFile = file => sources.get(file) ?? readFile(file);
+    host.fileExists = file => sources.has(file) || fileExists(file);
+    host.resolveModuleNames = (names, containingFile) => names.map(name => {
+      let resolvedFileName;
+      if (name === "./settings") resolvedFileName = path.join(root, "settings.ts");
+      else if (name === "./seat-sort") resolvedFileName = path.join(root, "seat-sort.ts");
+      else if (["./theme-catalog", "./platform", "./types"].includes(name)) resolvedFileName = dependencies;
+      else return ts.resolveModuleName(name, containingFile, options, host).resolvedModule;
+      return host.fileExists(resolvedFileName) ? { resolvedFileName, extension: ts.Extension.Ts } : undefined;
+    });
+    const program = ts.createProgram([fixture], options, host);
+    return ts.getPreEmitDiagnostics(program);
+  }
+  const legal = `import type { Preferences, Overrides, SettingKey } from './settings';
+    const key: SettingKey = 'rig.seatSort';
+    const modes: Preferences['rig.seatSort'][] = ['name', 'activity', 'attention-first'];
+    const overrides: Overrides[] = modes.map(value => ({ 'rig.seatSort': value }));
+  `;
+  const legalDiagnostics = check(legal);
+  assert.deepEqual(legalDiagnostics.map(d => ts.flattenDiagnosticMessageText(d.messageText, "\n")), [],
+    "all three modes must compile against real Preferences/Overrides/SettingKey");
+  const invalid = check(legal + "\nconst unsupported: Preferences['rig.seatSort'] = 'recent';");
+  assert.equal(invalid.length, 1);
+  assert.equal(invalid[0].code, 2322, "unsupported mode must fail assignability, not module loading");
+  assert.equal(invalid[0].file.fileName, fixture);
+  assert.match(ts.flattenDiagnosticMessageText(invalid[0].messageText, "\n"), /recent/);
+  assert.equal(fs.existsSync(fixture), false);
+  assert.equal(fs.existsSync(dependencies), false);
 });

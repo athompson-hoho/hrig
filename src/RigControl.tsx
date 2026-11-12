@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { isFreshRequest } from "./rig-quick-actions";
 import type { Connection, Inventory, PanelConfig } from "./types";
 import type { CommandSchema, ControlResult } from "./rig-control-types";
 import { ErrorBox, Loading } from "./components";
@@ -47,11 +48,14 @@ export default function RigControl({
   root,
   inventory,
   onFile,
+  initial,
 }: {
   connection: Connection;
   root: string;
   inventory: Inventory | null;
   onFile: (path: string, line?: number) => void;
+  /** Navigation request from a quick action: opens a command and prefills the rig. Never runs anything. */
+  initial?: { path: string[]; rigId?: string; nonce: number };
 }) {
   const [path, setPath] = useState<string[]>([]);
   const [schema, setSchema] = useState<CommandSchema | null>(null);
@@ -124,6 +128,10 @@ export default function RigControl({
           ),
         );
         if (!path.length) setRootCommands(result.schema!.commands);
+        const wanted = pendingRig.current;
+        const name = rigArgument(result.schema!);
+        if (wanted && name && wanted.pathKey === pathKey) setValues({ [name]: wanted.rigId });
+        if (wanted && wanted.pathKey === pathKey) pendingRig.current = undefined;
       })
       .catch((e) => {
         if (active) setError(e.message);
@@ -146,7 +154,27 @@ export default function RigControl({
       if (id) void window.hrig.closeTerminal(id).catch(() => {});
     };
   }, [terminal?.terminalId]);
+  // Rig id to prefill, valid only for the command path that was requested.
+  const pendingRig = useRef<{ pathKey: string; rigId: string } | undefined>(undefined);
+  const schemaRef = useRef<CommandSchema | null>(null);
+  schemaRef.current = schema;
+  const rigArgument = (s: CommandSchema | null) => s?.arguments?.find((a) => /rig/i.test(a.name))?.name;
+  useEffect(() => {
+    if (!initial || !isFreshRequest(initial.nonce, Date.now())) return;
+    pendingRig.current = undefined;
+    if (JSON.stringify(initial.path) === pathKey) {
+      // Same command already open: fill the rig now (no schema reload happens).
+      const name = rigArgument(schemaRef.current);
+      if (name && initial.rigId) setValues((v) => ({ ...v, [name]: initial.rigId! }));
+      setPlan(null);
+      setConfirmation("");
+    } else {
+      choose(initial.path);
+      if (initial.rigId) pendingRig.current = { pathKey: JSON.stringify(initial.path), rigId: initial.rigId };
+    }
+  }, [initial?.nonce]);
   const choose = (next: string[]) => {
+    pendingRig.current = undefined;
     setPath(next);
     setSearch("");
     setPlan(null);

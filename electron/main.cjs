@@ -16,6 +16,7 @@ if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').hom
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const core = require("./core.cjs");
+const { seatTerminalReuse } = require("./terminal-reuse.cjs");
 const features = require("./features.cjs");
 const rigControl = require("./rig-control.cjs").createRigControl(features.runRig, (connection,args,timeout,root) => features.runRig(connection,args,timeout,root,true));
 const backend=require("./backend.cjs").createBackend();
@@ -41,6 +42,11 @@ function handle(channel, fn) {
 handle("rig:control", (_event, connection, request) => { core.validateConnection(connection); return rigControl.operation(connection, request); });
 require('./terminal-tools.cjs').registerTerminalTools({handle,dialog,shell,getWindow:()=>mainWindow,fs,clipboard});
 require('./window-title.cjs').registerWindowTitle({handle,getWindow:()=>mainWindow});
+require('./diagnostics-export.cjs').registerDiagnosticsExport({
+  handle, dialog, getWindow: () => mainWindow, fs,
+  randomUUID: require('node:crypto').randomUUID,
+  getVersions: () => ({ hrig: app.getVersion(), electron: process.versions.electron, chromium: process.versions.chrome, node: process.versions.node }),
+});
 const terminalLogs = require('./terminal-logging.cjs').createTerminalLogs({notify: state => {
   if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.send('terminal:log-state', state);
 }});
@@ -291,6 +297,37 @@ ipcMain.on("state:flush", (event, state) => {
 });
 handle("connections:detect", () => core.detectConnections());
 handle("rig:inventory", (_event, connection) => backend.inventory(connection));
+const seatPrompt = require("./seat-prompt.cjs").createSeatPrompt({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 20000),
+});
+const seatMessage = require("./seat-message.cjs").createSeatMessage({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 30000),
+});
+handle("seat:message", (_event, connection, request) => {
+  core.validateConnection(connection);
+  if (connection.kind === "local" && process.platform === "win32")
+    throw new Error("Select a WSL or SSH connection.");
+  return seatMessage.operation(connection, request);
+});
+const seatTranscript = require("./seat-transcript.cjs").createSeatTranscript({
+  inventory: (connection) => backend.inventory(connection),
+  runRig: (connection, args) => features.runRig(connection, args, 20000),
+});
+handle("seat:transcript", (_event, connection, id) => {
+  core.validateConnection(connection);
+  return seatTranscript.read(connection, id);
+});
+const inventoryCache = require("./inventory-cache.cjs").createInventoryCache({
+  file: path.join(app.getPath("userData"), "inventory-cache.json"),
+  fs: fsSync,
+});
+handle("inventory:cache", (_event, request) => inventoryCache.operation(request));
+handle("seat:prompt", (_event, connection, id) => {
+  core.validateConnection(connection);
+  return seatPrompt.read(connection, id);
+});
 handle("rig:send", (_event,connection,seat,message)=>backend.sendMessage(connection,seat,message));
 handle("connection:doctor", (_event, connection) =>
   backend.doctor(connection),
@@ -308,6 +345,7 @@ handle("editor:operation", (_event, connection, request) =>
   backend.edit(connection, request),
 );
 handle("ports:list", (_event, connection) => features.ports(connection));
+require('./seat-notifications.cjs').registerSeatNotifications({ handle, Notification });
 handle("attention:notify", (_event, title, body) => {
   if (
     Notification.isSupported() &&
@@ -444,17 +482,25 @@ handle("terminal:create", async (event, options) => {
   if (typeof id !== "string" || id.length > 1000)
     throw new Error("Invalid panel ID.");
   core.validateConnection(connection);
-  const existing = terminals.get(id);
-  if (existing) return { id, buffer: existing.buffer, reused: true };
-  if (options.seatId && (connection.kind !== "local" || process.platform!=='win32')) {
-    const latest = await backend.inventory(connection);
-    const seat = latest.seats.find((s) => s.id === options.seatId);
-    if (!seat?.session)
-      throw new Error(
-        "This seat has no attachable session yet. HRig will retry without relaunching it.",
-      );
-    session = seat.session;
+  let existing = terminals.get(id);
+  if (options.seatId) {
+    if (existing && !seatTerminalReuse(existing, options))
+      throw new Error("Retained terminal ownership is unknown or conflicts. Existing terminal preserved; use existing connection controls to inspect it.");
+    if (!existing) {
+      const latest = await backend.inventory(connection);
+      const matches = latest.seats.filter((s) => s.id === options.seatId);
+      if (typeof session !== "string" || !session || matches.length !== 1 ||
+          typeof matches[0].session !== "string" || !matches[0].session)
+        throw new Error("Seat session changed or is unavailable. Existing terminal preserved; inspect readiness in OpenRig.");
+      session = matches[0].session;
+      existing = terminals.get(id);
+      if (existing && !seatTerminalReuse(existing, { ...options, session }, matches[0]))
+        throw new Error("Retained terminal ownership is unknown or conflicts. Existing terminal preserved; use existing connection controls to inspect it.");
+    }
+  } else if (existing?.seatId || existing && id.startsWith("seat:")) {
+    throw new Error("Seat terminal requires verified seat provenance. Existing terminal preserved.");
   }
+  if (existing) return { id, buffer: existing.buffer, reused: true };
   let file, args;
   if (options.rigControlToken) {
     const planned = rigControl.consumeTerminal(connection, options.rigControlToken, options.rigControlConfirmation);
@@ -503,7 +549,7 @@ handle("terminal:create", async (event, options) => {
     env,
     useConpty: true,
   });
-  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell };
+  const item = { terminal, buffer: "", sender: event.sender, connection: {...connection}, localShell: options.localShell, seatId: options.seatId, session };
   terminals.set(id, item);
   terminal.onData((data) => {
     if (terminals.get(id) !== item) return;

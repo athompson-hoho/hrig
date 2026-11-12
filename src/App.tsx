@@ -4,11 +4,11 @@ import {
   useEffect,
   useRef,
   useState,
-  lazy,
-  Suspense,
 } from "react";
 import { flushSync } from "react-dom";
+import { attentionScope, attentionJumpEligibility } from "./attention-inbox";
 import AccountStatus from "./AccountStatus";
+import GitInfoStatus from "./GitInfoStatus";
 import UpdateNotice from "./UpdateNotice";
 import {
   Actions,
@@ -70,6 +70,8 @@ import {
   restoreModel,
   roleSnapshot,
   instantiateRoles,
+  normalizeOptionalPanels,
+  normalizeOptionalTab,
 } from "./layout";
 import {
   Empty,
@@ -80,7 +82,10 @@ import {
   StatusDot,
 } from "./components";
 import Sidebar from "./Sidebar";
-import SettingsPage from "./SettingsPage";
+import { fileTreeOwner } from "./file-tree";
+import { normalizeCollapsedPods, podIdentity, togglePodCollapsed } from "./seat-pods";
+import { normalizePinnedSeats, pinConnectionIdentity, seatPinIdentity, toggleSeatPin } from "./seat-pins";
+import { advanceSeatNotifications, type SeatNotificationState } from "./seat-notifications";
 import { SettingsContext } from "./SettingsContext";
 import {
   changedKeys,
@@ -125,6 +130,11 @@ import { onTaskDraft, type TaskDraft } from "./task-draft";
 import { sendTerminalCommand, type TerminalCommand } from "./terminal-commands";
 import { droppedIds, droppedLabel, markDropped, onTerminalDropped, reconnectAllDropped, reconnectNotice } from "./terminal-dropped";
 import RelaunchSession from "./RelaunchSession";
+import SeatPrompt from "./SeatPrompt";
+import SeatMessage from "./SeatMessage";
+import SeatTranscript from "./SeatTranscript";
+import { planPodGrid, describePodGrid } from "./pod-grid";
+import RigHealthStatus from "./RigHealthStatus";
 import ProjectHub from "./ProjectHub";
 import QuickOpen from "./QuickOpen";
 import PanelNavigator, { type NavigablePanel } from "./PanelNavigator";
@@ -207,7 +217,10 @@ import {
   recordRecent,
   removeRecent,
 } from "./recent-files";
-const EditorPanel = lazy(() => import("./EditorPanel"));
+import DeferredPanel from "./DeferredPanel";
+import PanelBoundary from "./PanelBoundary";
+import { connectionStatus } from "./connection-status";
+import { initialCommand, quickAction } from "./rig-quick-actions";
 import ArrangeWorkspace from "./ArrangeWorkspace";
 import {
   DoctorPanel,
@@ -304,6 +317,9 @@ export default function App() {
   const [sidebar, setSidebar] = useState(true);
   // Focus mode is a view state of this session: it is never saved and never writes a preference.
   const [focusMode, setFocusMode] = useState<FocusState>(FOCUS_OFF);
+  const [transcriptView, setTranscriptView] = useState<{seat: Seat; connection: Connection} | null>(null);
+  const [quickMessage, setQuickMessage] = useState<{seat: Seat; connection: Connection} | null>(null);
+  const [promptView, setPromptView] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [relaunch, setRelaunch] = useState<{seat: Seat; connection: Connection} | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
   const modalRef = useRef(modal);
@@ -315,10 +331,12 @@ export default function App() {
   const modelOwners = useRef(new WeakMap<Model, string>());
   // In memory only: closed panels are forgotten when the app restarts.
   const closedPanels = useRef<ClosedPanel[]>([]);
-  const [menu, setMenu] = useState<"layout" | "connection" | null>(null);
+  const [menu, setMenu] = useState<"layout" | "connection" | "statusConnection" | null>(null);
   const [tabMenu, setTabMenu] = useState<PanelMenu | null>(null);
   const [inventory, setInventory] = useState<Inventory | null>(null);
   const inventoryCache = useRef(new Map<string, Inventory>());
+  const cacheInventoryPref = useRef(false);
+  const attentionContext = useRef<any>(null);
   const inventoryHealth = useRef<{
     key: string;
     failures: number;
@@ -359,6 +377,10 @@ export default function App() {
     state.connections[0] ||
     local;
   const root = state.roots[connection.id] || connection.root;
+  const pinOwner = pinConnectionIdentity(connection);
+  // Ownership is captured at render time, independently of snapshot freshness.
+  const pinsAvailable = inventoryHealth.current.key === pinOwner;
+  const podsAvailable = pinsAvailable;
   const projectHistory = useMemo(
     () => normalizeHistory(state.projectHistory),
     [state.projectHistory],
@@ -556,7 +578,7 @@ export default function App() {
     past: [],
     future: [],
   });
-  const attentionSeen = useRef(new Set<string>());
+  const seatNotificationState = useRef<SeatNotificationState>({ owner: null, armed: false, attentionIds: [] });
   const log = useCallback(
     (text: string, kind: ActivityEntry["kind"] = "info") =>
       setEvents((old) =>
@@ -610,9 +632,18 @@ export default function App() {
       return;
     }
     Promise.all([window.hrig.loadState(), window.hrig.detectConnections()])
-      .then(([saved, found]) => {
+      .then(async ([saved, found]) => {
         setDetected(found);
         const base = saved?.version === 1 ? saved : defaultState;
+        // Opt-in cached inventory: seed the unverified-snapshot cache so the
+        // sidebar is instant; the existing guard keeps actions off until a
+        // live poll succeeds.
+        if (base.preferences?.["rig.cacheInventory"] === true) {
+          try {
+            const { entries } = await window.hrig.inventoryCache({ op: "load" });
+            for (const entry of entries) inventoryCache.current.set(entry.key, entry.inventory);
+          } catch {}
+        }
         const connections = [...base.connections];
         for (const c of found)
           if (!connections.some((x) => x.id === c.id)) connections.push(c);
@@ -626,6 +657,8 @@ export default function App() {
           sidebarWidth: normalizeSidebarWidth(base.sidebarWidth),
           projectHistory: normalizeHistory(base.projectHistory),
           reviewChecks: normalizeReviewChecks(base.reviewChecks),
+          pinnedSeats: normalizePinnedSeats(base.pinnedSeats),
+          collapsedPods: normalizeCollapsedPods(base.collapsedPods),
           connections,
           preferences:
             base.preferences ??
@@ -683,25 +716,30 @@ export default function App() {
   }, [loaded, model, revision, root, titleDetails]);
   useEffect(() => window.hrig?.onResume(() => setRefresh((n) => n + 1)), []);
   useEffect(() => {
-    if (!inventory || inventoryError || !preferences["notifications.desktop"])
-      return;
-    const current = new Set<string>();
-    for (const seat of inventory.seats.filter(
-      (s) => s.status === "attention" || (s.status === "failed" && s.error),
-    )) {
-      const key =
-        connection.id + ":" + seat.id + ":" + (seat.error || seat.activity);
-      current.add(key);
-      if (!attentionSeen.current.has(key))
-        void window.hrig.notifyAttention(
-          seat.name + " needs your attention",
-          seat.rigName +
-            " · " +
-            (seat.error || seat.activity || "Input requested"),
-        );
+    const next = advanceSeatNotifications(seatNotificationState.current, {
+      enabled: preferences["notifications.desktop"], connection, inventory,
+      inventoryError, health: inventoryHealth.current,
+    });
+    // Advance before transport so failed or repeated requests never replay content.
+    seatNotificationState.current = next.state;
+    for (const request of next.requests) {
+      void window.hrig.notifySeatAttention(request).catch(() => {});
     }
-    attentionSeen.current = current;
-  }, [inventory, preferences["notifications.desktop"], connection.id]);
+  }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
+    inventoryHealth.current.key, inventoryHealth.current.verified,
+    inventoryHealth.current.failures]);
+  // User-level only (a project override cannot change what is stored on disk or restored at start).
+  const cacheInventoryOn = state.preferences?.["rig.cacheInventory"] === true;
+  cacheInventoryPref.current = cacheInventoryOn;
+  useEffect(() => {
+    if (loaded)
+      void window.hrig.updateFrequency(Number(preferences["workspace.updateCheckHours"])).catch(() => {});
+  }, [loaded, preferences["workspace.updateCheckHours"]]);
+  useEffect(() => {
+    // Turning the option off removes the stored copy (also on every start while off).
+    if (loaded && !cacheInventoryOn)
+      void window.hrig.inventoryCache({ op: "clear" }).catch(() => {});
+  }, [loaded, cacheInventoryOn]);
   useHumanItemNotices({
     enabled: loaded && preferences["notifications.humanItems"],
     connection,
@@ -782,6 +820,8 @@ export default function App() {
           health.verified = true;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
+          if (cacheInventoryPref.current)
+            void window.hrig.inventoryCache({ op: "save", key: inventoryKey, inventory: result }).catch(() => {});
           setInventoryError("");
         }
       } catch (e) {
@@ -880,7 +920,7 @@ export default function App() {
     const json = from.pop();
     if (!json) return;
     to.push(model.toJson());
-    const next = Model.fromJson(json, model);
+    const next = Model.fromJson(normalizeOptionalPanels(json), model);
     setModel(next);
     modelChanged(next);
   };
@@ -1103,6 +1143,23 @@ export default function App() {
       cancelled = true;
     };
   }, [loaded, root, endpoint, state.activeRig, currentRig?.name]);
+  // Quick action menu: navigation only. Opens the control center on a command
+  // with the rig prefilled; the reviewed Review/confirm/Run flow is unchanged.
+  const openRigAction = (rigId: string, actionId: string) => {
+    const action = quickAction(actionId);
+    const rig = inventory?.rigs.find((r) => r.id === rigId);
+    if (!action || !rig) return;
+    const request = initialCommand(action, rig, Date.now());
+    const panelId = "tool:rigControl:" + workspace;
+    const existing = model.getNodeById(panelId) as TabNode | undefined;
+    if (existing)
+      model.doAction(
+        Actions.updateNodeAttributes(panelId, {
+          config: { ...existing.getConfig(), initialCommand: request },
+        }),
+      );
+    addPanel("rigControl", "OpenRig control center", { initialCommand: request }, panelId);
+  };
   const addPanel = (
     component: string,
     name: string,
@@ -1115,13 +1172,13 @@ export default function App() {
       modelChanged(model);
       return;
     }
-    const tab: IJsonTabNode = {
+    const tab: IJsonTabNode = normalizeOptionalTab({
       type: "tab",
       id: id || uid(),
       name,
       component,
       config: { connection: { ...connection }, root, ...config },
-    };
+    });
     history.current = { past: [], future: [] };
     if (!layout.current?.addTabToActiveTabSet(tab)) {
       const first = model.getFirstTabSet();
@@ -1385,6 +1442,32 @@ export default function App() {
     panelMru.current = step.state;
     if (step.target !== null) focusPanel(step.target);
   };
+  attentionContext.current = { connection, inventory, inventoryError, openSeat, focusPanel };
+  const jumpAttention = (captured: Connection, seat: Seat, diagnostic = false): string => {
+    const latest = attentionContext.current;
+    const current = stateRef.current.connections.find((c) => c.id === stateRef.current.activeConnection) || stateRef.current.connections[0] || local;
+    const scope = attentionScope(captured, current, latest.inventory, inventoryHealth.current, latest.inventoryError);
+    if (!scope.ready) return scope.reason;
+    if (pinConnectionIdentity(latest.connection) !== pinConnectionIdentity(current)) return "Current connection inventory is unavailable. Existing terminal preserved.";
+    const reason = attentionJumpEligibility(scope.inventory, seat, diagnostic);
+    if (reason) return reason;
+    const id = `seat:${current.id}:${seat.id}`;
+    try {
+    const node = modelRef.current.getNodeById(id) as TabNode | undefined;
+    if (node) {
+      const config = node.getConfig?.();
+      if (node.getComponent?.() !== "terminal" || !config?.connection ||
+        pinConnectionIdentity(config.connection) !== pinConnectionIdentity(current) ||
+        config.terminalId !== id || config.seat?.id !== seat.id || config.seat?.session !== seat.session ||
+        !node.getDocument?.() || !node.getWindow?.() || node.getWindow()?.closed)
+        return "Jump is unavailable because an existing terminal belongs to a different or unverified target, or cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window, its connection and session before trying again.";
+      latest.focusPanel(id);
+    } else latest.openSeat(scope.inventory!.seats.find((row) => row.id === seat.id)!);
+    return "";
+    } catch {
+      return "This terminal cannot currently be focused. The existing terminal was preserved. Inspect the existing panel or window before trying again.";
+    }
+  };
   const movePanel = (id: string, target: string, direction: string) => {
     const current = modelRef.current;
     if (
@@ -1474,6 +1557,30 @@ export default function App() {
         workspace,
       ),
     );
+  };
+  // Pod grid: same undoable Team arrangement as openAll, limited to one pod's
+  // seats. Opening only attaches terminals; nothing is sent to any session.
+  const openPodGrid = (podSeats: Seat[]) => {
+    const plan = planPodGrid(podSeats, !inventoryError && sameConnection(connection));
+    if (!plan.blocked) {
+      remember();
+      const existing = allTabs().filter((t) => t.component !== "welcome");
+      for (const seat of plan.seats) {
+        const id = `seat:${connection.id}:${seat.id}`;
+        if (!existing.some((t) => t.id === id))
+          existing.push({
+            type: "tab",
+            id,
+            name: seat.name,
+            component: "terminal",
+            config: { connection: { ...connection }, root, seat, terminalId: id },
+          });
+      }
+      const next = arrangement(existing, "Team");
+      setModel(next);
+      modelChanged(next);
+    }
+    notify(describePodGrid(plan));
   };
   const closeTab = (id: string) => {
     history.current = { past: [], future: [] };
@@ -1657,7 +1764,7 @@ export default function App() {
     const config = node.getConfig() as PanelConfig;
     switch (node.getComponent()) {
       case "settings":
-        return <SettingsPage project={connection.name + " / " + root} />;
+        return <DeferredPanel node={node} panelProps={{ project: connection.name + " / " + root }} />;
       case "terminal":
         return (
           <TerminalPanel
@@ -1779,15 +1886,14 @@ export default function App() {
       case "doctor":
         return <DoctorPanel connection={config.connection} />;
       case "rigControl":
-        return <RigControl connection={config.connection} root={config.root} inventory={config.connection.id === connection.id ? inventory : null} onFile={(path,line) => openFile(path,false,line,config)} />;
+        return <RigControl connection={config.connection} root={config.root} inventory={config.connection.id === connection.id ? inventory : null} onFile={(path,line) => openFile(path,false,line,config)} initial={config.initialCommand} />;
       case "attention":
         return (
           <AttentionPanel
             connection={config.connection}
-            inventory={
-              config.connection.id === connection.id ? inventory : null
-            }
-            onSeat={openSeat}
+            scope={attentionScope(config.connection, connection, inventory, inventoryHealth.current, inventoryError)}
+            inventory={attentionScope(config.connection, connection, inventory, inventoryHealth.current, inventoryError).inventory}
+            onSeat={(seat, diagnostic) => jumpAttention(config.connection, seat, diagnostic)}
             notifications={preferences["notifications.desktop"]}
             onNotifications={(value) =>
               settingsContext.update(
@@ -1933,12 +2039,13 @@ export default function App() {
       case "editor":
       case "diff":
         return (
-          <Suspense fallback={<Loading text="Opening editor…" />}>
-            <EditorPanel
-              id={node.getId()}
-              config={config}
-              diff={node.getComponent() === "diff"}
-              onReady={(id) => {
+          <DeferredPanel
+            node={node}
+            panelProps={{
+              id: node.getId(),
+              config,
+              diff: node.getComponent() === "diff",
+              onReady: (id) => {
                 if (pendingFileFocus.current !== id) return false;
                 pendingFileFocus.current = null;
                 return (
@@ -1948,13 +2055,13 @@ export default function App() {
                     ?.getSelectedNode()
                     ?.getId() === id
                 );
-              }}
-              onDirty={markDirty}
-              onSaved={() => {
+              },
+              onDirty: markDirty,
+              onSaved: () => {
                 setFileRevision((n) => n + 1);
                 notify("File saved");
-              }}
-              onLoadFailed={() => {
+              },
+              onLoadFailed: () => {
                 const failed = config.path;
                 if (failed)
                   setState((s) => ({
@@ -1965,9 +2072,9 @@ export default function App() {
                       failed,
                     ),
                   }));
-              }}
-            />
-          </Suspense>
+              },
+            }}
+          />
         );
       case "queue":
         return (
@@ -2580,10 +2687,21 @@ export default function App() {
     );
   const tabCount = allTabs().filter((t) => t.component === "terminal").length;
   void revision;
+  const sidebarFileOwner = fileTreeOwner(connection, root);
+  const activeFile = (() => {
+    const selected = model.getActiveTabset()?.getSelectedNode();
+    if (!selected || !["editor", "diff"].includes(selected.getComponent() ?? "")) return null;
+    const config = selected.getConfig() as PanelConfig;
+    return config?.connection && typeof config.root === "string" && typeof config.path === "string"
+      ? config as PanelConfig & { path: string } : null;
+  })();
   return (
     <SettingsContext.Provider value={settingsContext}>
       <HostTintContext.Provider value={hostTints}>
       <div className="app" inert={updateRestarting || undefined}>
+        {transcriptView && <SeatTranscript key={transcriptView.connection.id + transcriptView.seat.id} connection={transcriptView.connection} seat={transcriptView.seat} others={freshSeats(transcriptView.connection)} onClose={() => setTranscriptView(null)} />}
+        {quickMessage && <SeatMessage key={quickMessage.connection.id + quickMessage.seat.id} connection={quickMessage.connection} seat={quickMessage.seat} onClose={() => setQuickMessage(null)} onSent={(m) => { setQuickMessage(null); notify(m); }} />}
+        {promptView && <SeatPrompt key={promptView.connection.id + promptView.seat.id} connection={promptView.connection} seat={promptView.seat} onClose={() => setPromptView(null)} />}
         {relaunch && <RelaunchSession key={relaunch.connection.id + relaunch.seat.id} connection={relaunch.connection} seat={relaunch.seat} onClose={() => setRelaunch(null)} onDone={() => {
           window.dispatchEvent(new CustomEvent("hrig:session-relaunched", {detail:{connectionId:relaunch.connection.id, seatId:relaunch.seat.id}}));
           refreshAll(); setRelaunch(null); notify("Fresh session launched. Checking readiness...");
@@ -2726,16 +2844,60 @@ export default function App() {
                 inventoryError={inventoryError}
                 busy={busy}
                 selectedRig={state.activeRig}
+                pinnedSeats={state.pinnedSeats || []}
+                pinsAvailable={pinsAvailable}
+                collapsedPods={state.collapsedPods || []}
+                podsAvailable={podsAvailable}
+                onTogglePod={(seat) => {
+                  if (!podsAvailable) return;
+                  setState((s) => {
+                    const current = s.connections.find((c) => c.id === s.activeConnection) ||
+                      s.connections[0] || local;
+                    if (pinConnectionIdentity(current) !== pinOwner) return s;
+                    return {
+                      ...s,
+                      collapsedPods: togglePodCollapsed(s.collapsedPods, podIdentity(current, seat)),
+                    };
+                  });
+                }}
+                onToggleSeatPin={(seat) => {
+                  if (!pinsAvailable) return;
+                  setState((s) => {
+                    const current = s.connections.find((c) => c.id === s.activeConnection) ||
+                      s.connections[0] || local;
+                    if (pinConnectionIdentity(current) !== pinOwner) return s;
+                    return {
+                      ...s,
+                      pinnedSeats: toggleSeatPin(s.pinnedSeats, seatPinIdentity(current, seat.id)),
+                    };
+                  });
+                }}
                 onRig={(id) => setState((s) => ({ ...s, activeRig: id }))}
+                onRigAction={(rigId, actionId) => openRigAction(rigId, actionId)}
                 onRefresh={refreshAll}
                 onProject={openProject}
                 onConnect={openConnect}
                 onSeat={openSeat}
                 onSeatBeside={openSeatBeside}
+                onSeatPrompt={(seat) => setPromptView({seat, connection})}
+                onSeatTranscript={(seat) => setTranscriptView({seat, connection})}
+                onPodGrid={(podSeats) => openPodGrid(podSeats)}
+                onSeatMessage={(seat) => setQuickMessage({seat, connection})}
                 onRelaunch={(seat) => setRelaunch({seat, connection})}
                 onDrag={dragSeat}
-                onFile={(path) => openFile(path)}
-                onDiff={(path) => openFile(path, true)}
+                activeFile={activeFile}
+                onFile={(path) => {
+                  const latest = stateRef.current;
+                  const current = latest.connections.find(c => c.id === latest.activeConnection) || latest.connections[0] || local;
+                  if (modelRef.current !== model || fileTreeOwner(current, latest.roots[current.id] || current.root) !== sidebarFileOwner) return;
+                  openFile(path, false, undefined, { connection, root });
+                }}
+                onDiff={(path) => {
+                  const latest = stateRef.current;
+                  const current = latest.connections.find(c => c.id === latest.activeConnection) || latest.connections[0] || local;
+                  if (modelRef.current !== model || fileTreeOwner(current, latest.roots[current.id] || current.root) !== sidebarFileOwner) return;
+                  openFile(path, true, undefined, { connection, root });
+                }}
                 fileRevision={fileRevision}
                 notes={state.seatNotes}
                 onNote={(seat, text) => {
@@ -2810,28 +2972,20 @@ export default function App() {
                 <span className="current-rig">
                   {currentRig?.name || "Workspace"}
                 </span>
-                <span
-                  className={`connection-state ${inventoryError && inventoryError !== CHECKING_SNAPSHOT ? "error" : ""}`}
-                >
-                  <StatusDot
-                    status={
-                      busy && !inventory
-                        ? "unknown"
-                        : connection.kind === "local" || inventory
-                          ? "running"
-                          : "unknown"
-                    }
-                  />
-                  {busy && !inventory
-                    ? "Connecting"
-                    : inventoryError && inventoryError !== CHECKING_SNAPSHOT
-                      ? "Unavailable"
-                      : connection.kind === "local"
-                        ? "Local"
-                        : inventory
-                          ? "Connected"
-                          : "Ready"}
-                </span>
+                {(() => {
+                  const status = connectionStatus({
+                    error: inventoryError,
+                    hasInventory: !!inventory,
+                    busy,
+                    local: connection.kind === "local",
+                  });
+                  return (
+                    <span className={`connection-state ${status.error ? "error" : ""}`}>
+                      <StatusDot status={status.dot} />
+                      {status.label}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="workspace-actions">
                 <IconButton
@@ -2966,7 +3120,10 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="layout-host">
+            <div
+              className="layout-host"
+              data-workspace-model-ready={loaded && !bootError && modelOwners.current.get(model) === workspace ? "true" : undefined}
+            >
               <Layout
                 ref={layout}
                 model={model}
@@ -2976,7 +3133,7 @@ export default function App() {
                     data-panel-id={node.getId()}
                     tabIndex={-1}
                   >
-                    {factory(node)}
+                    <PanelBoundary label={node.getName?.()}>{factory(node)}</PanelBoundary>
                   </div>
                 )}
                 onModelChange={modelChanged}
@@ -3083,24 +3240,59 @@ export default function App() {
             )}
             <div>
               {isVisible("connection", hiddenStatusItems) && (
-                <span className="status-brand">
+              <span className="status-connection">
+                <button
+                  type="button"
+                  className="status-brand status-connection-button"
+                  aria-haspopup="menu"
+                  aria-expanded={menu === "statusConnection"}
+                  title={`Connection: ${connection.name}. Choose another configured connection.`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenu(menu === "statusConnection" ? null : "statusConnection");
+                  }}
+                >
                   <Network size={11} />
                   {connection.kind === "local"
                     ? "Local workspace"
                     : `${connection.kind.toUpperCase()}: ${connection.name}`}
-                </span>
+                  <ChevronDown size={10} aria-hidden="true" />
+                </button>
+                {menu === "statusConnection" && (
+                  <div className="dropdown status-connection-menu" role="menu" aria-label="Connections">
+                    {state.connections.map((c) => (
+                      <button
+                        key={c.id}
+                        role="menuitemradio"
+                        aria-checked={c.id === connection.id}
+                        onClick={() => chooseConnection(c.id)}
+                      >
+                        <Network size={14} />
+                        <span>{c.name}</span>
+                        <small>{c.kind.toUpperCase()}</small>
+                        {c.id === connection.id && <Check size={13} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </span>
               )}
               {isVisible("source-control", hiddenStatusItems) && (
-                <button
-                  onClick={() => {
-                    setSection("changes");
-                    setSidebar(true);
-                  }}
-                >
-                  <GitBranch size={11} />
-                  Source control
-                </button>
+              <GitInfoStatus connection={connection} root={root} revision={fileRevision}
+                onOpen={() => {
+                  setSection("changes");
+                  setSidebar(true);
+                }}
+              />
               )}
+              <RigHealthStatus
+                scope={attentionScope(connection, connection, inventory, inventoryHealth.current, inventoryError)}
+                rigId={state.activeRig}
+                onOpen={() => {
+                  setSection("sessions");
+                  setSidebar(true);
+                }}
+              />
             </div>
             <div>
               {droppedNow.length > 0 && isVisible("reconnect", hiddenStatusItems) && (

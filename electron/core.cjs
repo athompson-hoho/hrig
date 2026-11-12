@@ -65,7 +65,7 @@ function transport(connection, command, interactive = false) {
   return { file: process.platform === "win32" ? "ssh.exe" : "ssh", args };
 }
 function execute(file, args, options = {}) {
-  const { input, acceptExitCodes = [], captureStderr = false, ...executionOptions } = options;
+  const { input, acceptExitCodes = [], captureStderr = false, exitResult = false, ...executionOptions } = options;
   return new Promise((resolve, reject) => {
     const child = execFile(
       file,
@@ -91,7 +91,9 @@ function execute(file, args, options = {}) {
               .slice(-10)
               .join("\n")
           : raw;
-        if (error && (!acceptExitCodes.includes(error.code) || stderr.trim()))
+        if (exitResult && (!error || (Number.isInteger(error.code) && !error.killed && !error.signal)))
+          resolve({ stdout, stderr, code: error ? error.code : 0 });
+        else if (error && (!acceptExitCodes.includes(error.code) || stderr.trim()))
           reject(new Error(message.slice(-2500)));
         else resolve(captureStderr ? { stdout, stderr } : stdout);
       },
@@ -128,6 +130,7 @@ function rows(value) {
     "Unsupported OpenRig JSON schema. Expected an array of rigs or seats.",
   );
 }
+const workCount = (v) => (Number.isInteger(v) && v >= 0 ? v : null);
 function normalizeInventory(rigData, nodeData) {
   const rigs = rows(rigData).map((r) => ({
     id: r.rigId || r.id || r.name,
@@ -159,8 +162,15 @@ function normalizeInventory(rigData, nodeData) {
               : "running"
           : n.sessionStatus || "unknown",
     activity: n.activityState?.display || n.agentActivity?.reason || "",
+    lastActivityAt:
+      typeof n.lastActivityAt === "string" &&
+      Number.isFinite(Date.parse(n.lastActivityAt))
+        ? n.lastActivityAt
+        : null,
     error: n.latestError || "",
     workCount: n.assignedWorkCount || 0,
+    assignedWork: workCount(n.assignedWorkCount),
+    pendingWork: workCount(n.pendingWorkCount),
   }));
   return { rigs, seats, sampledAt: new Date().toISOString() };
 }
@@ -173,9 +183,28 @@ async function inventory(connection) {
   const { runRig } = require("./features.cjs");
   const [rigs, nodes] = await Promise.all([
     runRig(connection, ["ps", "--json"]),
-    runRig(connection, ["ps", "--nodes", "--all-rigs", "--json"]),
+    nodeList(connection, runRig),
   ]);
   return normalizeInventory(parseJson(rigs), parseJson(nodes));
+}
+// The compact node list omits the raw lastActivityAt fact (its own `lastActivity`
+// is a sample time, not terminal activity). `--full` carries it; only the fields
+// normalizeInventory reads leave the main process. Hosts whose rig rejects the
+// flag fall back to the compact list (age then reads "not reported by this host").
+const NODE_LIST = ["ps", "--nodes", "--all-rigs", "--json"];
+async function nodeList(connection, runRig) {
+  try {
+    return await runRig(connection, [...NODE_LIST, "--full"]);
+  } catch (error) {
+    // Retry only when rig itself rejects the flag, never on timeouts or other failures.
+    if (
+      !/(unknown|unrecognized) (option|argument)[^\n]*--full|--full[^\n]*(unknown|unrecognized|not supported)/i.test(
+        String(error?.message || error),
+      )
+    )
+      throw error;
+    return runRig(connection, NODE_LIST);
+  }
 }
 function sessionCommand(session) {
   if (
@@ -261,6 +290,70 @@ async function localPath(root, relative = "", allowMissing = false) {
     throw new Error("The file is outside the project folder.");
   return target;
 }
+async function readGitInfo(root) {
+  const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" };
+  const run = async args => {
+    const result = await execute("git", ["-C", root, ...args], { env, exitResult: true });
+    if (result.code !== 0 && (result.code === 129 || /(?:unknown|unrecognized|unsupported|invalid) (?:option|switch|command)|^usage:/im.test(result.stderr)))
+      throw Object.assign(new Error("Git metadata commands are unsupported."), { code: "GIT_METADATA_UNSUPPORTED" });
+    return result;
+  };
+  const fail = () => { throw new Error("Git information is unavailable."); };
+  const text = r => r.stdout.replace(/\r?\n$/, "");
+  const safe = s => typeof s === "string" && !!s && !/[\x00-\x1f\x7f]/.test(s);
+  const validOid = s => /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(s);
+  const inside = await run(["rev-parse", "--is-inside-work-tree"]);
+  if (inside.code !== 0) {
+    if (inside.code === 128 && /^fatal: not a git repository(?:\s|\()/i.test(inside.stderr.trim())) return { state: "not-repository", root };
+    return fail();
+  }
+  if (text(inside) !== "true") return fail();
+  const resolve = ref => run(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
+  const identity = async () => {
+    const symbolic = await run(["symbolic-ref", "--quiet", "HEAD"]);
+    if (![0, 1].includes(symbolic.code) || (symbolic.code === 1 && (symbolic.stdout || symbolic.stderr))) return fail();
+    const ref = symbolic.code === 0 ? text(symbolic) : null;
+    if (ref !== null && (!safe(ref) || !ref.startsWith("refs/heads/") || ref === "refs/heads/")) return fail();
+    const head = await resolve("HEAD");
+    if (head.code !== 0) {
+      if (!ref || head.code !== 1) return fail();
+      const exists = await run(["show-ref", "--verify", "--quiet", ref]);
+      if (exists.code !== 1 || exists.stdout || exists.stderr) return fail();
+      return { head: "unborn", branch: ref.slice(11), comparison: "none" };
+    }
+    const oid = text(head);
+    if (!validOid(oid)) return fail();
+    if (!ref) return { head: "detached", oid, comparison: "none" };
+    const mapping = await run(["for-each-ref", "--format=%(refname)%00%(objectname)%00%(upstream)", ref]);
+    if (mapping.code !== 0) return fail();
+    const rows = mapping.stdout.replace(/\r?\n$/, "").split("\n").map(row => row.split("\0")).filter(row => row[0] === ref);
+    if (rows.length !== 1 || rows[0].length !== 3 || rows[0][1] !== oid) return fail();
+    const upstream = rows[0][2];
+    if (upstream && (!safe(upstream) || !upstream.startsWith("refs/"))) return fail();
+    let upstreamOid;
+    if (upstream) {
+      const result = await resolve(upstream);
+      if (result.code === 0) { upstreamOid = text(result); if (!validOid(upstreamOid)) return fail(); }
+      else if (result.code !== 1) return fail();
+    }
+    return { head: "attached", branch: ref.slice(11), oid, comparison: upstream ? "unknown" : "none", ...(upstream ? { upstream } : {}), ...(upstreamOid ? { upstreamOid } : {}) };
+  };
+  const before = await identity();
+  const result = { state: "repository", root, ...before };
+  delete result.upstreamOid;
+  if (before.upstreamOid) {
+    const count = await run(["rev-list", "--left-right", "--count", `${before.oid}...${before.upstreamOid}`]);
+    if (count.code === 0) {
+      const match = /^(\d+)\s+(\d+)\r?\n?$/.exec(count.stdout);
+      if (!match) return fail();
+      const ahead = Number(match[1]), behind = Number(match[2]);
+      if (![ahead, behind].every(Number.isSafeInteger)) return fail();
+      Object.assign(result, { comparison: "known", ahead, behind });
+    }
+  }
+  if (JSON.stringify(before) !== JSON.stringify(await identity())) return fail();
+  return result;
+}
 const PYTHON_FILES = `import os,sys,json,base64,subprocess
 a=json.load(sys.stdin)
 root=os.path.realpath(os.path.expanduser(a['root']))
@@ -268,7 +361,13 @@ target=os.path.realpath(os.path.join(root,a.get('path','')))
 if os.path.commonpath([root,target])!=root: raise Exception('The file is outside the project folder')
 op=a['op']
 def git_run(args):
- try: return subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C'))
+ try:
+  result=subprocess.run(['git','-C',root]+args,capture_output=True,env=dict(os.environ,LC_ALL='C',**({'GIT_OPTIONAL_LOCKS':'0'} if op in ['git','gitInfo'] else {})))
+  if op=='gitInfo' and result.returncode!=0:
+   import re
+   if result.returncode==129 or re.search(rb'(?:unknown|unrecognized|unsupported|invalid) (?:option|switch|command)|^usage:',result.stderr,re.I|re.M):
+    print(json.dumps(dict(state='unavailable',root=root,reason='unsupported-git')));sys.exit(0)
+  return result
  except FileNotFoundError:
   print('Git is not installed on this machine. Install Git on the project host.',file=sys.stderr);sys.exit(1)
 def git_fail(result):
@@ -289,15 +388,74 @@ elif op=='read':
 elif op=='write':
  with open(target,'w',encoding='utf-8') as f: f.write(a['content'])
  print(json.dumps({'saved':True}))
+elif op=='gitInfo':
+ import re
+ def fail(): raise Exception('Git information is unavailable.')
+ def text(r): return re.sub(r'\\r?\\n$','',r.stdout.decode('utf-8'))
+ def safe(s): return bool(s) and not re.search(r'[\\x00-\\x1f\\x7f]',s)
+ def valid_oid(s): return re.fullmatch(r'(?:[a-f0-9]{40}|[a-f0-9]{64})',s) is not None
+ def resolve(ref): return git_run(['rev-parse','--verify','--quiet',ref+'^{commit}'])
+ def identity():
+  symbolic=git_run(['symbolic-ref','--quiet','HEAD'])
+  if symbolic.returncode not in [0,1] or (symbolic.returncode==1 and (symbolic.stdout or symbolic.stderr)): fail()
+  ref=text(symbolic) if symbolic.returncode==0 else None
+  if ref is not None and (not safe(ref) or not ref.startswith('refs/heads/') or ref=='refs/heads/'): fail()
+  head=resolve('HEAD')
+  if head.returncode!=0:
+   if not ref or head.returncode!=1: fail()
+   exists=git_run(['show-ref','--verify','--quiet',ref])
+   if exists.returncode!=1 or exists.stdout or exists.stderr: fail()
+   return dict(head='unborn',branch=ref[11:],comparison='none')
+  oid=text(head)
+  if not valid_oid(oid): fail()
+  if not ref: return dict(head='detached',oid=oid,comparison='none')
+  mapping=git_run(['for-each-ref','--format=%(refname)%00%(objectname)%00%(upstream)',ref])
+  if mapping.returncode!=0: fail()
+  rows=[row.split('\\0') for row in text(mapping).split('\\n') if row.split('\\0')[0]==ref]
+  if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!=oid: fail()
+  upstream=rows[0][2]
+  if upstream and (not safe(upstream) or not upstream.startswith('refs/')): fail()
+  out=dict(head='attached',branch=ref[11:],oid=oid,comparison='unknown' if upstream else 'none')
+  if upstream:
+   out['upstream']=upstream
+   resolved=resolve(upstream)
+   if resolved.returncode==0:
+    upstream_oid=text(resolved)
+    if not valid_oid(upstream_oid): fail()
+    out['upstreamOid']=upstream_oid
+   elif resolved.returncode!=1: fail()
+  return out
+ inside=git_run(['rev-parse','--is-inside-work-tree'])
+ if inside.returncode!=0:
+  if inside.returncode==128 and re.match(rb'^fatal: not a git repository(?:\\s|\\()',inside.stderr.strip(),re.I): print(json.dumps(dict(state='not-repository',root=root)));sys.exit(0)
+  fail()
+ if text(inside)!='true': fail()
+ before=identity()
+ out=dict(state='repository',root=root,**before)
+ out.pop('upstreamOid',None)
+ if 'upstreamOid' in before:
+  counts=git_run(['rev-list','--left-right','--count',before['oid']+'...'+before['upstreamOid']])
+  if counts.returncode==0:
+   match=re.fullmatch(rb'(\\d+)\\s+(\\d+)\\r?\\n?',counts.stdout)
+   if not match: fail()
+   ahead,behind=map(int,match.groups())
+   if ahead>9007199254740991 or behind>9007199254740991: fail()
+   out.update(comparison='known',ahead=ahead,behind=behind)
+ if before!=identity(): fail()
+ print(json.dumps(out))
 elif op=='git':
  r=git_run(['rev-parse','--is-inside-work-tree'])
  if r.returncode!=0:
   if b'not a git repository' in r.stderr.lower(): print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
   git_fail(r)
  if r.stdout.strip()!=b'true': print(json.dumps({'raw':'','isRepository':False,'root':root}));sys.exit(0)
+ p=git_run(['rev-parse','--show-prefix'])
+ if p.returncode!=0: git_fail(p)
+ prefix=p.stdout.decode('utf-8')
+ prefix=prefix[:-2] if prefix.endswith('\\r\\n') else prefix[:-1] if prefix.endswith('\\n') else prefix
  r=git_run(['status','--porcelain=v1','-z','--untracked-files=normal'])
  if r.returncode!=0: git_fail(r)
- print(json.dumps({'raw':r.stdout.decode('utf-8'),'isRepository':True,'root':root}))
+ print(json.dumps({'raw':r.stdout.decode('utf-8'),'isRepository':True,'root':root,'projectPrefix':prefix}))
 elif op=='diff':
  r=git_run(['diff','--no-ext-diff','HEAD','--',a['path']])
  if r.returncode!=0: git_fail(r)
@@ -324,7 +482,7 @@ async function fileOperation(connection, request) {
   validateConnection(connection);
   if (request.op === "quickOpen") return require("./navigation.cjs").quickOpen(connection, request, {remote, quote, parseJson, localPath});
   if (
-    !["list", "read", "write", "git", "diff", "original", "search"].includes(
+    !["list", "read", "write", "git", "gitInfo", "diff", "original", "search"].includes(
       request.op,
     )
   )
@@ -357,6 +515,13 @@ async function fileOperation(connection, request) {
     request.path,
     ["original", "diff"].includes(request.op),
   );
+  if (request.op === "gitInfo") {
+    try { return await readGitInfo(target); }
+    catch (error) {
+      if (error.code === "GIT_METADATA_UNSUPPORTED") return { state: "unavailable", root: target, reason: "unsupported-git" };
+      throw error;
+    }
+  }
   if (request.op === "search") {
     const results = [];
     let scanned = 0;
@@ -382,7 +547,8 @@ async function fileOperation(connection, request) {
         if (entry.isDirectory()) await scan(full, depth + 1);
         else {
           scanned++;
-          const relative = path.relative(target, full).replaceAll("\\", "/");
+          const nativeRelative = path.relative(target, full);
+          const relative = process.platform === "win32" ? nativeRelative.replaceAll("\\", "/") : nativeRelative;
           if (relative.toLowerCase().includes(request.query.toLowerCase()))
             results.push({
               name: entry.name,
@@ -407,9 +573,9 @@ async function fileOperation(connection, request) {
       )
       .map((e) => ({
         name: e.name,
-        path: path
-          .relative(canonicalRoot, path.join(target, e.name))
-          .replaceAll("\\", "/"),
+        path: process.platform === "win32"
+          ? path.relative(canonicalRoot, path.join(target, e.name)).replaceAll("\\", "/")
+          : path.relative(canonicalRoot, path.join(target, e.name)),
         directory: e.isDirectory(),
       }))
       .sort(
@@ -432,7 +598,7 @@ async function fileOperation(connection, request) {
     return { saved: true };
   }
   if (request.op === "git") {
-    const env = { ...process.env, LC_ALL: "C" };
+    const env = { ...process.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" };
     let inside;
     try {
       inside = await execute(
@@ -450,11 +616,12 @@ async function fileOperation(connection, request) {
     return {
       isRepository: true,
       root: target,
+      projectPrefix: (await execute("git", ["-C", target, "rev-parse", "--show-prefix"], { env })).replace(/\r?\n$/, ""),
       raw: await execute(
         "git",
         [
           "-C",
-          request.root,
+          target,
           "status",
           "--porcelain=v1",
           "-z",
@@ -491,25 +658,44 @@ async function fileOperation(connection, request) {
     }
   }
 }
-function parseGitStatus(raw) {
+function countedGitStatus(raw) {
+  if (typeof raw !== "string" || (raw && !raw.endsWith("\0"))) throw new Error("Malformed Git status.");
+  if (!raw) return { entries: [], omittedPaths: 0 };
   const fields = raw.split("\0");
-  const result = [];
+  fields.pop();
+  const entries = [];
+  let omittedPaths = 0;
   for (let i = 0; i < fields.length; i++) {
     const entry = fields[i];
-    if (!entry) continue;
     const status = entry.slice(0, 2);
     const file = entry.slice(3);
-    result.push({ path: file, status: status.trim() || "M" });
-    if (/[RC]/.test(status)) i++;
+    if (!/^(?:[ MADRCT]{2}|DD|AU|UD|UA|DU|AA|UU|\?\?)$/.test(status) || status === "  " || entry[2] !== " " || !file)
+      { omittedPaths++; continue; }
+    if (/[RC]/.test(status) && !fields[++i]) { omittedPaths++; continue; }
+    entries.push({ path: file, status: status.trim() });
   }
-  return result;
+  return { entries, omittedPaths };
+}
+function parseGitStatus(raw) {
+  return countedGitStatus(raw).entries;
 }
 async function gitStatus(connection, root) {
   const result = await fileOperation(connection, { op: "git", root, path: "" });
+  if (!result || typeof result.isRepository !== "boolean" || typeof result.root !== "string" || !result.root)
+    throw new Error("Malformed Git status.");
+  if (result.isRepository) {
+    const prefix = result.projectPrefix;
+    if (typeof prefix !== "string" || (prefix && (!prefix.endsWith("/") ||
+      prefix.includes("\0") || prefix.slice(0, -1).split("/").some(part => !part || part === "." || part === ".."))))
+      throw new Error("Malformed Git status.");
+  }
+  const { entries, omittedPaths } = countedGitStatus(result.raw);
   return {
     isRepository: result.isRepository !== false,
     root: result.root || root,
-    entries: parseGitStatus(result.raw),
+    ...(result.isRepository !== false ? { projectPrefix: result.projectPrefix } : {}),
+    entries,
+    ...(omittedPaths ? { omittedPaths } : {}),
   };
 }
 async function detectConnections() {
@@ -574,6 +760,7 @@ module.exports = {
   parseJson,
   rows,
   normalizeInventory,
+  nodeList,
   inventory,
   sessionCommand,
   localPath,

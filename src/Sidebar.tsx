@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { VirtualList } from "./VirtualList";
+import FileExplorer, { type ActiveFileTarget } from "./FileExplorer";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
-  Folder,
   FileCode2,
   RefreshCw,
   RotateCw,
@@ -13,8 +14,9 @@ import {
   GripVertical,
   Bot,
   PanelsTopLeft,
+  Pin,
 } from "lucide-react";
-import type { Connection, FileEntry, GitEntry, Inventory, Seat } from "./types";
+import type { Connection, GitEntry, Inventory, Seat } from "./types";
 import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { HiddenSeatsNotice, HideStoppedButton } from "./HiddenSeats";
@@ -23,135 +25,22 @@ import SeatNote from "./SeatNotes";
 import type { SeatNotes } from "./seat-notes";
 import { hiddenCount, seatCountText, visibleSeats } from "./seat-visibility";
 import { useSettings } from "./SettingsContext";
+import { connectionStatus } from "./connection-status";
+import { QUICK_ACTIONS } from "./rig-quick-actions";
+import { seatActivityAge } from "./seat-activity-age";
+import { seatWorkSummary } from "./seat-work";
+import { filterSeats } from "./seat-search";
+import { filterSeatsByStatus, type SeatStatusFilter } from "./seat-status";
+import { sortSeats } from "./seat-sort";
+import { normalizePinnedSeats, partitionPinnedSeats, seatPinIdentity, pinConnectionIdentity } from "./seat-pins";
+import { groupSeatPods, normalizeCollapsedPods } from "./seat-pods";
+import { visibleInterval } from "./visible-interval";
 function InventoryAge({ sampledAt }: { sampledAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15000);
-    return () => clearInterval(timer);
+    return visibleInterval(() => setNow(Date.now()), 15000);
   }, []);
   return <>{formatAge(now - Date.parse(sampledAt))}</>;
-}
-function FileTree({
-  connection,
-  root,
-  path = "",
-  depth = 0,
-  onFile,
-  refresh,
-}: {
-  connection: Connection;
-  root: string;
-  path?: string;
-  depth?: number;
-  onFile: (path: string) => void;
-  refresh: number;
-}) {
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [error, setError] = useState("");
-  const [loaded, setLoaded] = useState(false);
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    let active = true;
-    window.hrig
-      .file(connection, { op: "list", root, path })
-      .then((data) => {
-        if (active) {
-          setFiles(data);
-          setError("");
-          setLoaded(true);
-        }
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [connection.id, root, path, refresh, attempt]);
-  const indent = { paddingLeft: 14 + depth * 13 };
-  if (error)
-    return (
-      <div className="tree-error" style={depth ? indent : undefined}>
-        {error}{" "}
-        <button
-          className="text-button"
-          onClick={() => {
-            setError("");
-            setAttempt((n) => n + 1);
-          }}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  if (!loaded)
-    return (
-      <div className="sidebar-empty" role="status" style={depth ? indent : undefined}>
-        Loading…
-      </div>
-    );
-  return (
-    <>
-      {files.map((file) => (
-        <div key={file.path}>
-          <button
-            className="file-row"
-            style={{ paddingLeft: 14 + depth * 13 }}
-            onClick={() => {
-              if (file.directory)
-                setExpanded((old) => {
-                  const next = new Set(old);
-                  next.has(file.path)
-                    ? next.delete(file.path)
-                    : next.add(file.path);
-                  return next;
-                });
-              else onFile(file.path);
-            }}
-            title={file.path}
-          >
-            {file.directory ? (
-              expanded.has(file.path) ? (
-                <ChevronDown size={12} />
-              ) : (
-                <ChevronRight size={12} />
-              )
-            ) : (
-              <span className="tree-spacer" />
-            )}
-            {file.directory ? (
-              <Folder size={14} className="folder-icon" />
-            ) : (
-              <FileCode2
-                size={14}
-                className={`file-icon ${file.name.split(".").pop()}`}
-              />
-            )}
-            <span>{file.name}</span>
-          </button>
-          {file.directory && expanded.has(file.path) && (
-            <FileTree
-              connection={connection}
-              root={root}
-              path={file.path}
-              depth={depth + 1}
-              onFile={onFile}
-              refresh={refresh}
-            />
-          )}
-        </div>
-      ))}
-      {!files.length &&
-        (depth === 0 ? (
-          <div className="sidebar-empty">This folder is empty.</div>
-        ) : (
-          <div className="sidebar-empty" style={indent}>
-            (empty)
-          </div>
-        ))}
-    </>
-  );
 }
 export default function Sidebar({
   section,
@@ -161,13 +50,24 @@ export default function Sidebar({
   inventoryError,
   busy,
   selectedRig,
+  pinnedSeats,
+  pinsAvailable,
+  onToggleSeatPin,
+  collapsedPods,
+  podsAvailable,
+  onTogglePod,
   onRig,
+  onRigAction,
   onRefresh,
   onProject,
   onConnect,
   onManageRigs,
   onSeat,
   onSeatBeside,
+  onSeatPrompt,
+  onSeatTranscript,
+  onPodGrid,
+  onSeatMessage,
   onRelaunch,
   onDrag,
   onFile,
@@ -175,6 +75,7 @@ export default function Sidebar({
   fileRevision,
   notes,
   onNote,
+  activeFile,
 }: {
   section: string;
   connection: Connection;
@@ -183,13 +84,25 @@ export default function Sidebar({
   inventoryError: string;
   busy: boolean;
   selectedRig: string;
+  collapsedPods: readonly string[];
+  podsAvailable: boolean;
+  onTogglePod: (seat: Seat) => void;
+  pinnedSeats: readonly string[];
+  pinsAvailable: boolean;
+  onToggleSeatPin: (seat: Seat) => void;
   onRig: (id: string) => void;
+  /** Opens the control center on a reviewed form; never runs anything. */
+  onRigAction?: (rigId: string, actionId: string) => void;
   onRefresh: () => void;
   onProject: () => void;
   onConnect: () => void;
   onManageRigs: () => void;
   onSeat: (seat: Seat) => void;
   onSeatBeside?: (seat: Seat) => void;
+  onSeatPrompt?: (seat: Seat) => void;
+  onSeatTranscript?: (seat: Seat) => void;
+  onPodGrid?: (seats: Seat[]) => void;
+  onSeatMessage?: (seat: Seat) => void;
   onRelaunch: (seat: Seat) => void;
   onDrag: (event: React.DragEvent, seat: Seat) => void;
   onFile: (path: string) => void;
@@ -197,9 +110,16 @@ export default function Sidebar({
   fileRevision: number;
   notes?: SeatNotes;
   onNote?: (seat: Seat, text: string) => void;
+  activeFile?: ActiveFileTarget | null;
 }) {
+  const podNamespace = useId();
+  const podTokens = useRef(new Map<string, number>());
   const [query, setQuery] = useState("");
+  const [selectedSeat, setSelectedSeat] = useState<string | null>(null);
+  const { effective, project, update } = useSettings();
+  const [statusFilter, setStatusFilter] = useState<SeatStatusFilter>("all");
   const [changes, setChanges] = useState<GitEntry[]>([]);
+  const [gitOmittedPaths, setGitOmittedPaths] = useState(0);
   const [gitError, setGitError] = useState("");
   const [isRepository, setIsRepository] = useState(true);
   const [gitLoading, setGitLoading] = useState(false);
@@ -211,11 +131,15 @@ export default function Sidebar({
     setGitLoading(true);
     setGitError("");
     setChanges([]);
+    setGitOmittedPaths(0);
     window.hrig
       .git(connection, root)
       .then((data) => {
         if (active) {
+          if (data.omittedPaths !== undefined && (!Number.isSafeInteger(data.omittedPaths) || data.omittedPaths < 0))
+            throw new Error("Git status is unavailable for this project.");
           setChanges(data.entries);
+          setGitOmittedPaths(data.omittedPaths || 0);
           setIsRepository(data.isRepository);
           setGitError("");
         }
@@ -231,19 +155,168 @@ export default function Sidebar({
     };
   }, [section, connection.id, root, fileRevision, gitRevision]);
   const rigs = inventory?.rigs || [];
-  const seats = (inventory?.seats || []).filter(
-    (s) =>
-      (!selectedRig || s.rigId === selectedRig) &&
-      (!query ||
-        `${s.name} ${s.rigName} ${s.runtime}`
-          .toLowerCase()
-          .includes(query.toLowerCase())),
-  );
+  const searchResult = filterSeats(inventory?.seats || [], selectedRig, query);
+  const pins = new Set(pinsAvailable ? normalizePinnedSeats(pinnedSeats) : []);
+  const statusSeats = filterSeatsByStatus(searchResult.seats, statusFilter);
+  // Hide stopped sessions (off by default) leaves stopped, exited and archived-rig sessions out of the list after the filters.
   const hideStopped = settings.user["workspace.hideStoppedSeats"] === true;
-  const shownSeats = visibleSeats(seats, rigs, hideStopped);
-  const hiddenSeats = hideStopped ? hiddenCount(seats, rigs) : 0;
+  const hiddenSeats = hideStopped ? hiddenCount(statusSeats, rigs) : 0;
   const setHideStopped = (value: boolean) =>
     settings.update("user", "workspace.hideStoppedSeats", value);
+  const seats = partitionPinnedSeats(sortSeats(
+    visibleSeats(statusSeats, rigs, hideStopped),
+    effective["rig.seatSort"],
+  ), connection, pinsAvailable ? pinnedSeats : []);
+  const noMatches = searchResult.scopedCount > 0 &&
+    (searchResult.hasQuery || statusFilter !== "all") && seats.length === 0 && hiddenSeats === 0;
+  const favorites = seats.filter(s => pins.has(seatPinIdentity(connection, s.id)));
+  const groups = groupSeatPods(seats.filter(s => !pins.has(seatPinIdentity(connection, s.id))), connection);
+  const collapsed = new Set(podsAvailable ? normalizeCollapsedPods(collapsedPods) : []);
+  const selectOnly = effective["rig.seatClick"] === "select";
+  const activityClock = Date.now(); // reader clock; refreshed by existing inventory rerenders, no timer
+  const ageCurrent = !inventoryError && pinsAvailable;
+  const [rigMenu, setRigMenu] = useState<string | null>(null);
+  useEffect(() => {
+    if (!rigMenu) return;
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setRigMenu(null); };
+    const click = () => setRigMenu(null);
+    window.addEventListener("keydown", key);
+    window.addEventListener("click", click);
+    return () => { window.removeEventListener("keydown", key); window.removeEventListener("click", click); };
+  }, [rigMenu]);
+  const connState = connectionStatus({
+    error: inventoryError,
+    hasInventory: !!inventory,
+    busy,
+    local: connection.kind === "local",
+  });
+  const renderSeat = (s: Seat) => {
+    const age = seatActivityAge(s.lastActivityAt, activityClock, ageCurrent);
+    const work = seatWorkSummary(s.assignedWork, s.pendingWork, ageCurrent);
+    return (
+    <div className="session-row" key={s.id}>
+      <button
+        disabled={!!inventoryError}
+        draggable={!inventoryError}
+        onDragStart={(event) => onDrag(event, s)}
+        onClick={() => { if (selectOnly) setSelectedSeat(s.id); else onSeat(s); }}
+        aria-pressed={selectOnly ? selectedSeat === s.id : undefined}
+        className={`seat-row${selectOnly && selectedSeat === s.id ? " selected" : ""}`}
+        key={s.id}
+        title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"} · ${age.tooltip} ${work.tooltip}`}
+      >
+        <span
+          className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
+        >
+          <Bot size={16} />
+        </span>
+        <span className="seat-details">
+          <strong>{s.name}</strong>
+          <small>
+            {s.rigName} · {s.runtime}
+            {age.available && (
+              <span className="seat-age" aria-label={age.label}> · {age.text} ago</span>
+            )}
+          </small>
+          {settings.effective["appearance.seatBadges"] && (
+            <SeatBadgeRow seat={s} />
+          )}
+        </span>
+        {work.badge && (
+          <span className="seat-work" aria-label={work.label}>{work.badge}</span>
+        )}
+        <StatusDot status={s.status} />
+        <GripVertical size={12} className="grip" />
+      </button>
+      <button
+        type="button"
+        className="icon-button seat-pin"
+        disabled={!pinsAvailable}
+        aria-pressed={pins.has(seatPinIdentity(connection, s.id))}
+        aria-label={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+        title={`${pins.has(seatPinIdentity(connection, s.id)) ? "Unpin" : "Pin"} session ${s.name} in ${s.rigName}`}
+        onClick={() => { if (pinsAvailable) onToggleSeatPin(s); }}
+      >
+        <Pin size={13} aria-hidden="true" fill={pins.has(seatPinIdentity(connection, s.id)) ? "currentColor" : "none"} />
+      </button>
+      {selectOnly && (
+        <IconButton title={`Open terminal for ${s.name}`} disabled={!!inventoryError || !s.session} onClick={() => onSeat(s)}><span aria-hidden="true">▶</span></IconButton>
+      )}
+      {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
+      {onSeatPrompt && s.status === "attention" && (
+        <IconButton title={`View pending prompt for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatPrompt(s)}><span aria-hidden="true">?</span></IconButton>
+      )}
+      {onSeatTranscript && (
+        <IconButton title={`View recent transcript for ${s.name} (read-only)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatTranscript(s)}><span aria-hidden="true">≡</span></IconButton>
+      )}
+      {onSeatMessage && (
+        <IconButton title={`Message ${s.name} (reviewed before sending)`} disabled={!!inventoryError || !s.session || !ageCurrent} onClick={() => onSeatMessage(s)}><span aria-hidden="true">✉</span></IconButton>
+      )}
+      <IconButton
+        title={`Relaunch session ${s.name}`}
+        disabled={!!inventoryError || !s.session}
+        onClick={() => onRelaunch(s)}
+      >
+        <RotateCw size={13} />
+      </IconButton>
+      {onNote && (
+        <SeatNote
+          seat={s}
+          connectionId={connection.id}
+          notes={notes}
+          onNote={onNote}
+        />
+      )}
+    </div>
+    );
+  };
+  type SessionRow = { key: string; seat: Seat; group?: typeof groups[number] }
+    | { key: string; group: typeof groups[number]; seat?: undefined };
+  const owner = pinConnectionIdentity(connection);
+  const sessionRows: SessionRow[] = favorites.map(seat => ({ key: JSON.stringify([owner, "favorite", seat.id]), seat }));
+  for (const group of groups) {
+    sessionRows.push({ key: JSON.stringify([owner, "pod", group.identity]), group });
+    if (!collapsed.has(group.identity)) for (const seat of group.seats)
+      sessionRows.push({ key: JSON.stringify([owner, "seat", group.identity, seat.id]), group, seat });
+  }
+  const renderSession = (row: SessionRow) => {
+    if (row.seat) return renderSeat(row.seat);
+    const group = row.group;
+    if (!podTokens.current.has(group.identity))
+      podTokens.current.set(group.identity, podTokens.current.size);
+    const id = `${podNamespace}-pod-${podTokens.current.get(group.identity)}`;
+    const expanded = !collapsed.has(group.identity);
+    const attention = group.seats.filter(seat => seat.status === "attention").length;
+    const label = `${expanded ? "Collapse" : "Expand"} pod ${group.podLabel} in rig ${group.rigLabel}`;
+    return (
+      <div className="pod-group">
+        <button type="button" className="pod-disclosure" disabled={!podsAvailable}
+          aria-expanded={expanded} aria-describedby={`${id}-description`}
+          aria-label={label} title={label}
+          onClick={() => { if (podsAvailable) onTogglePod(group.seats[0]); }}>
+          {expanded ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
+          <span className="pod-label">{group.podLabel} · {group.rigLabel}</span>
+          <span className="count">{group.seats.length}</span>
+          {!expanded && attention > 0 && <span className="pod-attention"><span className="status-dot attention" aria-hidden="true" />{attention} need input</span>}
+        </button>
+        {onPodGrid && (
+          <IconButton
+            className="pod-grid-open"
+            title={`Open the ${group.seats.length} matching unpinned ${group.seats.length === 1 ? "session" : "sessions"} of pod ${group.podLabel} as a grid (pinned sessions are in Favorites)`}
+            disabled={!!inventoryError || !podsAvailable}
+            onClick={() => onPodGrid(group.seats)}
+          >
+            <PanelsTopLeft size={13} aria-hidden="true" />
+          </IconButton>
+        )}
+        <span className="sr-only" id={`${id}-description`}>
+          {group.seats.length} matching unpinned {group.seats.length === 1 ? "session" : "sessions"}.
+          {!expanded && attention > 0 && ` ${attention} need input.`}
+          {!podsAvailable && " Pod controls unavailable while this snapshot belongs to another connection."}
+        </span>
+      </div>
+    );
+  };
   return (
     <aside className="sidebar">
       <div className="sidebar-title">
@@ -298,14 +371,13 @@ export default function Sidebar({
             <span>PROJECT FILES</span>
             <span className="key-hint">Ctrl O</span>
           </div>
-          <div className="sidebar-scroll">
-            <FileTree
-              connection={connection}
-              root={root}
-              onFile={onFile}
-              refresh={fileRevision}
-            />
-          </div>
+          <FileExplorer
+            connection={connection}
+            root={root}
+            onFile={onFile}
+            refresh={fileRevision}
+            activeFile={activeFile}
+          />
         </>
       ) : section === "changes" ? (
         <>
@@ -314,6 +386,8 @@ export default function Sidebar({
             <span className="count">{changes.length}</span>
           </div>
           <div className="sidebar-scroll">
+            {!gitLoading && !gitError && isRepository && gitOmittedPaths > 0 &&
+              <div className="sidebar-empty" role="status">{gitOmittedPaths} paths not shown.</div>}
             {gitLoading ? (
               <div className="sidebar-empty">Checking repository…</div>
             ) : gitError ? (
@@ -347,8 +421,8 @@ export default function Sidebar({
             ) : (
               <div className="sidebar-empty">
                 <GitBranch size={25} />
-                <strong>Working tree clean</strong>
-                <p>Changes will appear here.</p>
+                <strong>{gitOmittedPaths ? "No shown Git changes" : "Working tree clean"}</strong>
+                <p>{gitOmittedPaths ? "Some reported paths could not be shown." : "Changes will appear here."}</p>
               </div>
             )}
           </div>
@@ -365,6 +439,37 @@ export default function Sidebar({
             />
             <kbd>/</kbd>
           </div>
+          <select
+            aria-label="Filter session status"
+            className="sidebar-status-filter"
+            value={statusFilter}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "all" || value === "working" || value === "idle" ||
+                  value === "attention" || value === "stopped") setStatusFilter(value);
+            }}
+          >
+            <option value="all">All statuses</option>
+            <option value="working">Working</option>
+            <option value="idle">Idle</option>
+            <option value="attention">Needs input</option>
+            <option value="stopped">Stopped</option>
+          </select>
+          <select
+            aria-label="Sort sessions"
+            className="sidebar-status-filter"
+            value={effective["rig.seatSort"]}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === "name" || value === "activity" || value === "attention-first")
+                update(Object.hasOwn(project, "rig.seatSort") ? "project" : "user",
+                  "rig.seatSort", value);
+            }}
+          >
+            <option value="name">Name</option>
+            <option value="activity">Activity (working first)</option>
+            <option value="attention-first">Attention first</option>
+          </select>
           <div className="section-label">
             <span>RIGS</span>
             <button title="Add connection" onClick={onConnect}>
@@ -388,23 +493,66 @@ export default function Sidebar({
               <span>All rigs</span>
               <span className="count">{rigs.length}</span>
             </button>
-            {rigs.map((r) => (
-              <button
-                className={`rig-row ${r.id === selectedRig ? "selected" : ""}`}
-                key={r.id}
-                onClick={() => onRig(r.id)}
-              >
-                <StatusDot status={r.status} />
-                <span>{r.name}</span>
-                <span className="count">{r.nodeCount}</span>
-              </button>
-            ))}
+            {rigs.length > 0 && <VirtualList rows={rigs} itemKey={r => JSON.stringify([owner, "rig", r.id])}
+              scopeKey={owner} label="Rig list" maxHeight={136} estimateHeight={34}
+              className="sidebar-rig-viewport" renderRow={r => (
+              <div className="rig-row-wrap" key={r.id}>
+                <button
+                  className={`rig-row ${r.id === selectedRig ? "selected" : ""}`}
+                  onClick={() => onRig(r.id)}
+                >
+                  <StatusDot status={r.status} />
+                  <span>{r.name}</span>
+                  <span className="count">{r.nodeCount}</span>
+                </button>
+                {onRigAction && (
+                  <button
+                    type="button"
+                    className="rig-actions-toggle"
+                    title={`Rig actions for ${r.name}`}
+                    aria-label={`Rig actions for ${r.name}`}
+                    aria-haspopup="menu"
+                    aria-expanded={rigMenu === r.id}
+                    disabled={!!inventoryError}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRigMenu(rigMenu === r.id ? null : r.id);
+                    }}
+                  >
+                    <span aria-hidden="true">⋯</span>
+                  </button>
+                )}
+              </div>
+            )} />}
+            {onRigAction && rigMenu && (() => {
+              const rig = rigs.find((r) => r.id === rigMenu);
+              if (!rig) return null;
+              return (
+                <div className="rig-actions-menu" role="menu" aria-label={`Actions for ${rig.name}`}>
+                  <p className="subtle">Opens the OpenRig control center. Nothing runs until you review and confirm there.</p>
+                  {QUICK_ACTIONS.map((a) => (
+                    <button
+                      key={a.id}
+                      role="menuitem"
+                      title={a.hint}
+                      onClick={() => {
+                        setRigMenu(null);
+                        onRigAction(rig.id, a.id);
+                      }}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                  <button role="menuitem" onClick={() => setRigMenu(null)}>Close</button>
+                </div>
+              );
+            })()}
           </div>
           <div className="section-label">
-            <span>SESSIONS</span>
+            <span title="Matching sessions, including favorites and sessions in collapsed pods.">SESSIONS</span>
             <span className="section-tools">
               <span className="count">
-                {seatCountText(shownSeats.length, seats.length, hideStopped)}
+                {seatCountText(seats.length, statusSeats.length, hideStopped)}
               </span>
               <HideStoppedButton
                 hiding={hideStopped}
@@ -412,13 +560,14 @@ export default function Sidebar({
               />
             </span>
           </div>
-          <div className="sidebar-scroll">
-            {inventoryError === CHECKING_SNAPSHOT && inventory && (
+          <div className="sidebar-scroll sidebar-session-container">
+            {connState.banner === "refreshing" && inventory && (
               <div className="sidebar-empty" role="status">
-                Refreshing · showing the last known snapshot…
+                Refreshing · showing the last known snapshot… Last updated{" "}
+                <InventoryAge sampledAt={inventory.sampledAt} />.
               </div>
             )}
-            {inventoryError && inventoryError !== CHECKING_SNAPSHOT && inventory && (
+            {connState.banner === "stale" && inventory && (
               <div className="error-box" role="status">
                 Stale inventory · last updated{" "}
                 <InventoryAge sampledAt={inventory.sampledAt} />. {inventoryError}{" "}
@@ -438,53 +587,18 @@ export default function Sidebar({
                   Connection settings
                 </button>
               </div>
-            ) : shownSeats.length ? (
-              shownSeats.map((s) => (
-                <div className="session-row" key={s.id}>
-                  <button
-                    disabled={!!inventoryError}
-                    draggable={!inventoryError}
-                    onDragStart={(event) => onDrag(event, s)}
-                    onClick={() => onSeat(s)}
-                    className="seat-row"
-                    key={s.id}
-                    title={`${s.name}@${s.rigName}${s.session ? " · " + s.session : " · No terminal available"}`}
-                  >
-                    <span
-                      className={`seat-avatar ${s.runtime?.includes("codex") ? "purple" : ""}`}
-                    >
-                      <Bot size={16} />
-                    </span>
-                    <span className="seat-details">
-                      <strong>{s.name}</strong>
-                      <small>
-                        {s.rigName} · {s.runtime}
-                      </small>
-                      {settings.effective["appearance.seatBadges"] && (
-                        <SeatBadgeRow seat={s} />
-                      )}
-                    </span>
-                    <StatusDot status={s.status} />
-                    <GripVertical size={12} className="grip" />
-                  </button>
-                  {onSeatBeside && <IconButton title={`Open ${s.name} beside current`} disabled={!!inventoryError || !s.session} onClick={() => onSeatBeside(s)}><span aria-hidden="true">▥</span></IconButton>}
-                  <IconButton
-                    title={`Relaunch session ${s.name}`}
-                    disabled={!!inventoryError || !s.session}
-                    onClick={() => onRelaunch(s)}
-                  >
-                    <RotateCw size={13} />
-                  </IconButton>
-                  {onNote && (
-                    <SeatNote
-                      seat={s}
-                      connectionId={connection.id}
-                      notes={notes}
-                      onNote={onNote}
-                    />
-                  )}
-                </div>
-              ))
+            ) : noMatches ? (
+              <div className="sidebar-empty" role="status">
+                <strong>No matching sessions</strong>
+                <p>Try another search or clear the filters.</p>
+              </div>
+            ) : seats.length ? (
+              <VirtualList rows={sessionRows} itemKey={row => row.key} renderRow={renderSession}
+                groupRow={row => row.seat && row.group ? {
+                  key: JSON.stringify([owner, row.group.identity]),
+                  label: `${row.group.podLabel} · ${row.group.rigLabel}`, className: "pod-content",
+                } : undefined}
+                label="Sessions" scopeKey={owner} className="sidebar-session-viewport" />
             ) : hiddenSeats ? (
               <HiddenSeatsNotice
                 count={hiddenSeats}
@@ -509,7 +623,7 @@ export default function Sidebar({
           </div>
           <div className="sidebar-tip">
             <GripVertical size={14} />
-            <span>Drag sessions into the workspace to arrange them.</span>
+            <span>Drag sessions into the workspace to arrange them. Favorites stay visible when their pod is collapsed.</span>
           </div>
         </>
       )}

@@ -17,6 +17,7 @@ import {
   Check,
 } from "lucide-react";
 import { useSettings } from "./SettingsContext";
+import { analyzeSettingsImport, summarizeImport } from "./settings-transfer";
 import {
   defaults,
   schema,
@@ -574,28 +575,38 @@ export default function SettingsPage({ project }: { project: string }) {
                 />
               </label>
               {error && <ErrorBox error={error} />}
+              {(() => {
+                const report = analyzeSettingsImport(json, own);
+                return (
+                  <div className="settings-import-report" role="status" aria-label="Import check">
+                    <strong>Check before applying ({scope} scope): </strong>
+                    {summarizeImport(report)}
+                    {report.notes.map((n) => <p key={n} className="subtle">{n}</p>)}
+                    {report.skipped.length > 0 && (
+                      <ul>
+                        {report.skipped.slice(0, 10).map((s) => <li key={s.key}><code>{s.key}</code>: {s.reason}</li>)}
+                        {report.skipped.length > 10 && <li>…and {report.skipped.length - 10} more</li>}
+                      </ul>
+                    )}
+                    {report.removed.length > 0 && <p className="subtle">Applying replaces this scope, so these current settings will be removed: {report.removed.slice(0, 10).join(", ")}{report.removed.length > 10 ? "…" : ""}</p>}
+                  </div>
+                );
+              })()}
               <button
                 className="primary-button"
+                disabled={!!analyzeSettingsImport(json, own).fatal}
                 onClick={() => {
-                  try {
-                    if (json.length > 65536)
-                      throw Error("Settings JSON must be smaller than 64 KB.");
-                    const parsed = JSON.parse(json);
-                    if (parsed.version !== 1 || !parsed.settings)
-                      throw Error("Expected version: 1 and a settings object.");
-                    const next = validateOverrides(parsed.settings);
-                    context.replace(scope, next);
-                    setError("");
-                    setNotice(
-                      "Applied " +
-                        Object.keys(next).length +
-                        " settings to " +
-                        scope +
-                        " scope.",
-                    );
-                  } catch (e) {
-                    setError((e as Error).message);
+                  const report = analyzeSettingsImport(json, own);
+                  if (report.fatal) {
+                    setError(report.fatal);
+                    return;
                   }
+                  context.replace(scope, report.valid);
+                  setError("");
+                  setNotice(
+                    "Applied " + Object.keys(report.valid).length + " settings to " + scope + " scope" +
+                      (report.skipped.length ? "; skipped " + report.skipped.length + "." : "."),
+                  );
                 }}
               >
                 Apply JSON

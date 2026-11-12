@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Send, ListTodo, Activity, RefreshCw, Bot } from "lucide-react";
+import { Send, ListTodo, Activity, RefreshCw, Bot, Copy } from "lucide-react";
+import { filterLog, formatLog, type LogFilter } from "./activity-log";
 import { Empty, ErrorBox, IconButton, Loading, StatusDot } from "./components";
 import type { Connection, Seat } from "./types";
 import { draftKey, draftOperation, useDraft } from "./drafts";
+import { visibleInterval } from "./visible-interval";
 function RecipientMessage({
   connection,
   root,
@@ -205,10 +207,10 @@ export function QueuePanel({
           if (active) setError(e.message);
         });
     load();
-    const timer = setInterval(load, 15000);
+    const stopPolling = visibleInterval(load, 15000);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, [connection.id, rigName, refresh]);
   return (
@@ -278,16 +280,45 @@ export interface ActivityEntry {
   kind: "info" | "error" | "success";
 }
 export function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
+  const [filter, setFilter] = useState<LogFilter>("all");
+  const [copied, setCopied] = useState("");
+  const shown = filterLog(entries, filter);
+  const copy = async () => {
+    const log = formatLog(shown);
+    try {
+      await navigator.clipboard.writeText(log.text);
+      setCopied(`Copied ${log.count} ${log.count === 1 ? "entry" : "entries"}${log.truncated ? " (newest part only)" : ""}.`);
+    } catch {
+      setCopied("Could not copy to the clipboard.");
+    }
+  };
   return (
     <div className="tool-panel">
       <div className="tool-panel-heading">
         <Activity size={18} />
         <div>
-          <h3>Workspace activity</h3>
-          <p>Connections, sessions, and workspace events</p>
+          <h3>Workspace activity log</h3>
+          <p>Connections, sessions, and workspace events from this run. Kept in memory (latest 150); cleared when HRig closes.</p>
         </div>
       </div>
-      {entries.map((e) => (
+      <div className="activity-log-controls">
+        <label>
+          Show{" "}
+          <select aria-label="Filter log entries" value={filter} onChange={(e) => { setFilter(e.target.value as LogFilter); setCopied(""); }}>
+            <option value="all">All</option>
+            <option value="error">Errors</option>
+            <option value="success">Successes</option>
+            <option value="info">Information</option>
+          </select>
+        </label>
+        <span className="subtle" role="status">{shown.length} of {entries.length} {entries.length === 1 ? "entry" : "entries"}</span>
+        <button className="small-button" onClick={copy} disabled={!shown.length} title="Copy the shown entries as plain text (oldest first)">
+          <Copy size={12} /> Copy log
+        </button>
+        {copied && <span className="subtle" role="status">{copied}</span>}
+      </div>
+      {!shown.length && <p className="subtle">No log entries to show.</p>}
+      {shown.map((e) => (
         <div className={`activity-entry ${e.kind}`} key={e.id}>
           <span className="activity-marker" />
           <div>

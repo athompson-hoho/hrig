@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { ErrorBox } from "./components";
+import { visibleInterval } from "./visible-interval";
 
 export default function MobileDevices() {
   const [state, setState] = useState<any>(null),
@@ -31,13 +32,13 @@ export default function MobileDevices() {
       }
     };
     void load();
-    const timer = setInterval(() => {
+    const stopPolling = visibleInterval(() => {
       setClock(Date.now());
       void load();
     }, 1500);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
     };
   }, []);
   useEffect(() => {

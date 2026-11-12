@@ -1,8 +1,19 @@
-import { _electron as electron } from "@playwright/test";
+import { runControlledRendererBenchmark } from "./renderer-benchmark.mjs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+if (process.argv.includes("--controlled-renderer")) {
+  const flag = process.argv.find((arg) => arg.startsWith("--samples="));
+  console.log(JSON.stringify(await runControlledRendererBenchmark({
+    samples: flag ? Number(flag.slice(10)) : 5,
+  }), null, 2));
+} else {
+  await runPackagedBenchmark();
+}
+
+async function runPackagedBenchmark() {
+const { _electron: electron } = await import("@playwright/test");
 const { cpuSample } = createRequire(import.meta.url)(
   "../electron/performance-model.cjs",
 );
@@ -169,3 +180,4 @@ await fs.writeFile(
   JSON.stringify(report, null, 2) + "\n",
 );
 console.log(JSON.stringify(report, null, 2));
+}

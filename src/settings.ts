@@ -2,6 +2,7 @@ import { themes } from "./theme-catalog";
 import { isWindows } from "./platform";
 import { DEFAULT_WORD_SEPARATOR, isValidWordSeparator } from "./terminal-words";
 import { STATUS_ITEMS } from "./status-bar-items";
+import type { SeatSort } from "./seat-sort";
 export const defaults = {
   "appearance.theme": "hrig-dark",
   "appearance.accent": "theme",
@@ -23,6 +24,9 @@ export const defaults = {
   "editor.renderWhitespace": "selection",
   "editor.bracketPairs": true,
   "editor.diffSideBySide": true,
+  "editor.largeFileWarnKb": 1024,
+  "editor.breadcrumbs": false,
+  "editor.formatOnSave": false,
   "editor.autoReload": true,
   "terminal.fontSize": 13,
   "terminal.fontFamily":
@@ -31,6 +35,7 @@ export const defaults = {
   "terminal.cursorStyle": "bar",
   "terminal.cursorBlink": true,
   "terminal.scrollback": 10000,
+  "terminal.scrollbackBudget": 200000,
   "terminal.theme": "inherit",
   "terminal.localShell": "system",
   "terminal.autoReconnect": true,
@@ -47,9 +52,13 @@ export const defaults = {
   "workspace.refreshInterval": 15,
   "workspace.restoreLastProject": false,
   "workspace.hideStoppedSeats": false,
+  "workspace.updateCheckHours": "6",
   "connections.defaultKind": isWindows ? "wsl" : "ssh",
   "connections.defaultRoot": "~",
   "rig.defaultRuntime": "codex",
+  "rig.seatSort": "name" as SeatSort,
+  "rig.seatClick": "open" as "open" | "select",
+  "rig.cacheInventory": false,
   "rig.defaultTeamSize": 2,
   "rig.claudePlanMonthlyUsd": 200,
   "rig.codexPlanMonthlyUsd": 100,
@@ -85,6 +94,36 @@ export type Setting = {
 const options = (...values: string[]): Option[] =>
   values.map((value) => ({ value, label: value }));
 export const schema: Setting[] = [
+  {
+    key: "rig.seatSort",
+    category: "Connections & rigs",
+    label: "Seat sort order",
+    description:
+      "Choose the default sidebar seat order. Activity puts working seats first; it does not use an activity timestamp.",
+    options: [
+      { value: "name", label: "Name" },
+      { value: "activity", label: "Activity (working first)" },
+      { value: "attention-first", label: "Attention first" },
+    ],
+  },
+  {
+    key: "rig.seatClick",
+    category: "Connections & rigs",
+    label: "Clicking a session",
+    description:
+      "Open its terminal (default), or only select the row. Selecting never opens or sends input to a terminal; use the row's Open terminal button instead.",
+    options: [
+      { value: "open", label: "Open its terminal" },
+      { value: "select", label: "Select only" },
+    ],
+  },
+  {
+    key: "rig.cacheInventory",
+    category: "Connections & rigs",
+    label: "Remember the last session list",
+    description:
+      "Keep a copy of the last verified session list on this computer so the sidebar can show it right after a restart. It is marked as the last known snapshot and actions stay disabled until the connection is verified. Turning this off deletes the stored copy.",
+  },
   {
     key: "rig.claudePlanMonthlyUsd",
     category: "Connections & rigs",
@@ -242,8 +281,8 @@ export const schema: Setting[] = [
     category: "Editor",
     label: "Render whitespace",
     description:
-      "Show spaces and tabs for the selected text, everywhere, or nowhere.",
-    options: options("selection", "all", "none"),
+      "Show spaces and tabs for the selected text, only at word boundaries, only trailing spaces, everywhere, or nowhere. Trailing is handy when reviewing diffs.",
+    options: options("selection", "boundary", "trailing", "all", "none"),
   },
   {
     key: "editor.bracketPairs",
@@ -257,6 +296,30 @@ export const schema: Setting[] = [
     label: "Side-by-side diffs",
     description:
       "Compare versions in two columns. Turn off for an inline diff.",
+  },
+  {
+    key: "editor.formatOnSave",
+    category: "Editor",
+    label: "Format on save",
+    description:
+      "When you press Save, first format JSON, CSS/SCSS/Less, HTML, JavaScript and TypeScript files with the editor's built-in formatter. Off by default. Other file types and files over 500,000 characters are saved as written, and no external tools are run.",
+  },
+  {
+    key: "editor.breadcrumbs",
+    category: "Editor",
+    label: "Breadcrumb path bar",
+    description:
+      "Show the open file's path as folder breadcrumbs in the editor toolbar. Display only: breadcrumbs do not navigate.",
+  },
+  {
+    key: "editor.largeFileWarnKb",
+    category: "Editor",
+    label: "Large file warning (KB)",
+    description:
+      "Show a warning when you open an editable file at least this large. Files over 2 MB and binary files open as a read-only preview and are never edited or saved.",
+    min: 100,
+    max: 2000,
+    step: 100,
   },
   {
     key: "editor.autoReload",
@@ -301,6 +364,16 @@ export const schema: Setting[] = [
     category: "Terminal",
     label: "Blinking cursor",
     description: "Animate the terminal cursor when the terminal has focus.",
+  },
+  {
+    key: "terminal.scrollbackBudget",
+    category: "Terminal",
+    label: "Total scrollback budget (lines)",
+    description:
+      "Limits the scrollback lines all open terminals keep together, to protect memory when many terminals are open. Each terminal keeps at most its own scrollback setting and at least 1,000 lines. Set 0 for no limit. Rig sessions are not affected; only older output in the view is dropped.",
+    min: 0,
+    max: 2000000,
+    step: 10000,
   },
   {
     key: "terminal.scrollback",
@@ -446,6 +519,20 @@ export const schema: Setting[] = [
       "Leave the sessions that have stopped or exited, and the sessions of a rig the inventory calls archived, out of the sidebar's session list. Off by default, so every session is listed as before. A failed session or one that needs input is never hidden. While this is on, the count beside SESSIONS reads shown of total, and an empty list says how many are hidden, with a button to show them. Only that list changes: open panels, the command center, drag and drop and relaunch are as they were, and nothing is started, stopped or sent to a seat. The eye button beside SESSIONS turns it on and off. Read from your user settings only: a project override has no effect.",
   },
   {
+    key: "workspace.updateCheckHours",
+    category: "Workspace",
+    label: "Check for HRig updates",
+    description:
+      "How often HRig checks for a new version in the background. Checks never download or install anything by themselves, and Check for updates still works on demand. Applies to installed builds only.",
+    options: [
+      { value: "6", label: "Every 6 hours (default)" },
+      { value: "12", label: "Every 12 hours" },
+      { value: "24", label: "Daily" },
+      { value: "168", label: "Weekly" },
+      { value: "0", label: "Never automatically" },
+    ],
+  },
+  {
     key: "connections.defaultKind",
     category: "Connections & rigs",
     label: "New connection type",
@@ -489,9 +576,9 @@ export const schema: Setting[] = [
   {
     key: "notifications.desktop",
     category: "Notifications",
-    label: "Desktop attention notifications",
+    label: "Desktop needs-input notifications",
     description:
-      "Notify when a seat newly needs input or reports a failure. Windows notification preferences still apply.",
+      "Seat name only, for newly needs-input seats in verified inventory on the current connection. Enabling starts silently. Desktop support and OS notification settings may prevent display.",
   },
   {
     key: "notifications.terminalBell",

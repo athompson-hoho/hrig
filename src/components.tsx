@@ -7,16 +7,18 @@ export function IconButton({
   onClick,
   active = false,
   disabled = false,
+  className = "",
 }: {
   title: string;
   children: ReactNode;
   onClick?: () => void;
   active?: boolean;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
     <button
-      className={`icon-button ${active ? "active" : ""}`}
+      className={`icon-button ${active ? "active" : ""}${className ? " " + className : ""}`}
       title={title}
       aria-label={title}
       onClick={onClick}
