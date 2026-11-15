@@ -795,6 +795,21 @@ test("terminal-paste-history store: each terminal has its own list, the list goe
   });
 });
 
+test("terminal-paste-history does not remember a paste after its terminal target disappears", async () => {
+  await withTools(async (tools) => {
+    tools.effective["terminal.pasteHistory"] = true;
+    const a = tools.mount({ terminalId: "missing-target" });
+    a.props().terminal.current = null;
+    tools.clipboard = "not delivered";
+
+    await a.pressPaste();
+    await a.openMenu();
+
+    assert.deepEqual(a.pasted, []);
+    assert.deepEqual(a.labels(), BASE_MENU, "a paste with no terminal target is not remembered");
+  });
+});
+
 // ---- the picker dialog ----
 
 let pickerText;
@@ -1095,11 +1110,11 @@ test("terminal-paste-history wiring: the module is pure, only the terminal tools
   assert.equal(
     count(
       tools,
-      "if (terminal.current === target) { target?.paste(text); rememberPaste(text); }",
+      "if (target && terminal.current === target) { target.paste(text); rememberPaste(text); }",
     ),
     1,
   );
-  assert.equal(count(tools, "target?.paste(text)"), 1);
+  assert.equal(count(tools, "target.paste(text)"), 1);
   assert.equal(count(tools, "terminal.current?.paste(text)"), 1);
   assert.equal(
     count(tools, "readClipboardText()"),

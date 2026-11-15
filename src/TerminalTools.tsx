@@ -153,7 +153,7 @@ export default function TerminalTools({
     const target = terminal.current;
     try {
       // A picked history entry takes the same route as clipboard text, so the multi-line confirmation applies to it too; the clipboard itself is not read for it.
-      await pasteClipboard({readText:()=>picked===undefined?window.hrig.readClipboardText():Promise.resolve(picked),hasImage:()=>picked===undefined?window.hrig.clipboardHasImage():Promise.resolve(false),pasteText:text=>{ if (terminal.current === target) { target?.paste(text); rememberPaste(text); } },pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
+      await pasteClipboard({readText:()=>picked===undefined?window.hrig.readClipboardText():Promise.resolve(picked),hasImage:()=>picked===undefined?window.hrig.clipboardHasImage():Promise.resolve(false),pasteText:text=>{ if (target && terminal.current === target) { target.paste(text); rememberPaste(text); } },pasteImage,confirm:askPaste,confirmEnabled:confirmMultiline.current});
     } catch (e) {
       setNotice((e as Error).message);
     }
