@@ -10,6 +10,7 @@ export const STATUS_ITEMS: readonly StatusItem[] = Object.freeze(
     { id: "accounts", label: "Accounts" },
     { id: "connection", label: "Connection" },
     { id: "source-control", label: "Source control" },
+    { id: "rig-health", label: "Rig health summary" },
     { id: "reconnect", label: "Reconnect dropped terminals" },
     { id: "sessions", label: "Sessions open" },
     { id: "layout", label: "Layout autosaved" },

@@ -3295,14 +3295,16 @@ export default function App() {
                 }}
               />
               )}
-              <RigHealthStatus
-                scope={attentionScope(connection, connection, inventory, inventoryHealth.current, inventoryError)}
-                rigId={state.activeRig}
-                onOpen={() => {
-                  setSection("sessions");
-                  setSidebar(true);
-                }}
-              />
+              {isVisible("rig-health", hiddenStatusItems) && (
+                <RigHealthStatus
+                  scope={attentionScope(connection, connection, inventory, inventoryHealth.current, inventoryError)}
+                  rigId={state.activeRig}
+                  onOpen={() => {
+                    setSection("sessions");
+                    setSidebar(true);
+                  }}
+                />
+              )}
             </div>
             <div>
               {droppedNow.length > 0 && isVisible("reconnect", hiddenStatusItems) && (

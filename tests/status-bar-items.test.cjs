@@ -46,6 +46,7 @@ const IDS = [
   "accounts",
   "connection",
   "source-control",
+  "rig-health",
   "reconnect",
   "sessions",
   "layout",
@@ -240,6 +241,8 @@ const MARKERS = {
     allNodes(tree).some((n) => n.type === "span" && n.props && n.props.className === "status-connection"),
   "source-control": (tree) =>
     allNodes(tree).some((n) => n.type && n.type.name === "GitInfoStatus"),
+  "rig-health": (tree) =>
+    allNodes(tree).some((n) => n.type && n.type.name === "RigHealthStatus"),
   reconnect: (tree) =>
     allNodes(tree).some(
       (n) =>
@@ -375,11 +378,9 @@ test("status-bar-items tracer: the real footer of App.tsx draws exactly what it 
 
   // Every id hidden: an empty strip with the footer and its two groups.
   const empty = lines({ hidden: IDS.join(" "), dropped: ["a"] });
-  // The rig health status has no switch, so it is the one thing left in the strip.
   assert.deepEqual(empty, [
     "footer.statusbar",
     "  div",
-    '    RigHealthStatus scope={"ready":false} rigId="" onOpen=fn',
     "  div",
   ]);
 
@@ -431,7 +432,7 @@ function modelHidden(text) {
 }
 
 test("status-bar-items rules: the catalog, parsing (separators, case, caps, hostile text), isVisible, serialize and the dividers", () => {
-  // Catalog: seven items in drawing order, frozen, ids that fit the setting text rule.
+  // Catalog: eight items in drawing order, frozen, ids that fit the setting text rule.
   assert.deepEqual(
     lib.STATUS_ITEMS.map((item) => item.id),
     IDS,
@@ -579,6 +580,7 @@ test("status-bar-items rules: the catalog, parsing (separators, case, caps, host
       "layout",
       "sessions",
       "reconnect",
+      "rig-health",
       "source-control",
       "connection",
       "accounts",
@@ -869,6 +871,7 @@ test("status-bar-items docs: SETTINGS.md has the setting's row with an empty def
     "`accounts` (the Accounts button)",
     "`connection` (the Local workspace, WSL or SSH label)",
     "`source-control` (the Source control button)",
+    "`rig-health` (the rig health summary)",
     "`reconnect` (the Reconnect all dropped button)",
     "`sessions` (the count of open sessions)",
     "`layout` (the Layout autosaved note)",
