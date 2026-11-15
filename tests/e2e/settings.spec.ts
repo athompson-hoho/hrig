@@ -111,7 +111,7 @@ test("settings apply live themes, scoped values and validated imports, persist, 
       .click();
     await expect(font).toHaveValue("18");
     await page.getByRole("button", { name: "User", exact: true }).click();
-    await search.fill("Desktop attention");
+    await search.fill("Desktop needs-input");
     await expect(
       page.getByLabel("Desktop needs-input notifications", { exact: true }),
     ).toBeChecked();
