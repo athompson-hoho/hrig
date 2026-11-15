@@ -113,7 +113,7 @@ test("settings apply live themes, scoped values and validated imports, persist, 
     await page.getByRole("button", { name: "User", exact: true }).click();
     await search.fill("Desktop attention");
     await expect(
-      page.getByLabel("Desktop attention notifications", { exact: true }),
+      page.getByLabel("Desktop needs-input notifications", { exact: true }),
     ).toBeChecked();
     await search.fill("does-not-exist");
     await expect(page.getByText("No matching settings")).toBeVisible();
