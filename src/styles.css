@@ -3096,6 +3096,39 @@ button:hover {
   color: var(--color-71839e);
   margin: -4px 0 18px;
 }
+.pod-broadcast-notice,
+.pod-broadcast-section {
+  border: 1px solid var(--color-303a48);
+  border-radius: 6px;
+  background: var(--color-1b1f27);
+  padding: 11px 13px;
+  margin: 0 0 14px;
+}
+.pod-broadcast-notice {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: var(--color-d59ba8);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.pod-broadcast-notice svg { flex: 0 0 auto; margin-top: 2px; }
+.pod-broadcast-section h3 { font-size: 12px; margin: 0 0 7px; }
+.pod-broadcast-section > p,
+.pod-broadcast-section li { font-size: 11px; line-height: 1.65; }
+.pod-broadcast-section small { color: var(--color-8090a8); }
+.pod-broadcast-seats,
+.pod-broadcast-results { list-style: none; padding: 0; margin: 0; }
+.pod-broadcast-seats li { border-top: 1px solid var(--color-303a48); }
+.pod-broadcast-seats label { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; padding: 7px 0; cursor: pointer; }
+.pod-broadcast-seats input { grid-row: span 2; margin: 3px 0 0; }
+.pod-broadcast-seats span,
+.pod-broadcast-results strong { overflow-wrap: anywhere; }
+.pod-broadcast-seats small { grid-column: 2; }
+.pod-broadcast-seats .blocked label { cursor: not-allowed; opacity: .55; }
+.pod-broadcast-excluded { color: var(--color-d59ba8); font-size: 10px; line-height: 1.6; }
+.pod-broadcast-exact pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; border: 1px solid var(--color-303a48); padding: 9px; border-radius: 4px; font-size: 11px; }
+.pod-broadcast-results li { border-top: 1px solid var(--color-303a48); padding: 6px 0; overflow-wrap: anywhere; }
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1.1fr;

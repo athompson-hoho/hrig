@@ -1,7 +1,4 @@
-// Inert and not imported by any app code. It exists so the preview and
-// confirmation rules of the design note docs/pod-broadcast.md are written
-// down and tested before any broadcast is approved. Nothing here sends a
-// message, reads a terminal, touches the disk or has a setting.
+// Pure recipient and text rules for the reviewed flow in docs/pod-broadcast.md.
 
 /** Most recipients one broadcast may have. A seat past it is reported as "over cap" and is never a recipient. */
 export const MAX_RECIPIENTS = 8;
@@ -26,7 +23,9 @@ export type SeatProblem =
   | "no session"
   | "stopped"
   | "exited"
-  | "failed";
+  | "failed"
+  | "not running"
+  | "ambiguous address";
 /** Why a selected id is not a recipient: a seat problem, an id that is not in the list, a repeat, or the cap. */
 export type ExcludeReason =
   SeatProblem | "unknown seat" | "duplicate" | "over cap";
@@ -35,6 +34,7 @@ export type TextProblem =
   | "not text"
   | "empty"
   | "too long"
+  | "option-like text"
   | "control characters"
   | "hidden characters";
 
@@ -156,7 +156,7 @@ function read(raw: unknown): Row | null {
 }
 
 /** The first reason this seat can not be sent to, or an empty string. */
-function problem(row: Row): SeatProblem | "" {
+function problem(row: Row, addressIsAmbiguous = false): SeatProblem | "" {
   const runtime = row.runtime.toLowerCase();
   if (
     PERSON_NAME.test(row.name) ||
@@ -173,6 +173,9 @@ function problem(row: Row): SeatProblem | "" {
   if (status === "stopped") return "stopped";
   if (status === "exited") return "exited";
   if (status === "failed") return "failed";
+  if (!["attention", "working", "idle", "running"].includes(status))
+    return "not running";
+  if (addressIsAmbiguous) return "ambiguous address";
   return "";
 }
 
@@ -192,11 +195,18 @@ export function podGroups(seats: unknown): PodGroup[] {
     if (!Array.isArray(seats)) return [];
     const groups = new Map<string, PodGroup>();
     const seen = new Set<string>();
+    const addressCounts = new Map<string, number>();
     const limit = Math.min(seats.length, MAX_ROWS);
+    const parsed: Row[] = [];
     for (let i = 0; i < limit; i++) {
       const row = read(seats[i]);
       if (!row || seen.has(row.id)) continue;
       seen.add(row.id);
+      parsed.push(row);
+      const target = address(row);
+      addressCounts.set(target, (addressCounts.get(target) || 0) + 1);
+    }
+    for (const row of parsed) {
       const key = JSON.stringify([row.rigId, row.pod]);
       let group = groups.get(key);
       if (!group) {
@@ -214,7 +224,7 @@ export function podGroups(seats: unknown): PodGroup[] {
         address: address(row),
         runtime: row.runtime,
         status: row.status,
-        blocked: problem(row),
+        blocked: problem(row, (addressCounts.get(address(row)) || 0) > 1),
       });
     }
     const list = [...groups.values()];
@@ -250,9 +260,14 @@ export function previewRecipients(
       return { recipients: [], excluded: [], unread: 0 };
     const byId = new Map<string, Row>();
     const rows = Math.min(seats.length, MAX_ROWS);
+    const addressCounts = new Map<string, number>();
     for (let i = 0; i < rows; i++) {
       const row = read(seats[i]);
-      if (row && !byId.has(row.id)) byId.set(row.id, row);
+      if (row && !byId.has(row.id)) {
+        byId.set(row.id, row);
+        const target = address(row);
+        addressCounts.set(target, (addressCounts.get(target) || 0) + 1);
+      }
     }
     const recipients: Recipient[] = [];
     const excluded: Excluded[] = [];
@@ -262,7 +277,9 @@ export function previewRecipients(
       const id = short(selectedIds[i]);
       const row = id === "" ? undefined : byId.get(id);
       const shown = row ? address(row) : "";
-      const why = row ? problem(row) : "";
+      const why = row
+        ? problem(row, (addressCounts.get(address(row)) || 0) > 1)
+        : "";
       if (id === "") {
         excluded.push({ id, address: shown, reason: "unknown seat" });
       } else if (named.has(id)) {
@@ -304,6 +321,7 @@ export function previewRecipients(
  */
 export function validateBroadcastText(value: unknown): TextCheck {
   if (typeof value !== "string") return { ok: false, reason: "not text" };
+  if (value.startsWith("-")) return { ok: false, reason: "option-like text" };
   if (value.length > MAX_TEXT_CHARS * 2)
     return { ok: false, reason: "too long" };
   if (value.trim() === "") return { ok: false, reason: "empty" };

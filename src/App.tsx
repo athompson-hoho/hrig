@@ -95,6 +95,7 @@ import {
 } from "./settings-recent";
 import { HostTintContext } from "./HostTint";
 import HostTintDialog from "./HostTintDialog";
+import PodBroadcast from "./PodBroadcast";
 import { normalizeHostTints } from "./host-tint";
 import { resolveTaskFilters, saveTaskFilters } from "./task-filters";
 import { isVisible, parseHidden, statusDividers } from "./status-bar-items";
@@ -271,6 +272,7 @@ type ModalKind =
   | "tools"
   | "shortcuts"
   | "hostTint"
+  | "podBroadcast"
   | null;
 type PendingAction = {
   title: string;
@@ -2372,6 +2374,12 @@ export default function App() {
       action: openShortcuts,
     },
     {
+      name: "Send a message to a pod",
+      hint: "Review recipients and confirm",
+      icon: <Send size={16} />,
+      action: () => setModal("podBroadcast"),
+    },
+    {
       name: "Go to line",
       hint: "Ctrl G in the editor",
       icon: <FileCode2 size={16} />,
@@ -3821,6 +3829,14 @@ export default function App() {
           onChange={terminalSnippets => setState(s => ({...s,terminalSnippets}))}
           onInsert={(text,run) => requestAnimationFrame(() => sendTerminalCommand(snippetTarget.id,run ? "run" : "insert",text))}
           onClose={() => {setSnippetTarget(null);setSnippetDraft(null);}} />}
+        {modal === "podBroadcast" && (
+          <PodBroadcast
+            connection={connection}
+            seats={freshSeats(connection)}
+            inventoryError={inventoryError}
+            onClose={() => setModal(null)}
+          />
+        )}
         {modal === "palette" && (
           <Modal title="Command center" onClose={() => setModal(null)} wide>
             <div className="palette-input">

@@ -871,9 +871,9 @@ test("host-tint dialog: the real dialog lists every connection, keeps edits to i
   );
   assert.equal(count(code, "maxLength={MAX_TINT_LABEL}"), 1);
 
-  // The App: one palette command, one modal kind, and Save writes the map into the workspace state.
+  // The App: one palette command, its modal kind, and Save writes the map into the workspace state.
   const app = tight(stripComments(read("src/App.tsx")));
-  assert.equal(count(app, '| "hostTint" | null;'), 1);
+  assert.equal(count(app, '| "hostTint" | "podBroadcast" | null;'), 1);
   assert.equal(count(app, 'import HostTintDialog from "./HostTintDialog";'), 1);
   assert.equal(count(app, 'name: "Set host label and tint"'), 1);
   assert.ok(

@@ -15,7 +15,7 @@ Let a person send the same line to several terminals at once, for example the sa
 - Host label and tint (`src/host-tint.ts`, TERMINALS.md) exists because mistaking a production shell for a development one is a real risk. It is a person's own label per saved connection (up to 24 characters, six colors). HRig does not know which host is production.
 - Seats have their own channel: `window.hrig.sendMessage(connection, seat, message)` (`rig:send` in `electron/main.cjs`, `sendMessage` in `electron/backend.cjs`) sends a message to a seat, not keystrokes to a terminal. The rig command list in `src/RigControl.tsx` names a `broadcast` command; what it does was not examined for this note.
 - Input typed while a terminal is disconnected is dropped, never queued (`onData` in `src/TerminalPanel.tsx`), because after an uncertain disconnect replayed keystrokes could run commands unseen.
-- The backlog lists a pod-level broadcast with a recipient list preview (item R20). It is not in this tree, so nothing here relies on how it looks or works.
+- The seat-message broadcast (item R20) is available from the command center and is described in `docs/pod-broadcast.md`. It uses the seat message path, not the terminal input channel described here.
 
 ## Risks
 

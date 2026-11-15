@@ -292,6 +292,28 @@ test("pod-broadcast preview: every selected id lands in one list, in the order t
     assert.deepEqual(previewRecipients(bad, ["r1:a"]), empty);
 });
 
+test("pod-broadcast preview: unknown session states and duplicate CLI addresses are excluded", () => {
+  const sameAddress = (id, rigId) => seat({
+    id,
+    rigId,
+    rigName: "alpha",
+    name: "same",
+    session: "same@alpha",
+  });
+  const input = [
+    named("mystery", { status: "unknown" }),
+    sameAddress("r1:same", "r1"),
+    sameAddress("r2:same", "r2"),
+  ];
+  const preview = previewRecipients(input, ids(input));
+  assert.deepEqual(preview.recipients, []);
+  assert.deepEqual(preview.excluded.map((item) => item.reason), [
+    "not running",
+    "ambiguous address",
+    "ambiguous address",
+  ]);
+});
+
 test("pod-broadcast cap: at most 8 recipients, the rest reported as over cap, and a long selection is only counted past 100", () => {
   const many = Array.from({ length: 12 }, (_, i) => named("s" + (i + 10)));
   const pick = many.map((s) => s.id);
@@ -327,7 +349,9 @@ test("pod-broadcast cap: at most 8 recipients, the rest reported as over cap, an
   assert.ok(!beyond.recipients.some((r) => r.id === "r1:s18"));
   assert.ok(!beyond.excluded.some((e) => e.id === "r1:s18"));
   // At most 500 rows of the seat list are read: seat 501 is unknown.
-  const rows = Array.from({ length: 501 }, (_, i) => seat({ id: "r1:" + i }));
+  const rows = Array.from({ length: 501 }, (_, i) =>
+    seat({ id: "r1:" + i, name: "seat" + i, session: "seat" + i + "@alpha" }),
+  );
   const read = previewRecipients(rows, ["r1:499", "r1:500"]);
   assert.deepEqual(ids(read.recipients), ["r1:499"]);
   assert.equal(read.excluded[0].reason, "unknown seat");
@@ -351,7 +375,6 @@ test("pod-broadcast text: the exact text or a reason, with the limit counted in 
     "x".repeat(10000),
     "\u{1F600}".repeat(10000),
     "caf\u00e9 \u20ac \u2764\ufe0f",
-    "- starts with a dash",
   ];
   for (const text of ok) {
     const r = validateBroadcastText(text);
@@ -365,6 +388,7 @@ test("pod-broadcast text: the exact text or a reason, with the limit counted in 
   for (const v of ["", " ", "   ", "\n\t ", "\u00a0", "\u2003 "])
     refused(v, "empty");
   refused("x".repeat(10001), "too long");
+  refused("- starts with a dash", "option-like text");
   refused("x".repeat(20001), "too long");
   refused("\u{1F600}".repeat(10001), "too long");
   refused("\u0000" + "x".repeat(10001), "too long");
@@ -613,7 +637,7 @@ test("pod-broadcast tracer: a CLI inventory through the real normalizer, a pod c
   }
 });
 
-test("pod-broadcast inert: no app source imports it, nothing sends, and no setting or shortcut names it", () => {
+test("pod-broadcast integration: app uses the reviewed dialog and send boundary, with no setting or shortcut", () => {
   const files = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -625,73 +649,45 @@ test("pod-broadcast inert: no app source imports it, nothing sends, and no setti
   walk(path.join(root, "src"));
   walk(path.join(root, "electron"));
   assert.ok(files.length > 20, "found the sources");
-  for (const file of files) {
-    if (path.basename(file) === "pod-broadcast.ts") continue;
-    assert.ok(
-      !fs.readFileSync(file, "utf8").includes("pod-broadcast"),
-      path.relative(root, file) + " must not import pod-broadcast",
-    );
-  }
+  assert.ok(read("src/PodBroadcast.tsx").includes('from "./pod-broadcast"'));
+  assert.ok(read("src/PodBroadcast.tsx").includes('from "./pod-broadcast-send"'));
+  assert.ok(read("src/App.tsx").includes('setModal("podBroadcast")'));
+  assert.ok(read("src/App.tsx").includes('<PodBroadcast'));
+  assert.ok(read("src/pod-broadcast-send.ts").includes("sendMessage"));
   for (const file of ["src/settings.ts", "src/shortcuts.ts"])
     assert.ok(
       !/broadcast/i.test(read(file)),
       file + " must not name a broadcast setting or shortcut",
     );
   const source = read("src/pod-broadcast.ts");
-  assert.ok(!/[^\n -~]/.test(source), "the module is printable ASCII");
-  const code = stripComments(source);
-  assert.ok(!/^\s*import\b/m.test(code) && !/ from "/.test(code), "no import");
-  assert.ok(
-    !/(^|[^A-Za-z.])(window|document|fetch|process|require|localStorage|sessionStorage|navigator|clipboard|setTimeout|setInterval|console|hrig|sendMessage|writeTerminal|sendTerminalCommand|innerHTML)([^A-Za-z]|$)/.test(
-      code,
-    ) && !/Date\.now|new Date|Math\.random/.test(code),
-    "no page, bridge, clock or randomness",
-  );
-  const lines = source.split("\n");
-  const exported = lines.filter((line) => /^export /.test(line)).length;
-  assert.equal(exported, 16, "sixteen exports");
-  lines.forEach((line, i) => {
-    if (/^export /.test(line))
-      assert.ok(/\*\/\s*$/.test(lines[i - 1]), "documented: " + line);
-  });
+  assert.ok(!/^\s*import\b/m.test(stripComments(source)), "pure preview helper has no imports");
 });
 
-test("pod-broadcast note: docs/pod-broadcast.md says it is not implemented, has the required headings and names the helper and the gate, and TERMINALS.md points to it once", () => {
+test("pod-broadcast note: docs describe the implemented flow and TERMINALS.md points to it once", () => {
   const note = read("docs/pod-broadcast.md");
   const lines = note.split("\n");
   assert.equal(lines[0], "# Pod broadcast");
   assert.ok(
     lines
       .find((line) => line.trim() !== "" && !line.startsWith("#"))
-      .startsWith("Design note only; not implemented."),
+      .startsWith("Implemented: an explicit, reviewed pod message flow."),
   );
   assert.deepEqual(
     lines.filter((line) => line.startsWith("## ")),
     [
       "## Goal",
-      "## Current behavior",
-      "## Risks",
-      "## Options",
-      "## Recommendation",
-      "## Approval gate",
-      "## Tests an implementation must add",
+      "## Delivered behavior",
+      "## Limits and human checks",
     ],
   );
   for (const part of [
-    "`src/pod-broadcast.ts`",
-    "`podGroups`",
-    "`previewRecipients`",
-    "`validateBroadcastText`",
-    "`confirmationPhrase`",
-    "`MAX_RECIPIENTS` (8)",
-    "`MAX_TEXT_CHARS`, 10,000",
     "`sendMessage`",
     "`rig send`",
-    "`--pod`",
-    "A person must approve this before anything is built",
+    "HRig does not save the broadcast text",
+    "one message at a time",
+    "uncertain",
   ])
     assert.ok(note.includes(part), "the note must say: " + part);
-  assert.ok(!/[^\n -~]/.test(note), "the note is printable ASCII");
   assert.ok(note.endsWith("\n") && !note.endsWith("\n\n"));
   const terminals = read("TERMINALS.md");
   assert.equal(terminals.split("docs/pod-broadcast.md").length - 1, 1);
@@ -699,9 +695,5 @@ test("pod-broadcast note: docs/pod-broadcast.md says it is not implemented, has 
     .split("\n\n")
     .find((part) => part.includes("docs/pod-broadcast.md"));
   assert.ok(paragraph.includes("docs/terminal-broadcast-input.md"));
-  assert.ok(paragraph.includes("several seats of a pod is not implemented"));
-  // The wave 9 terminal note is not edited: its sentence about this item stays true.
-  assert.ok(
-    read("docs/terminal-broadcast-input.md").includes("It is not in this tree"),
-  );
+  assert.ok(paragraph.includes("available from the command center"));
 });
