@@ -730,7 +730,14 @@ test("terminal-link-at wiring: one pure module, one open path, only a primary cl
     ),
     1,
   );
-  assert.equal(count(tools, "target?.paste(text)"), 1);
+  assert.equal(
+    count(
+      tools,
+      "if (target && terminal.current === target) { target.paste(text); rememberPaste(text); }",
+    ),
+    1,
+    "paste history is recorded only after the captured live terminal receives the paste",
+  );
   assert.equal(count(tools, "terminal.current?.paste(text)"), 1);
   assert.ok(
     !/writeTerminal|sendTerminalCommand|openTerminalLink|\.edit\(/.test(tools),
