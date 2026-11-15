@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ErrorBox, Modal } from "./components";
 import type { Connection, Seat } from "./types";
 import { compareCandidates, compareLabel, snapshotStats } from "./seat-compare";
+import { useSettings } from "./SettingsContext";
+import { copyTextForClipboard } from "./terminal-copy-text";
 
 type Snapshot = { text: string; truncated: boolean; capturedAt: string };
 
@@ -74,6 +76,8 @@ export default function SeatTranscript({
   const [revision, setRevision] = useState(0);
   const [copied, setCopied] = useState(false);
   const [otherId, setOtherId] = useState("");
+  const { effective } = useSettings();
+  const trimCopy = effective["terminal.copyTrimTrailingWhitespace"] === true;
   const candidates = compareCandidates(others, seat);
   const other = candidates.find((c) => c.id === otherId) || null;
   // Both panes show live inventory status; fall back to the opened seat if it left the inventory.
@@ -86,8 +90,8 @@ export default function SeatTranscript({
     const text = other && second.snapshot
       ? `=== ${seat.name} (${seat.rigName}) ===\n${first.snapshot.text}\n\n=== ${other.name} (${other.rigName}) ===\n${second.snapshot.text}`
       : first.snapshot.text;
-    navigator.clipboard?.writeText(text).then(() => setCopied(true), () => setCopied(false));
-  }, [first.snapshot, second.snapshot, other, seat]);
+    navigator.clipboard?.writeText(copyTextForClipboard(text, trimCopy)).then(() => setCopied(true), () => setCopied(false));
+  }, [first.snapshot, second.snapshot, other, seat, trimCopy]);
   const loading = first.loading || second.loading;
   return (
     <Modal

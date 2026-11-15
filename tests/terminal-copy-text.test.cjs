@@ -54,6 +54,17 @@ function count(text, pattern) {
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
+test("seat prompt and transcript copy honor the terminal trailing-whitespace trim setting", () => {
+  for (const file of ["src/SeatPrompt.tsx", "src/SeatTranscript.tsx"]) {
+    const source = stripComments(read(file));
+    assert.match(source, /copyTextForClipboard/);
+    assert.match(source, /effective\["terminal\.copyTrimTrailingWhitespace"\]/);
+    assert.match(source, /navigator\.clipboard\?\.writeText\(copyTextForClipboard\(/);
+  }
+  assert.equal(copyTextForClipboard("prompt  \ntranscript\t", true), "prompt\ntranscript");
+  assert.equal(copyTextForClipboard("prompt  \ntranscript\t", false), "prompt  \ntranscript\t");
+});
+
 // Hand-written expectations, never computed by the module under test.
 const SELECTION = "ls -l  \n\tindent\t\n\nend   ";
 const TRIMMED = "ls -l\n\tindent\n\nend";
@@ -573,8 +584,7 @@ test("terminal.copytrim source tripwire: every write of terminal text to the cli
   assert.deepEqual(
     filesWith(/\.writeText\(/),
     // The long-list chain's panels also copy: an error message (PanelBoundary), a rig log (RigPanels) and the read-only
-    // snapshot of a needs-input seat or of a transcript (SeatPrompt, SeatTranscript). None is the terminal selection this
-    // setting trims.
+    // snapshot of a needs-input seat or of a transcript (SeatPrompt, SeatTranscript), which honor the trim setting too.
     ["PanelBoundary.tsx", "RigPanels.tsx", "SeatPrompt.tsx", "SeatTranscript.tsx", "SnippetTransfer.tsx", "TeamAssessment.tsx", "TerminalTools.tsx"],
     "a new file writes to the clipboard: route terminal text through copyTextForClipboard",
   );
@@ -590,8 +600,10 @@ test("terminal.copytrim source tripwire: every write of terminal text to the cli
     "TerminalTools.tsx",
     "terminal-output.ts",
   ]);
-  assert.deepEqual(filesWith(/terminal-copy-text/), ["TerminalTools.tsx"]);
+  assert.deepEqual(filesWith(/terminal-copy-text/), ["SeatPrompt.tsx", "SeatTranscript.tsx", "TerminalTools.tsx"]);
   assert.deepEqual(filesWith(/"terminal\.copyTrimTrailingWhitespace"/), [
+    "SeatPrompt.tsx",
+    "SeatTranscript.tsx",
     "TerminalTools.tsx",
     "settings.ts",
   ]);
@@ -657,7 +669,7 @@ test("terminal.copytrim source tripwire: every write of terminal text to the cli
     2,
     "handlers close over old renders, so only the ref may read the setting",
   );
-  assert.equal(count(tools, /target\?\.paste\(text\)/g), 1);
+  assert.equal(count(tools, /target\.paste\(text\)/g), 1);
   assert.equal(count(tools, /terminal\.current\?\.paste\(text\)/g), 1);
   assert.ok(
     !/paste\(clipboardText\(/.test(tools),

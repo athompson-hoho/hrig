@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { ErrorBox, Modal } from "./components";
 import type { Connection, Seat } from "./types";
+import { useSettings } from "./SettingsContext";
+import { copyTextForClipboard } from "./terminal-copy-text";
 
 type Snapshot = { text: string; truncated: boolean; capturedAt: string };
 
@@ -19,6 +21,8 @@ export default function SeatPrompt({
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   const [copied, setCopied] = useState(false);
+  const { effective } = useSettings();
+  const trimCopy = effective["terminal.copyTrimTrailingWhitespace"] === true;
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -33,8 +37,8 @@ export default function SeatPrompt({
   }, [connection, seat.id, revision]);
   const copy = useCallback(() => {
     if (!snapshot) return;
-    navigator.clipboard?.writeText(snapshot.text).then(() => setCopied(true), () => setCopied(false));
-  }, [snapshot]);
+    navigator.clipboard?.writeText(copyTextForClipboard(snapshot.text, trimCopy)).then(() => setCopied(true), () => setCopied(false));
+  }, [snapshot, trimCopy]);
   return (
     <Modal
       title="Pending prompt"
