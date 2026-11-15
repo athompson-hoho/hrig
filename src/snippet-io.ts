@@ -187,7 +187,7 @@ export function mergeSnippets(
     ? [...existing]
     : [];
   const names = new Set<string>();
-  const pairs = new Set<string>();
+  const texts = new Set<string>();
   for (const item of snippets) {
     if (
       isRecord(item) &&
@@ -195,7 +195,7 @@ export function mergeSnippets(
       typeof item.text === "string"
     ) {
       names.add(item.name);
-      pairs.add(pairKey(item.name, item.text));
+      texts.add(item.text);
     }
   }
   const result: MergeResult = {
@@ -214,8 +214,7 @@ export function mergeSnippets(
       continue;
     }
     const base = (name0 as string).trim();
-    const original = pairKey(base, text);
-    if (pairs.has(original)) {
+    if (texts.has(text)) {
       result.duplicates++;
       continue;
     }
@@ -225,8 +224,7 @@ export function mergeSnippets(
       result.renamed++;
     }
     names.add(name);
-    pairs.add(original);
-    pairs.add(pairKey(name, text));
+    texts.add(text);
     snippets.push({ id: makeId(), name, text });
     result.added++;
   }

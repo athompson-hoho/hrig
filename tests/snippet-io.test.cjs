@@ -635,6 +635,10 @@ test("snippet-io export and merge: an export is name and text only and reads bac
   );
   assert.deepEqual([m.added, m.duplicates, m.renamed, m.invalid], [3, 2, 2, 0]);
   assert.equal(n, 3, "an id is made only for an added snippet");
+  const reimport = mergeSnippets(m.snippets, incoming, makeId);
+  assert.deepEqual(reimport.snippets, m.snippets, "re-importing the same file is idempotent even when an earlier name clash was renamed");
+  assert.deepEqual([reimport.added, reimport.duplicates], [0, incoming.length]);
+  assert.equal(n, 3, "re-importing duplicates does not allocate ids");
   assert.equal(m.snippets[0], existing[0]);
   assert.equal(m.snippets[1], existing[1]);
   assert.equal(existing.length, 2, "the saved list is not changed");
@@ -723,17 +727,17 @@ test("snippet-io export and merge: an export is name and text only and reads bac
       });
     let ids = 0;
     const r = mergeSnippets(lib, inc, () => "w" + ids++);
-    // The model: a plain loop with its own name search; a pair that was offered once is never added twice.
+    // The model: a plain loop with its own name search; text offered once is never added twice.
     const model = lib.map((s) => ({ name: s.name, text: s.text }));
-    const offered = new Set(model.map((s) => s.name + "|" + s.text));
+    const offered = new Set(model.map((s) => s.text));
     let dup = 0;
     let ren = 0;
     for (const e of inc) {
-      if (offered.has(e.name + "|" + e.text)) {
+      if (offered.has(e.text)) {
         dup++;
         continue;
       }
-      offered.add(e.name + "|" + e.text);
+      offered.add(e.text);
       let name = e.name;
       if (model.some((s) => s.name === name)) {
         let k = 2;
@@ -742,7 +746,6 @@ test("snippet-io export and merge: an export is name and text only and reads bac
         ren++;
       }
       model.push({ name, text: e.text });
-      offered.add(name + "|" + e.text);
     }
     assert.deepEqual(
       r.snippets.map((s) => ({ name: s.name, text: s.text })),
