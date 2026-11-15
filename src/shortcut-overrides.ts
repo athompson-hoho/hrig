@@ -245,7 +245,9 @@ export function reservedReason(chord: string): string {
 
 function chordIdentity(chord: string): string {
   // parseChord keeps only Control+Tab physical; all other modifier aliases are canonical.
-  return chord;
+  const parts = chord.split("+");
+  if (parts.at(-1) === "Plus") parts[parts.length - 1] = "Equal";
+  return parts.join("+");
 }
 
 function bareLetter(chord: string): string | null {
@@ -262,6 +264,22 @@ function conflict(
   candidate: OverrideMap,
 ): string {
   const isOwnDefault = chord === defaultChord(id);
+  const legacyOwner = (
+    ["workspace.palette", "workspace.sidebar"] as const
+  ).find((owner) => {
+    if (owner === id || effectiveChord(owner, candidate) !== defaultChord(owner))
+      return false;
+    const parts = defaultChord(owner).split("+");
+    const shifted = [parts[0], "Shift", ...parts.slice(1)].join("+");
+    return chordIdentity(shifted) === chordIdentity(chord);
+  });
+  if (legacyOwner)
+    return (
+      named(chord) +
+      " is already used by: " +
+      labelOf(groups, legacyOwner) +
+      "."
+    );
   const letter = bareLetter(chord);
   if (letter && !isOwnDefault)
     return named(chord) + " needs Shift; unshifted Ctrl/Cmd letters belong to terminals and the editor.";

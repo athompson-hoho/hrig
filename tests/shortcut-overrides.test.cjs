@@ -505,7 +505,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
         0,
     );
   assert.deepEqual(free(REOPEN), [
-    "B",
     "E",
     "H",
     "J",
@@ -517,7 +516,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     "Y",
   ]);
   assert.deepEqual(free(MAXIMIZE), [
-    "B",
     "E",
     "J",
     "M",
@@ -529,7 +527,6 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
     "Y",
   ]);
   assert.deepEqual(free(FOCUS), [
-    "B",
     "D",
     "E",
     "J",
@@ -552,6 +549,17 @@ test("shortcut-overrides collisions: terminal, editor, fixed and other shortcut 
   assert.deepEqual(reasons({ [REOPEN]: "Ctrl+Shift+M" }), [
     "Ctrl/Cmd+Shift+M is already used by: Maximize or restore the focused panel group.",
   ]);
+  assert.match(
+    ov.saveOverride("", FOCUS, "Ctrl+Shift+B", "linux").error,
+    /already used by: Show or hide the sidebar/,
+    "the legacy shifted sidebar chord cannot be assigned to focus mode",
+  );
+  for (const key of ["Equal", "Plus"])
+    assert.match(
+      ov.saveOverride("", REOPEN, "Ctrl+" + key, "linux").error,
+      /already used by: Zoom in/,
+      "both names for the physical zoom key are reserved",
+    );
   assert.deepEqual(
     reasons({ [REOPEN]: "Ctrl+Shift+Y", [FOCUS]: "Ctrl+Shift+Y" }),
     [
