@@ -7,6 +7,7 @@ import {
   noteFor,
   noteKey,
   notePreview,
+  orphanSeatNotes,
   type SeatNotes,
 } from "./seat-notes";
 import type { Seat } from "./types";
@@ -92,6 +93,112 @@ export default function SeatNote({
               }}
             >
               Save
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+/** Lists and explicitly removes notes for seats absent from this connection's verified live inventory. */
+export function OrphanSeatNotesManager({
+  connectionId,
+  connectionName,
+  notes,
+  liveSeatIds,
+  available,
+  onDelete,
+}: {
+  connectionId: string;
+  connectionName: string;
+  notes: SeatNotes | undefined;
+  liveSeatIds: readonly string[];
+  available: boolean;
+  onDelete: (keys: readonly string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pendingKeys, setPendingKeys] = useState<readonly string[] | null>(null);
+  const orphans = available ? orphanSeatNotes(notes, connectionId, liveSeatIds) : [];
+  const pending = pendingKeys?.filter((key) => orphans.some((row) => row.key === key)) || [];
+  const title = "Manage notes for removed seats";
+  return (
+    <>
+      <button
+        type="button"
+        className="small-button orphan-notes-button"
+        aria-label={`${title} (${orphans.length})`}
+        title={available ? title : "Refresh this connection's inventory to manage orphan notes"}
+        disabled={!available}
+        onClick={() => setOpen(true)}
+      >
+        <StickyNote size={13} aria-hidden="true" /> Notes <span className="count">{orphans.length}</span>
+      </button>
+      {open && !pendingKeys && (
+        <Modal
+          title={title}
+          subtitle={`Only notes for ${connectionName} are checked. A verified current inventory is required; notes for live seats are never listed.`}
+          onClose={() => setOpen(false)}
+          wide
+        >
+          {orphans.length ? (
+            <>
+              <ul className="orphan-notes-list">
+                {orphans.map((note) => (
+                  <li key={note.key}>
+                    <div>
+                      <code>{note.seatId}</code>
+                      <span>{note.preview || "(empty note)"}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      aria-label={`Delete note for ${note.seatId}`}
+                      onClick={() => setPendingKeys([note.key])}
+                    >
+                      Delete...
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <div className="modal-actions">
+                <button className="secondary-button" onClick={() => setOpen(false)}>Close</button>
+                <button className="secondary-button" aria-label="Delete all orphan notes" onClick={() => setPendingKeys(orphans.map((row) => row.key))}>
+                  Delete all {orphans.length} orphan notes...
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p>No orphan notes for this connection.</p>
+              <div className="modal-actions">
+                <button className="secondary-button" onClick={() => setOpen(false)}>Close</button>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
+      {open && pendingKeys && (
+        <Modal
+          title="Confirm note deletion"
+          subtitle={pending.length
+            ? `Delete ${pending.length === 1 ? "this note" : `these ${pending.length} notes`} for seats no longer present in ${connectionName}'s verified inventory? This cannot be undone.`
+            : "These notes are no longer orphaned in the current inventory. Nothing will be deleted."}
+          onClose={() => setPendingKeys(null)}
+        >
+          <div className="modal-actions">
+            <button className="secondary-button" onClick={() => setPendingKeys(null)}>Cancel</button>
+            <button
+              className="primary-button"
+              aria-label="Confirm deletion of orphan notes"
+              disabled={!pending.length || !available}
+              onClick={() => {
+                if (pending.length && available) onDelete(pending);
+                setPendingKeys(null);
+                setOpen(false);
+              }}
+            >
+              Delete {pending.length || "none"}
             </button>
           </div>
         </Modal>

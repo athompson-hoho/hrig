@@ -3176,6 +3176,44 @@ button:hover {
   border-top: 1px solid var(--color-303a48);
   padding-top: 20px;
 }
+.orphan-notes-button {
+  padding: 3px 6px;
+}
+.orphan-notes-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+  max-height: min(45vh, 420px);
+  overflow: auto;
+}
+.orphan-notes-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--color-303a48);
+  border-radius: 5px;
+  padding: 8px 10px;
+}
+.orphan-notes-list li > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.orphan-notes-list code {
+  overflow-wrap: anywhere;
+  color: var(--color-aebcce);
+}
+.orphan-notes-list li > div > span {
+  overflow-wrap: anywhere;
+  color: var(--color-929caf);
+  font-size: 11px;
+}
+.orphan-notes-list li > button {
+  flex-shrink: 0;
+}
 .modal .error-box {
   margin: 12px 0;
 }

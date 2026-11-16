@@ -12,6 +12,9 @@ export type SeatNote = { text: string; updatedAt: number };
 /** Saved notes keyed by noteKey. */
 export type SeatNotes = Record<string, SeatNote>;
 
+/** One saved note whose seat is absent from a connection's verified live inventory. */
+export type OrphanSeatNote = { key: string; seatId: string; text: string; preview: string; updatedAt: number };
+
 const SEPARATOR = "|";
 // A saved text is read up to this many UTF-16 units before cleaning, so a hostile file cannot make a load slow.
 const SCAN_CHARS = 20000;
@@ -94,6 +97,46 @@ export function notePreview(value: unknown): string {
   return chars.length > PREVIEW_CHARS
     ? chars.slice(0, PREVIEW_CHARS).join("").trimEnd() + "..."
     : flat;
+}
+
+/** Notes for one connection whose seat IDs are missing from its verified inventory, with shared-cleaner previews. */
+export function orphanSeatNotes(
+  notes: unknown,
+  connectionId: string,
+  liveSeatIds: readonly string[],
+): OrphanSeatNote[] {
+  if (typeof connectionId !== "string" || !connectionId || connectionId.includes("|")) return [];
+  const normalized = normalizeSeatNotes(notes);
+  const prefix = connectionId + "|";
+  const live = new Set(liveSeatIds.map((id) => noteKey(connectionId, id)).filter(Boolean));
+  return Object.keys(normalized)
+    .filter((key) => key.startsWith(prefix) && !live.has(key))
+    .map((key) => {
+      const note = normalized[key];
+      return {
+        key,
+        seatId: key.slice(prefix.length),
+        text: note.text,
+        preview: notePreview(note.text),
+        updatedAt: note.updatedAt,
+      };
+    });
+}
+
+/** Removes only selected notes that are still orphaned for this connection; returns the input unchanged if none qualify. */
+export function removeOrphanSeatNotes(
+  notes: SeatNotes,
+  connectionId: string,
+  liveSeatIds: readonly string[],
+  selectedKeys: readonly string[],
+): SeatNotes {
+  const selected = new Set(selectedKeys);
+  const removable = orphanSeatNotes(notes, connectionId, liveSeatIds)
+    .filter((note) => selected.has(note.key));
+  if (!removable.length) return notes;
+  const next = { ...normalizeSeatNotes(notes) };
+  for (const note of removable) delete next[note.key];
+  return next;
 }
 
 /** Defensive load: keeps the entries with a usable key and some text left after cleaning, reads at most 1000 keys, and keeps the 200 changed most recently (an equal time keeps the later entry); a time that is not a finite number of at least 0 counts as 0, so the note is kept but is the first to go. */

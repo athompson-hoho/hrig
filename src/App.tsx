@@ -236,7 +236,7 @@ import {
 import TaskBoard from "./TaskBoard";
 import { ReviewWorkspace, ProblemsPanel } from "./ReviewWorkspace";
 import { normalizeReviewChecks } from "./review-checks";
-import { noteKey, normalizeSeatNotes, setNote } from "./seat-notes";
+import { noteKey, normalizeSeatNotes, removeOrphanSeatNotes, setNote } from "./seat-notes";
 import {
   ActivityPanel,
   MessagePanel,
@@ -2910,6 +2910,31 @@ export default function App() {
                 }}
                 fileRevision={fileRevision}
                 notes={state.seatNotes}
+                orphanNotesAvailable={pinsAvailable && inventoryHealth.current.verified && !inventoryError}
+                onDeleteOrphanNotes={(keys) => {
+                  const latest = attentionContext.current;
+                  const owner = pinConnectionIdentity(connection);
+                  if (latest.connection?.id !== connection.id || latest.inventoryError ||
+                      !latest.inventory || inventoryHealth.current.key !== owner ||
+                      !inventoryHealth.current.verified) return;
+                  setState((s) => {
+                    const currentConnection = s.connections.find((c) => c.id === s.activeConnection) ||
+                      s.connections[0] || local;
+                    if (currentConnection.id !== connection.id) return s;
+                    const current = attentionContext.current;
+                    if (current.connection?.id !== currentConnection.id || current.inventoryError ||
+                        !current.inventory || inventoryHealth.current.key !== pinConnectionIdentity(currentConnection) ||
+                        !inventoryHealth.current.verified) return s;
+                    const before = normalizeSeatNotes(s.seatNotes);
+                    const after = removeOrphanSeatNotes(
+                      before,
+                      currentConnection.id,
+                      current.inventory.seats.map((seat: Seat) => seat.id),
+                      keys,
+                    );
+                    return after === before ? s : { ...s, seatNotes: after };
+                  });
+                }}
                 onNote={(seat, text) => {
                   const now = Date.now();
                   setState((s) => {

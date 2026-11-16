@@ -21,7 +21,7 @@ import { ErrorBox, IconButton, StatusDot } from "./components";
 import { CHECKING_SNAPSHOT, formatAge } from "./inventory-health";
 import { HiddenSeatsNotice, HideStoppedButton } from "./HiddenSeats";
 import { SeatBadgeRow } from "./SeatBadgeRow";
-import SeatNote from "./SeatNotes";
+import SeatNote, { OrphanSeatNotesManager } from "./SeatNotes";
 import type { SeatNotes } from "./seat-notes";
 import { hiddenCount, seatCountText, visibleSeats } from "./seat-visibility";
 import { useSettings } from "./SettingsContext";
@@ -74,6 +74,8 @@ export default function Sidebar({
   onDiff,
   fileRevision,
   notes,
+  orphanNotesAvailable,
+  onDeleteOrphanNotes,
   onNote,
   activeFile,
 }: {
@@ -109,6 +111,8 @@ export default function Sidebar({
   onDiff: (path: string) => void;
   fileRevision: number;
   notes?: SeatNotes;
+  orphanNotesAvailable: boolean;
+  onDeleteOrphanNotes: (keys: readonly string[]) => void;
   onNote?: (seat: Seat, text: string) => void;
   activeFile?: ActiveFileTarget | null;
 }) {
@@ -554,6 +558,14 @@ export default function Sidebar({
               <span className="count">
                 {seatCountText(seats.length, statusSeats.length, hideStopped)}
               </span>
+              <OrphanSeatNotesManager
+                connectionId={connection.id}
+                connectionName={connection.name}
+                notes={notes}
+                liveSeatIds={inventory?.seats.map((seat) => seat.id) || []}
+                available={orphanNotesAvailable && !inventoryError && !!inventory}
+                onDelete={onDeleteOrphanNotes}
+              />
               <HideStoppedButton
                 hiding={hideStopped}
                 onToggle={() => setHideStopped(!hideStopped)}

@@ -223,6 +223,49 @@ function dialogHarness(initialProps) {
   return h;
 }
 
+function orphanNotesHarness(initialProps) {
+  const slots = [];
+  let cursor = 0;
+  let tree = null;
+  let props = initialProps;
+  const react = {
+    useState(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
+      return [slots[i], (value) => {
+        slots[i] = typeof value === "function" ? value(slots[i]) : value;
+        render();
+      }];
+    },
+  };
+  const jsx = (type, p) => ({ type, props: p });
+  const Component = load("src/SeatNotes.tsx", {
+    react,
+    "react/jsx-runtime": { jsx, jsxs: jsx, Fragment: "fragment" },
+    "lucide-react": { StickyNote: "StickyNote" },
+    "./components": { Modal: "Modal" },
+  }).OrphanSeatNotesManager;
+  function render() {
+    cursor = 0;
+    tree = Component(props);
+  }
+  const all = (node, out = []) => {
+    if (Array.isArray(node)) node.forEach((n) => all(n, out));
+    else if (node && typeof node === "object") {
+      out.push(node);
+      all(node.props && node.props.children, out);
+    }
+    return out;
+  };
+  render();
+  return {
+    all: () => all(tree),
+    setProps(patch) { props = { ...props, ...patch }; render(); },
+    button: (label) => all(tree).find((n) => n.type === "button" && n.props["aria-label"] === label),
+    modal: () => all(tree).find((n) => n.type === "Modal"),
+  };
+}
+
 // Runs a function while the page, the network and the shared storage refuse every access.
 function withoutPage(fn) {
   const names = ["window", "document", "fetch", "XMLHttpRequest", "WebSocket"];
@@ -286,6 +329,8 @@ test("seat-notes keys: the module's exports and limits are exactly these, a key 
       "normalizeSeatNotes",
       "notePreview",
       "setNote",
+      "orphanSeatNotes",
+      "removeOrphanSeatNotes",
     ].sort(),
   );
   assert.equal(lib.MAX_NOTES, 200);
@@ -351,6 +396,69 @@ test("seat-notes keys: the module's exports and limits are exactly these, a key 
     keyOf(rigs(undefined, "renamed", "x")),
     keyOf(rigs(undefined, "build", "x")),
   );
+});
+
+test("orphan notes are connection-scoped, previews use the shared visible-text cleaner, and deletion rechecks the current live seats", () => {
+  const notes = {
+    "c1|rig-1:live": { text: "keep", updatedAt: 1 },
+    "c1|rig-1:gone": { text: "A\u200bB", updatedAt: 2 },
+    "c1|rig-2:gone": { text: "other rig", updatedAt: 3 },
+    "c2|rig-1:gone": { text: "other connection", updatedAt: 4 },
+  };
+  const rows = lib.orphanSeatNotes(notes, "c1", ["rig-1:live"]);
+  assert.deepEqual(rows.map(({ key, seatId, preview }) => ({ key, seatId, preview })), [
+    { key: "c1|rig-1:gone", seatId: "rig-1:gone", preview: "AB" },
+    { key: "c1|rig-2:gone", seatId: "rig-2:gone", preview: "other rig" },
+  ]);
+  const unchanged = lib.removeOrphanSeatNotes(notes, "c1", ["rig-1:live", "rig-1:gone"], ["c1|rig-1:gone"]);
+  assert.equal(unchanged, notes, "a seat that became live before confirmation is retained");
+  const one = lib.removeOrphanSeatNotes(notes, "c1", ["rig-1:live"], ["c1|rig-1:gone"]);
+  assert.equal(one["c1|rig-1:live"].text, "keep");
+  assert.equal(one["c1|rig-1:gone"], undefined);
+  assert.ok(one["c1|rig-2:gone"]);
+  assert.ok(one["c2|rig-1:gone"]);
+  const all = lib.removeOrphanSeatNotes(notes, "c1", ["rig-1:live"], rows.map((row) => row.key));
+  assert.deepEqual(Object.keys(all), ["c1|rig-1:live", "c2|rig-1:gone"]);
+  assert.equal(notes["c1|rig-1:gone"].text, "A\u200bB", "input is not mutated");
+});
+
+test("orphan-note manager previews sanitized text and requires confirmation for one or all deletions, and stays disabled without verified inventory", () => {
+  const notes = {
+    "c1|rig-1:gone": { text: "private\u200b preview", updatedAt: 2 },
+    "c1|rig-1:gone2": { text: "second", updatedAt: 3 },
+    "c1|rig-1:live": { text: "keep", updatedAt: 1 },
+  };
+  const deleted = [];
+  const props = {
+    connectionId: "c1",
+    connectionName: "Work SSH",
+    notes,
+    liveSeatIds: ["rig-1:live"],
+    available: true,
+    onDelete: (keys) => deleted.push([...keys]),
+  };
+  const h = orphanNotesHarness(props);
+  const trigger = h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes"));
+  trigger.props.onClick();
+  assert.ok(h.modal());
+  assert.match(JSON.stringify(h.modal().props.children), /private preview/);
+  h.button("Delete note for rig-1:gone").props.onClick();
+  assert.deepEqual(deleted, [], "opening the confirmation has no effect");
+  assert.match(h.modal().props.subtitle, /Work SSH/);
+  assert.match(h.modal().props.subtitle, /cannot be undone/);
+  h.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted, [["c1|rig-1:gone"]]);
+
+  const allDeleted = [];
+  const allHarness = orphanNotesHarness({ ...props, onDelete: (keys) => allDeleted.push([...keys]) });
+  allHarness.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.onClick();
+  allHarness.button("Delete all orphan notes").props.onClick();
+  assert.deepEqual(allDeleted, [], "Delete all opens a confirmation first");
+  allHarness.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(allDeleted, [["c1|rig-1:gone", "c1|rig-1:gone2"]]);
+
+  const unavailable = orphanNotesHarness({ ...props, available: false });
+  assert.equal(unavailable.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.disabled, true);
 });
 
 test("seat-notes clean: line breaks become line feeds, control, zero-width, bidirectional and separator characters and unpaired surrogates are dropped, tabs and line feeds stay, the text is cut to 2000 code points and trailing white space trimmed, and the counter and the tooltip line follow", () => {
@@ -885,7 +993,7 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   );
   const lines = source.split("\n");
   const exported = lines.filter((line) => line.startsWith("export "));
-  assert.equal(exported.length, 13);
+  assert.equal(exported.length, 16);
   lines.forEach((line, i) => {
     if (line.startsWith("export "))
       assert.ok(
@@ -945,7 +1053,7 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   assert.equal(
     count(
       app,
-      'import { noteKey, normalizeSeatNotes, setNote } from "./seat-notes";',
+      'import { noteKey, normalizeSeatNotes, removeOrphanSeatNotes, setNote } from "./seat-notes";',
     ),
     1,
   );
@@ -957,12 +1065,14 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   );
   assert.ok(
     app.includes(
-      "fileRevision={fileRevision} notes={state.seatNotes} onNote={(seat, text) => { const now = Date.now(); setState((s) => { const current = normalizeSeatNotes(s.seatNotes); const next = setNote( current, noteKey(connection.id, seat.id), text, now, ); return next === current ? s : { ...s, seatNotes: next }; }); }} />",
+      "onNote={(seat, text) => { const now = Date.now(); setState((s) => { const current = normalizeSeatNotes(s.seatNotes); const next = setNote( current, noteKey(connection.id, seat.id), text, now, ); return next === current ? s : { ...s, seatNotes: next }; }); }} />",
     ),
     "written through setState, an unchanged note writes nothing",
   );
-  assert.equal(count(app, "seatNotes"), 5);
-  assert.equal(count(app, "normalizeSeatNotes("), 2);
+  assert.equal(count(app, "seatNotes"), 7);
+  assert.equal(count(app, "normalizeSeatNotes("), 3);
+  assert.ok(app.includes("inventoryHealth.current.verified"), "orphan manager requires verified inventory");
+  assert.ok(app.includes("removeOrphanSeatNotes("), "write path recomputes orphan eligibility");
   assert.equal(count(handlerCut.body, "window"), 0);
   assert.equal(count(handlerCut.body, "hrig"), 0);
   assert.ok(
@@ -978,18 +1088,19 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
 
   // The sidebar: two imports, two optional props, the button behind the handler, the old row buttons as before.
   const sidebar = collapse(stripComments(read("src/Sidebar.tsx")));
-  assert.equal(count(sidebar, 'import SeatNote from "./SeatNotes";'), 1);
+  assert.equal(count(sidebar, 'import SeatNote, { OrphanSeatNotesManager } from "./SeatNotes";'), 1);
   assert.equal(
     count(sidebar, 'import type { SeatNotes } from "./seat-notes";'),
     1,
   );
   // activeFile (long-list chain) follows the two note props.
-  assert.ok(sidebar.includes("fileRevision, notes, onNote, activeFile, }: {"));
+  assert.ok(sidebar.includes("fileRevision, notes, orphanNotesAvailable, onDeleteOrphanNotes, onNote, activeFile, }: {"));
   assert.ok(
     sidebar.includes(
-      "notes?: SeatNotes; onNote?: (seat: Seat, text: string) => void; activeFile?: ActiveFileTarget | null; }) {",
+      "notes?: SeatNotes; orphanNotesAvailable: boolean; onDeleteOrphanNotes: (keys: readonly string[]) => void; onNote?: (seat: Seat, text: string) => void; activeFile?: ActiveFileTarget | null; }) {",
     ),
   );
+  assert.ok(sidebar.includes("available={orphanNotesAvailable && !inventoryError && !!inventory}"));
   assert.equal(
     count(
       sidebar,

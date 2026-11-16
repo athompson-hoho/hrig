@@ -478,7 +478,7 @@ test("seat-visibility wiring: the setting is off by default and sits after the r
   assert.equal(count(sidebar, "workspace.hideStoppedSeats"), 2);
   // The label, the list and the empty states.
   assert.ok(
-    /<span title="[^"]*">SESSIONS<\/span> <span className="section-tools"> <span className="count"> \{seatCountText\(seats\.length, statusSeats\.length, hideStopped\)\} <\/span> <HideStoppedButton hiding=\{hideStopped\} onToggle=\{\(\) => setHideStopped\(!hideStopped\)\} \/> <\/span> <\/div>/.test(
+    /<span title="[^"]*">SESSIONS<\/span> <span className="section-tools"> <span className="count"> \{seatCountText\(seats\.length, statusSeats\.length, hideStopped\)\} <\/span> <OrphanSeatNotesManager[\s\S]*?\/> <HideStoppedButton hiding=\{hideStopped\} onToggle=\{\(\) => setHideStopped\(!hideStopped\)\} \/> <\/span> <\/div>/.test(
       sidebar,
     ),
     "the SESSIONS label",
