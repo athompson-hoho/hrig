@@ -461,6 +461,28 @@ test("orphan-note manager previews sanitized text and requires confirmation for 
   assert.equal(unavailable.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.disabled, true);
 });
 
+test("orphan-note manager keeps one-note confirmation but disables bulk deletion for an empty live-seat inventory", () => {
+  const deleted = [];
+  const h = orphanNotesHarness({
+    connectionId: "c1",
+    connectionName: "Work SSH",
+    notes: { "c1|rig-1:gone": { text: "keep until reviewed", updatedAt: 2 } },
+    liveSeatIds: [],
+    available: true,
+    onDelete: (keys) => deleted.push([...keys]),
+  });
+  h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.onClick();
+  const deleteAll = h.button("Delete all orphan notes");
+  assert.equal(deleteAll.props.disabled, true);
+  assert.match(JSON.stringify(h.modal().props.children), /at least one verified live seat/i);
+
+  h.button("Delete note for rig-1:gone").props.onClick();
+  assert.equal(h.modal().props.title, "Confirm note deletion");
+  assert.deepEqual(deleted, [], "single deletion still waits for its explicit confirmation");
+  h.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted, [["c1|rig-1:gone"]]);
+});
+
 test("seat-notes clean: line breaks become line feeds, control, zero-width, bidirectional and separator characters and unpaired surrogates are dropped, tabs and line feeds stay, the text is cut to 2000 code points and trailing white space trimmed, and the counter and the tooltip line follow", () => {
   const c = lib.cleanNote;
   assert.equal(c("hello"), "hello");

@@ -120,6 +120,7 @@ export function OrphanSeatNotesManager({
   const [open, setOpen] = useState(false);
   const [pendingKeys, setPendingKeys] = useState<readonly string[] | null>(null);
   const orphans = available ? orphanSeatNotes(notes, connectionId, liveSeatIds) : [];
+  const bulkDeleteAvailable = available && liveSeatIds.length > 0;
   const pending = pendingKeys?.filter((key) => orphans.some((row) => row.key === key)) || [];
   const title = "Manage notes for removed seats";
   return (
@@ -163,10 +164,15 @@ export function OrphanSeatNotesManager({
               </ul>
               <div className="modal-actions">
                 <button className="secondary-button" onClick={() => setOpen(false)}>Close</button>
-                <button className="secondary-button" aria-label="Delete all orphan notes" onClick={() => setPendingKeys(orphans.map((row) => row.key))}>
+                <button className="secondary-button" aria-label="Delete all orphan notes" disabled={!bulkDeleteAvailable}
+                  title={bulkDeleteAvailable ? undefined : "At least one verified live seat is required for bulk deletion"}
+                  onClick={() => setPendingKeys(orphans.map((row) => row.key))}>
                   Delete all {orphans.length} orphan notes...
                 </button>
               </div>
+              {!bulkDeleteAvailable && (
+                <p className="muted">Delete all is disabled because this inventory contains no live seats. Verify at least one seat before bulk deletion; you can still review and delete one note at a time.</p>
+              )}
             </>
           ) : (
             <>
