@@ -25,7 +25,7 @@ test('long-list navigation preserves explicit action authority', async () => {
   // behind an incomplete fake. No real transport, timer or host is invoked.
   const api = new Proxy({}, { get: (_, name) => async (...args) => {
     record(String(name), ...args.map(arg => arg && typeof arg === 'object' && arg !== connection ? { ...arg } : arg));
-    if (name === 'edit') return matches;
+    if (name === 'searchProject') return { matches, truncated: false, reason: '' };
     if (name === 'queue') return tasks;
     return [];
   } });
@@ -63,9 +63,12 @@ test('long-list navigation preserves explicit action authority', async () => {
     await project.settle();
     assert.equal(effects.length, 3);
     // Compared as plain data: the options object is made inside the App's own realm.
-    assert.deepEqual(JSON.parse(JSON.stringify(effects[2])), JSON.parse(JSON.stringify(['edit', connection, { op: 'searchText', query: 'Synthetic', root: '/synthetic',
+    assert.equal(effects[2][0], 'searchProject', 'content search uses the cancellable renderer route');
+    assert.equal(effects[2][1], connection);
+    assert.deepEqual(JSON.parse(JSON.stringify(effects[2][2])), JSON.parse(JSON.stringify({ op: 'searchText', query: 'Synthetic', root: '/synthetic',
       // The search options of the build chain (regex and whole word), both off by default.
-      options: { regex: false, wholeWord: false } }])));
+      options: { regex: false, wholeWord: false } })));
+    assert.match(effects[2][3], /^search-[a-z0-9]+-[a-z0-9]+$/);
     assert.deepEqual([...board.intervals.values()].map(timer => timer.delay), [15000], 'existing timer is inert');
     const baseline = effects.length;
     const scenarios = [

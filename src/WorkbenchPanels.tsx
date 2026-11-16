@@ -32,6 +32,11 @@ import {
 } from "./content-search-view";
 import { VirtualList } from "./VirtualList";
 import { visibleInterval } from "./visible-interval";
+let projectSearchSequence = 0;
+function nextProjectSearchId() {
+  projectSearchSequence = (projectSearchSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `search-${Date.now().toString(36)}-${projectSearchSequence.toString(36)}`;
+}
 export function DoctorPanel({ connection }: { connection: Connection }) {
   const { effective } = useSettings();
   // Keep full raw identity internal. No display normalization grants authority.
@@ -288,7 +293,7 @@ export function ProjectTools({
   }, [searchScope]);
   const runSearch = async (request: any) => {
     if (busy || !request?.query) return;
-    const id = window.crypto.randomUUID();
+    const id = nextProjectSearchId();
     activeSearchId.current = id;
     setError("");
     setStopped("Searching project contents…");

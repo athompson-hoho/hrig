@@ -347,7 +347,7 @@ handle("rig:assess", (_event, connection, request) =>
 handle("editor:operation", (_event, connection, request) =>
   backend.edit(connection, request),
 );
-const validSearchId = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const validSearchId = (id) => typeof id === "string" && /^search-[a-z0-9]+-[a-z0-9]+$/i.test(id);
 const editorSearchKey = (event, id) => `${event.sender.id}:${id}`;
 handle("editor:search", async (event, connection, request, id) => {
   if (!validSearchId(id) || request?.op !== "searchText")
@@ -356,9 +356,12 @@ handle("editor:search", async (event, connection, request, id) => {
   if (activeEditorSearches.has(key)) throw new Error("This project search is already running.");
   const controller = new AbortController();
   activeEditorSearches.set(key, controller);
+  const cancelOnDestroy = () => controller.abort();
+  event.sender.once("destroyed", cancelOnDestroy);
   try {
     return await backend.edit(connection, request, { signal: controller.signal });
   } finally {
+    event.sender.removeListener("destroyed", cancelOnDestroy);
     if (activeEditorSearches.get(key) === controller) activeEditorSearches.delete(key);
   }
 });

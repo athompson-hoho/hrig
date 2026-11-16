@@ -26,7 +26,11 @@ function project(results = matches, geometry = {}) {
     connection, root: '/synthetic', onFile: (...args) => opened.push(args),
     onChanged: () => calls.push(['changed']),
   }, { height: 330, rowHeight: 55, ...geometry, api: {
-    edit: async (owner, request) => { calls.push(['edit', owner, request]); return results; },
+    searchProject: async (owner, request, requestId) => {
+      calls.push(['searchProject', owner, request, requestId]);
+      return { matches: results, truncated: false, reason: '' };
+    },
+    cancelProjectSearch: () => {},
   } });
   const rows = () => h.nodes().filter(n => n.type === 'button' &&
     n.children.some(child => child?.type === 'strong' && h.text(child).startsWith('/synthetic/')));
@@ -44,7 +48,7 @@ test('actual ProjectTools search and result activation preserve explicit origina
   assert.equal(h.rows().length, 0);
   assert.deepEqual(h.calls, []);
   await h.search();
-  assert.equal(h.calls.length, 1, 'only explicit search performs edit');
+  assert.equal(h.calls.length, 1, 'only explicit search performs a project search');
   assert.equal(h.calls[0][2].op, 'searchText');
   assert.equal(h.calls[0][2].root, '/synthetic');
   assert.deepEqual(h.opened, []);
