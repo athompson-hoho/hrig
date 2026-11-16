@@ -346,7 +346,8 @@ export default function App() {
     failures: number;
     lastSuccessAt: number | null;
     verified: boolean;
-  }>({ key: "", failures: 0, lastSuccessAt: null, verified: false });
+    stale: boolean;
+  }>({ key: "", failures: 0, lastSuccessAt: null, verified: false, stale: false });
   const [inventoryError, setInventoryError] = useState("");
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -731,7 +732,7 @@ export default function App() {
     }
   }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
     inventoryHealth.current.key, inventoryHealth.current.verified,
-    inventoryHealth.current.failures]);
+    inventoryHealth.current.failures, inventoryHealth.current.stale]);
   // User-level only (a project override cannot change what is stored on disk or restored at start).
   const cacheInventoryOn = state.preferences?.["rig.cacheInventory"] === true;
   cacheInventoryPref.current = cacheInventoryOn;
@@ -791,6 +792,7 @@ export default function App() {
         failures: 0,
         lastSuccessAt: cached ? Date.parse(cached.sampledAt) || null : null,
         verified: false,
+        stale: false,
       };
       setInventory(cached || null);
       setInventoryError(cached ? CHECKING_SNAPSHOT : "");
@@ -822,6 +824,7 @@ export default function App() {
           health.failures = 0;
           health.lastSuccessAt = Date.now();
           health.verified = true;
+          health.stale = false;
           setInventory(result);
           inventoryCache.current.set(inventoryKey, result);
           if (cacheInventoryPref.current)
@@ -831,6 +834,7 @@ export default function App() {
       } catch (e) {
         if (active) {
           health.failures++;
+          health.stale = true;
           const outcome = failureOutcome({
             verified: health.verified,
             failures: health.failures,
@@ -2910,13 +2914,14 @@ export default function App() {
                 }}
                 fileRevision={fileRevision}
                 notes={state.seatNotes}
-                orphanNotesAvailable={pinsAvailable && inventoryHealth.current.verified && !inventoryError}
+                orphanNotesAvailable={pinsAvailable && inventoryHealth.current.verified &&
+                  !inventoryHealth.current.stale && !inventoryError}
                 onDeleteOrphanNotes={(keys) => {
                   const latest = attentionContext.current;
                   const owner = pinConnectionIdentity(connection);
                   if (latest.connection?.id !== connection.id || latest.inventoryError ||
                       !latest.inventory || inventoryHealth.current.key !== owner ||
-                      !inventoryHealth.current.verified) return;
+                      !inventoryHealth.current.verified || inventoryHealth.current.stale) return;
                   setState((s) => {
                     const currentConnection = s.connections.find((c) => c.id === s.activeConnection) ||
                       s.connections[0] || local;
@@ -2924,7 +2929,7 @@ export default function App() {
                     const current = attentionContext.current;
                     if (current.connection?.id !== currentConnection.id || current.inventoryError ||
                         !current.inventory || inventoryHealth.current.key !== pinConnectionIdentity(currentConnection) ||
-                        !inventoryHealth.current.verified) return s;
+                        !inventoryHealth.current.verified || inventoryHealth.current.stale) return s;
                     const before = normalizeSeatNotes(s.seatNotes);
                     const after = removeOrphanSeatNotes(
                       before,

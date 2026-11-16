@@ -1072,6 +1072,14 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   assert.equal(count(app, "seatNotes"), 7);
   assert.equal(count(app, "normalizeSeatNotes("), 3);
   assert.ok(app.includes("inventoryHealth.current.verified"), "orphan manager requires verified inventory");
+  assert.ok(
+    app.includes("orphanNotesAvailable={pinsAvailable && inventoryHealth.current.verified && !inventoryHealth.current.stale && !inventoryError}"),
+    "a quiet inventory failure blocks orphan-note deletion even while the cached snapshot remains verified",
+  );
+  assert.ok(
+    app.includes("!inventoryHealth.current.verified || inventoryHealth.current.stale"),
+    "both write-time gates recheck snapshot freshness",
+  );
   assert.ok(app.includes("removeOrphanSeatNotes("), "write path recomputes orphan eligibility");
   assert.equal(count(handlerCut.body, "window"), 0);
   assert.equal(count(handlerCut.body, "hrig"), 0);
