@@ -438,7 +438,7 @@ test("orphan-note manager previews sanitized text and requires confirmation for 
     onDelete: (keys) => deleted.push([...keys]),
   };
   const h = orphanNotesHarness(props);
-  const trigger = h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes"));
+  const trigger = h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes"));
   trigger.props.onClick();
   assert.ok(h.modal());
   assert.match(JSON.stringify(h.modal().props.children), /private preview/);
@@ -451,14 +451,14 @@ test("orphan-note manager previews sanitized text and requires confirmation for 
 
   const allDeleted = [];
   const allHarness = orphanNotesHarness({ ...props, onDelete: (keys) => allDeleted.push([...keys]) });
-  allHarness.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.onClick();
+  allHarness.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
   allHarness.button("Delete all orphan notes").props.onClick();
   assert.deepEqual(allDeleted, [], "Delete all opens a confirmation first");
   allHarness.button("Confirm deletion of orphan notes").props.onClick();
   assert.deepEqual(allDeleted, [["c1|rig-1:gone", "c1|rig-1:gone2"]]);
 
   const unavailable = orphanNotesHarness({ ...props, available: false });
-  assert.equal(unavailable.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.disabled, true);
+  assert.equal(unavailable.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.disabled, true);
 });
 
 test("orphan-note manager keeps one-note confirmation but disables bulk deletion for an empty live-seat inventory", () => {
@@ -471,7 +471,7 @@ test("orphan-note manager keeps one-note confirmation but disables bulk deletion
     available: true,
     onDelete: (keys) => deleted.push([...keys]),
   });
-  h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage notes")).props.onClick();
+  h.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
   const deleteAll = h.button("Delete all orphan notes");
   assert.equal(deleteAll.props.disabled, true);
   assert.match(JSON.stringify(h.modal().props.children), /at least one verified live seat/i);
@@ -481,6 +481,26 @@ test("orphan-note manager keeps one-note confirmation but disables bulk deletion
   assert.deepEqual(deleted, [], "single deletion still waits for its explicit confirmation");
   h.button("Confirm deletion of orphan notes").props.onClick();
   assert.deepEqual(deleted, [["c1|rig-1:gone"]]);
+});
+
+test("orphan-note manager has a distinct visible and accessible label from per-seat Notes buttons", () => {
+  const notes = { "c1|rig-1:gone": { text: "review me", updatedAt: 2 } };
+  const manager = orphanNotesHarness({
+    connectionId: "c1",
+    connectionName: "Work SSH",
+    notes,
+    liveSeatIds: [],
+    available: true,
+    onDelete: () => {},
+  });
+  const managerButton = manager.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes"));
+  assert.ok(managerButton);
+  assert.match(JSON.stringify(managerButton.props.children), /Orphaned notes/);
+  assert.equal(managerButton.props["aria-label"], "Manage orphaned seat notes (1)");
+
+  const seat = inventory().seats[0];
+  const seatButton = dialogHarness({ seat, connectionId: "c1", notes, onNote: () => {} }).notesButton();
+  assert.equal(seatButton.props["aria-label"], "Notes for dev-impl");
 });
 
 test("seat-notes clean: line breaks become line feeds, control, zero-width, bidirectional and separator characters and unpaired surrogates are dropped, tabs and line feeds stay, the text is cut to 2000 code points and trailing white space trimmed, and the counter and the tooltip line follow", () => {
@@ -1226,6 +1246,9 @@ test("seat-notes docs: README and PRIVACY.md say the note is private, kept only 
     "panel layouts, seat metadata and any private seat notes you write (plain text, so keep secrets out of them), not passwords or terminal transcripts.",
   ])
     assert.equal(count(readme, part), 1, part);
+  assert.match(readme, /separate Sessions-header \*\*Orphaned notes\*\* control/);
+  assert.match(readme, /A failed poll disables it even when HRig is quietly serving an older snapshot/);
+  assert.match(readme, /\*\*Delete all\*\* additionally requires at least one verified live seat/);
   assert.equal(
     count(readme, "TASKS.md"),
     1,
@@ -1240,6 +1263,9 @@ test("seat-notes docs: README and PRIVACY.md say the note is private, kept only 
   );
   assert.equal(count(privacy, "private seat notes"), 1);
   assert.equal(count(privacy, "review checks"), 1);
+  assert.match(privacy, /separate \*\*Orphaned notes\*\* manager/);
+  assert.match(privacy, /any failed poll disables the manager/);
+  assert.match(privacy, /Bulk \*\*Delete all\*\* also requires at least one verified live seat/);
   assert.equal(
     count(
       privacy,

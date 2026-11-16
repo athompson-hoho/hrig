@@ -122,7 +122,7 @@ export function OrphanSeatNotesManager({
   const orphans = available ? orphanSeatNotes(notes, connectionId, liveSeatIds) : [];
   const bulkDeleteAvailable = available && liveSeatIds.length > 0;
   const pending = pendingKeys?.filter((key) => orphans.some((row) => row.key === key)) || [];
-  const title = "Manage notes for removed seats";
+  const title = "Manage orphaned seat notes";
   return (
     <>
       <button
@@ -133,7 +133,7 @@ export function OrphanSeatNotesManager({
         disabled={!available}
         onClick={() => setOpen(true)}
       >
-        <StickyNote size={13} aria-hidden="true" /> Notes <span className="count">{orphans.length}</span>
+        <StickyNote size={13} aria-hidden="true" /> Orphaned notes <span className="count">{orphans.length}</span>
       </button>
       {open && !pendingKeys && (
         <Modal
