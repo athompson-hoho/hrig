@@ -26,13 +26,12 @@ const ELLIPSIS = "\u2026";
 const MAX_NAME = 200;
 const MAX_ROOT = 4096;
 const MAX_INPUT = 2048;
-// Invisible characters the panel title cleaner keeps: soft hyphen, Mongolian vowel separator, annotation marks and the unassigned or deprecated format characters; the main process drops them too.
-const INVISIBLE = /[\u00ad\u180e\u2065\u206a-\u206f\ufff9-\ufffb]/g;
-
+// Keep the window title's existing broader format-character cleanup; the shared helper adds the approved filler set through normalizeTitle.
+const WINDOW_ONLY_INVISIBLE = /[\u2065\u206a-\u206f]/g;
 function clean(value: unknown): string | null {
   return normalizeTitle(
     typeof value === "string"
-      ? value.slice(0, MAX_INPUT).replace(INVISIBLE, "")
+      ? value.slice(0, MAX_INPUT).replace(WINDOW_ONLY_INVISIBLE, "")
       : value,
     MAX_NAME,
   );

@@ -408,18 +408,28 @@ test("pod-broadcast text: the exact text or a reason, with the limit counted in 
     refused(v, "control characters");
   for (const v of [
     "a\u200bb",
-    "a\u200db",
     "a\u200eb",
     "a\u202eb",
     "a\u2066b",
     "a\ufeffb",
     "a\u2060b",
-    "a\u00adb",
-    "a\u{E0041}b",
     "a\ud800b",
-    "\u{1F468}\u200d\u{1F469}",
   ])
     refused(v, "hidden characters");
+  assert.deepEqual(validateBroadcastText("a\u200db"), {
+    ok: true,
+    text: "a\u200db",
+  });
+  assert.deepEqual(validateBroadcastText("a\u00adb"), {
+    ok: true,
+    text: "ab",
+  });
+  assert.deepEqual(validateBroadcastText("a\u{E0041}b"), {
+    ok: true,
+    text: "ab",
+  });
+  const joined = "\u{1f468}\u200d\u{1f469}";
+  assert.deepEqual(validateBroadcastText(joined), { ok: true, text: joined });
   // A control character is named before a hidden one.
   refused("\u0000\u200b", "control characters");
 });
@@ -660,7 +670,11 @@ test("pod-broadcast integration: app uses the reviewed dialog and send boundary,
       file + " must not name a broadcast setting or shortcut",
     );
   const source = read("src/pod-broadcast.ts");
-  assert.ok(!/^\s*import\b/m.test(stripComments(source)), "pure preview helper has no imports");
+  assert.deepEqual(
+    [...stripComments(source).matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./visible-text"],
+    "broadcast preview uses only the shared visible-text cleaner",
+  );
 });
 
 test("pod-broadcast note: docs describe the implemented flow and TERMINALS.md points to it once", () => {

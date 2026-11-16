@@ -21,7 +21,7 @@ A task goes to the seat a person decides on, and a selection says nothing about 
 
 The selected text is untrusted and may hold secrets, so the dialog is the review step:
 
-- Control, zero-width and direction-changing characters, invisible tag characters and terminal escape sequences are removed; line breaks and tabs are kept. At most 100,000 characters of a selection are read and 8,000 are kept.
+- Control, zero-width except ZWJ, direction-changing characters, invisible tag characters, terminal escape sequences and approved filler characters are removed; line breaks, tabs and ZWJ are kept. At most 100,000 characters of a selection are read and 8,000 are kept.
 - The text is shown as plain text in the subject and brief boxes, never as HTML or Markdown, and never run.
 - A selection that looks like a private key block is refused with a notice that does not repeat it. A selection that looks like it holds a token, an API key, a password or a long random string is still prepared, with a second warning. Every prepared dialog carries the line: Selections can contain secrets: review before creating. These checks are a help, not a guarantee: read the text before you create the task.
 - A task body is stored by OpenRig and shown to its owner, so anything you leave in it is no longer private.

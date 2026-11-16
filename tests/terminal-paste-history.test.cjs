@@ -995,7 +995,7 @@ test("terminal-paste-history wiring: the module is pure, only the terminal tools
   const code = stripComments(moduleSource);
   assert.deepEqual(
     [...moduleSource.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
-    ["./terminal-paste"],
+    ["./terminal-paste", "./visible-text"],
   );
   for (const word of [
     "window",

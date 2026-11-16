@@ -1,4 +1,5 @@
 import { lineCount } from "./terminal-paste";
+import { stripInvisibleFillers } from "./visible-text";
 
 /** How many recent pastes one terminal remembers; the oldest one is dropped past this. */
 export const MAX_PASTE_HISTORY = 10;
@@ -19,7 +20,7 @@ export interface PastePreview {
 // Only this much of a paste is looked at to find its first line with text, so a huge entry stays cheap.
 const SCAN_LIMIT = 4096;
 
-// Control characters (the tab stays and is collapsed later), the soft hyphen, zero-width, direction and other invisible formatting characters, tag characters and lone surrogates: none of them can be shown, and some could reorder what the person reads. The zero-width joiner and the variation selectors stay, so emoji sequences stay whole.
+// Control characters (the tab stays and is collapsed later), approved invisible fillers, zero-width, direction and other invisible formatting characters, tag characters and lone surrogates: none of them can be shown, and some could reorder what the person reads. The zero-width joiner and variation selectors stay, so emoji sequences stay whole.
 const HIDDEN =
   /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u{00ad}\u{061c}\u{180e}\u{200b}\u{200c}\u{200e}\u{200f}\u{2028}-\u{202e}\u{2060}-\u{206f}\u{feff}\u{fff9}-\u{fffb}\ud800-\udfff\u{e0000}-\u{e007f}]/gu;
 
@@ -43,7 +44,9 @@ export function pushPaste(list: readonly string[], text: string): string[] {
 export function previewOf(text: string): PastePreview {
   if (typeof text !== "string" || text === "")
     return { text: "", lines: 0, chars: 0 };
-  const head = text.length > SCAN_LIMIT ? text.slice(0, SCAN_LIMIT) : text;
+  const head = stripInvisibleFillers(
+    text.length > SCAN_LIMIT ? text.slice(0, SCAN_LIMIT) : text,
+  );
   let shown = "";
   let start = 0;
   while (start < head.length) {

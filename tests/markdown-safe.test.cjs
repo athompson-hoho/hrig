@@ -920,7 +920,11 @@ test("markdown-safe wiring: the module is pure, the component only uses react an
     /dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML|document\.|window\.|globalThis|localStorage|sessionStorage|indexedDB|eval\(|new Function|setTimeout|setInterval|fetch\(|href|src=|style=|<a |<img|<iframe|<script|hrig|openTerminalLink|rigAction|sendMessage|Date\.|Math\.random|performance\./;
 
   const mdSource = stripComments(read("src/markdown-safe.ts"));
-  assert.ok(noImports(mdSource), "markdown-safe has no import");
+  assert.deepEqual(
+    [...mdSource.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./visible-text"],
+    "markdown-safe uses only the shared visible-text cleaner",
+  );
   assert.ok(!hostile.test(mdSource), "markdown-safe is pure");
   const mdExports = exportsOf(read("src/markdown-safe.ts"));
   for (const name of [

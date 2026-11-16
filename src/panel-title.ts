@@ -1,3 +1,5 @@
+import { stripInvisibleFillers } from "./visible-text";
+
 /** Longest custom panel title, in characters (code points). */
 export const MAX_TITLE = 60;
 
@@ -58,14 +60,17 @@ function bare(code: number): boolean {
   );
 }
 
-/** Cleans a typed or stored panel title: white space and line breaks become one space, control, zero-width, direction-override and tag characters are dropped, the ends are trimmed and the rest is cut at max characters (default MAX_TITLE, never splitting an astral character). Null when nothing visible is left or the input is not text, which means no custom title. */
+/** Cleans a typed or stored panel title: white space and line breaks become one space, control, zero-width, direction-override, tag and approved filler characters are dropped, the ends are trimmed and the rest is cut at max characters (default MAX_TITLE, never splitting an astral character). Null when nothing visible is left or the input is not text, which means no custom title. */
 export function normalizeTitle(
   input: unknown,
   max: number = MAX_TITLE,
 ): string | null {
   if (typeof input !== "string") return null;
   const cap = Number.isInteger(max) && max > 0 ? max : MAX_TITLE;
-  const spaced = input.slice(0, MAX_INPUT).replace(/\s+/g, " ");
+  const spaced = stripInvisibleFillers(input.slice(0, MAX_INPUT)).replace(
+    /\s+/g,
+    " ",
+  );
   let kept = "";
   for (const ch of spaced) {
     if (!hidden(ch.codePointAt(0) ?? 0)) kept += ch;

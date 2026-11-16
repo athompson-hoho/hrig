@@ -1,3 +1,5 @@
+import { stripInvisibleFillers } from "./visible-text";
+
 /** Most characters of one text that are read; the rest is cut off and the result says so. */
 export const MAX_MARKDOWN_CHARS = 100000;
 /** Most blocks (and list items) one text can produce; later ones are cut off and the result says so. */
@@ -49,7 +51,7 @@ function hidden(code: number): boolean {
 }
 
 function clean(text: string): string {
-  const unix = text.replace(/\r\n?/g, "\n");
+  const unix = stripInvisibleFillers(text.replace(/\r\n?/g, "\n"));
   let out = "";
   let from = 0;
   for (let i = 0; i < unix.length; i++) {

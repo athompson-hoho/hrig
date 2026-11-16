@@ -607,10 +607,12 @@ test("task-draft draft: the selection is trimmed, cleaned of hidden characters a
   // Hidden characters are dropped wherever they are, and so are lone surrogates.
   for (const code of [
     0x00, 0x01, 0x07, 0x08, 0x0b, 0x0c, 0x0e, 0x1b, 0x7f, 0x80, 0x9f, 0xad,
-    0x61c, 0x180e, 0x200b, 0x200c, 0x200d, 0x200e, 0x200f, 0x202a, 0x202e,
+    0x61c, 0x180e, 0x200b, 0x200c, 0x200e, 0x200f, 0x202a, 0x202e,
     0x2060, 0x2066, 0x2069, 0xfeff, 0xe0001, 0xe007f,
   ])
     assert.equal(ok("ab" + char(code) + "cd").body, "abcd", code.toString(16));
+  const joined = char(0x1f468) + char(0x200d) + char(0x1f469);
+  assert.equal(ok(joined).body, joined);
   assert.equal(ok("ab" + String.fromCharCode(0xd800) + "cd").body, "abcd");
   assert.equal(ok("ab" + String.fromCharCode(0xdc00) + "cd").body, "abcd");
   // A tab and a line feed are the only controls a brief keeps; every kind of line break becomes a line feed.
@@ -1268,7 +1270,11 @@ test("task-draft wiring: the pure module touches nothing, the entry points only 
   const moduleSource = read("src/task-draft.ts");
   const code = stripComments(moduleSource);
   assert.ok(!/[^ -~\n]/.test(moduleSource), "printable ASCII only");
-  assert.deepEqual([...code.matchAll(/^import /gm)], [], "no imports");
+  assert.deepEqual(
+    [...code.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./visible-text"],
+    "task drafts use only the shared visible-text cleaner",
+  );
   for (const banned of [
     /\bdocument\b/,
     /\bReact\b/,

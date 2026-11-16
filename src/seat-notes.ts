@@ -1,3 +1,5 @@
+import { stripInvisibleFillers } from "./visible-text";
+
 /** Most notes kept; a new note that would be the 201st pushes out the one changed longest ago. */
 export const MAX_NOTES = 200;
 /** Most characters (code points, not UTF-16 units) one note keeps; the rest is cut. */
@@ -23,13 +25,15 @@ const has = (target: object, key: string) =>
 const plain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Control, line-separator, zero-width, bidirectional and unpaired-surrogate characters are refused. */
+/** Control, line-separator, zero-width except ZWJ, bidirectional and unpaired-surrogate characters are refused; approved invisible fillers are stripped before display. */
 function hidden(code: number) {
   return (
     code < 32 ||
     (code >= 127 && code <= 159) ||
     code === 0x061c ||
-    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x200b && code <= 0x200c) ||
+    code === 0x200e ||
+    code === 0x200f ||
     (code >= 0x2028 && code <= 0x202e) ||
     (code >= 0x2060 && code <= 0x206f) ||
     (code >= 0xd800 && code <= 0xdfff) ||
@@ -38,6 +42,7 @@ function hidden(code: number) {
 }
 
 function clean(text: string) {
+  if (stripInvisibleFillers(text) !== text) return false;
   for (const char of text) if (hidden(char.codePointAt(0)!)) return false;
   return true;
 }
@@ -55,7 +60,7 @@ function stamp(value: unknown): number {
     : 0;
 }
 
-/** The key one seat's note is kept under: the connection id, a bar and the seat id (rig id or name, a colon and the seat's logical name); empty when either is not text, the connection id holds a bar, the result is over 200 characters or it holds a hidden character. */
+/** The key one seat's note is kept under: the connection id, a bar and the seat id (rig id or name, a colon and the seat's logical name); empty when either is not text, the connection id holds a bar, the result is over 200 characters or it holds a hidden character or invisible filler. */
 export function noteKey(connectionId: unknown, seatId: unknown): string {
   if (typeof connectionId !== "string" || typeof seatId !== "string") return "";
   if (!connectionId || !seatId || connectionId.includes(SEPARATOR)) return "";
@@ -63,12 +68,13 @@ export function noteKey(connectionId: unknown, seatId: unknown): string {
   return usableKey(key) ? key : "";
 }
 
-/** Cleans note text: line breaks become line feeds, every control character except line feed and tab, every zero-width, bidirectional and line-separator character and every unpaired surrogate is dropped, the text is cut to 2000 code points and trailing white space is trimmed; anything but a string gives an empty note. At most the first 20000 UTF-16 units are read. */
+/** Cleans note text: line breaks become line feeds, every control character except line feed and tab, approved invisible fillers are removed, and every other zero-width except ZWJ, bidirectional and line-separator character and every unpaired surrogate is dropped, the text is cut to 2000 code points and trailing white space is trimmed; anything but a string gives an empty note. At most the first 20000 UTF-16 units are read. */
 export function cleanNote(value: unknown): string {
   if (typeof value !== "string") return "";
   const head = value.length > SCAN_CHARS ? value.slice(0, SCAN_CHARS) : value;
+  const cleaned = stripInvisibleFillers(head.replace(/\r\n?/g, "\n"));
   const kept: string[] = [];
-  for (const char of head.replace(/\r\n?/g, "\n")) {
+  for (const char of cleaned) {
     if (kept.length >= MAX_NOTE_CHARS) break;
     const code = char.codePointAt(0)!;
     if (code === 10 || code === 9 || !hidden(code)) kept.push(char);

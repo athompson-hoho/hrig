@@ -361,7 +361,11 @@ test("seat-notes clean: line breaks become line feeds, control, zero-width, bidi
   assert.equal(c("a\u0000b\u0007c\u001bd\u007fe\u0085f"), "abcdef");
   assert.equal(
     c("a\u200bb\u200cc\u200dd\u200ee\u200ff\ufeffg\u2060h"),
-    "abcdefgh",
+    "abc\u200ddefgh",
+  );
+  assert.equal(
+    c("\u{1f468}\u200d\u{1f469}"),
+    "\u{1f468}\u200d\u{1f469}",
   );
   assert.equal(c("\u202eevil\u202c \u2066x\u2069 \u061c"), "evil x");
   assert.equal(c("a\u2028b\u2029c"), "abc");
@@ -868,7 +872,11 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   const source = read("src/seat-notes.ts");
   const code = stripComments(source);
   assert.ok(!/[^\t\n -~]/.test(source), "plain ASCII");
-  assert.ok(!/^import /m.test(code), "no import");
+  assert.deepEqual(
+    [...code.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./visible-text"],
+    "seat notes use only the shared visible-text cleaner",
+  );
   assert.ok(
     !/\b(window|document|fetch|localStorage|sessionStorage|navigator|clipboard|setTimeout|setInterval|require|process|console)\b|Date\.now|new Date|Math\.random|innerHTML/.test(
       code,

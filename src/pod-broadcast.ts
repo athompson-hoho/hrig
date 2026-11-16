@@ -1,3 +1,5 @@
+import { stripInvisibleFillers } from "./visible-text";
+
 // Pure recipient and text rules for the reviewed flow in docs/pod-broadcast.md.
 
 /** Most recipients one broadcast may have. A seat past it is reported as "over cap" and is never a recipient. */
@@ -111,9 +113,8 @@ function short(value: unknown): string {
 /** Visible text: hidden characters dropped, the ends trimmed, cut to MAX_LABEL characters on a code point boundary. Only the start of a long string is read. */
 function clean(value: unknown): string {
   if (typeof value !== "string") return "";
-  const head = value
-    .slice(0, MAX_LABEL * 4)
-    .replace(HIDDEN, "")
+  const head = stripInvisibleFillers(value.slice(0, MAX_LABEL * 4))
+    .replace(HIDDEN, (char) => (char === "\u200d" ? char : ""))
     .trim();
   let out = "";
   let count = 0;
@@ -123,6 +124,20 @@ function clean(value: unknown): string {
     count++;
   }
   return out.trim();
+}
+
+function hasUnpairedSurrogate(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+      index++;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** The part of an address, when it is shown exactly as it is and is one plain word. */
@@ -311,26 +326,28 @@ export function previewRecipients(
 }
 
 /**
- * Checks a broadcast text. The answer carries the exact text: nothing is
- * trimmed, so what is shown for review is what would be sent. Refused: a
- * value that is not text, a text that is empty or only white space, one over
- * MAX_TEXT_CHARS characters (an emoji counts as one), control characters
- * other than line feed and tab (carriage return, escape, NUL, DEL, the C1
- * range, line and paragraph separators) and hidden characters (zero-width,
- * bidirectional and tag characters, unpaired surrogates). Never throws.
+ * Checks broadcast text after removing approved invisible fillers. The returned
+ * text is exactly what the review shows and what the send path receives. ZWJ
+ * stays for joined emoji; other forbidden control and format characters are
+ * refused. Never throws.
  */
 export function validateBroadcastText(value: unknown): TextCheck {
   if (typeof value !== "string") return { ok: false, reason: "not text" };
-  if (value.startsWith("-")) return { ok: false, reason: "option-like text" };
   if (value.length > MAX_TEXT_CHARS * 2)
     return { ok: false, reason: "too long" };
-  if (value.trim() === "") return { ok: false, reason: "empty" };
-  if (Array.from(value).length > MAX_TEXT_CHARS)
+  if (hasUnpairedSurrogate(value))
+    return { ok: false, reason: "hidden characters" };
+  const text = stripInvisibleFillers(value);
+  if (text.startsWith("-")) return { ok: false, reason: "option-like text" };
+  if (text.trim() === "") return { ok: false, reason: "empty" };
+  if (Array.from(text).length > MAX_TEXT_CHARS)
     return { ok: false, reason: "too long" };
-  const body = value.replace(/[\n\t]/g, "");
+  const body = text.replace(/[\n\t]/g, "");
   if (CONTROL.test(body)) return { ok: false, reason: "control characters" };
-  if (FORMAT.test(body)) return { ok: false, reason: "hidden characters" };
-  return { ok: true, text: value };
+  for (const char of body)
+    if (char !== "\u200d" && FORMAT.test(char))
+      return { ok: false, reason: "hidden characters" };
+  return { ok: true, text };
 }
 
 /** The words a person must type to confirm a broadcast to `count` recipients: the count as a decimal string. Empty when the count is not a whole number from 1 to MAX_RECIPIENTS, so such a broadcast can not be confirmed. */

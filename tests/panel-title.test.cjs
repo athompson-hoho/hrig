@@ -624,7 +624,12 @@ test("panel-title rules: normalizeTitle cleans, cuts and refuses as specified, a
     const source = new Set(Array.from(input));
     assert.ok(
       chars.every((c) => c === " " || source.has(c)),
-      "nothing is invented",
+      "nothing is invented: " +
+        JSON.stringify({
+          input,
+          out,
+          unexpected: chars.filter((c) => c !== " " && !source.has(c)),
+        }),
     );
   }
   assert.ok(
@@ -1332,7 +1337,11 @@ test("panel-title wiring: the module is pure, the menu only passes text, App cha
   const source = read("src/panel-title.ts");
   assert.ok(isAscii(source), "ASCII only");
   const code = stripComments(source);
-  assert.ok(!/^import /m.test(code), "no import");
+  assert.deepEqual(
+    [...code.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]),
+    ["./visible-text"],
+    "panel titles use only the shared visible-text cleaner",
+  );
   assert.ok(!/export default/.test(code), "named exports only");
   assert.ok(
     !/\b(document|window|hrig|React|localStorage|sessionStorage|indexedDB|setTimeout|setInterval|fetch|Date|Math|performance|eval|require|console|process|structuredClone|crypto)\b/.test(

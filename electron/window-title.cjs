@@ -6,9 +6,9 @@ const SEPARATOR = " - ";
 const MAX_TITLE = 100;
 const MAX_INPUT = 1024;
 const ENDING = SEPARATOR + APP_TITLE;
-// Lone surrogates, control characters (white space is handled apart), soft hyphen, zero-width and direction characters, annotation marks and tag characters. The zero-width joiner and the variation selectors stay: emoji sequences need them.
+// Lone surrogates, control characters (white space is handled apart), invisible fillers, zero-width and direction characters, annotation marks and tag characters. The zero-width joiner and the variation selectors stay: emoji sequences need them.
 const DROPPED =
-  /[\ud800-\udfff]|[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\ufff9-\ufffb]|[\u{e0000}-\u{e007f}]/gu;
+  /[\ud800-\udfff]|[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufff9-\ufffb]|[\u{e0000}-\u{e007f}]/gu;
 
 function windowTitle(value) {
   if (typeof value !== "string") return APP_TITLE;

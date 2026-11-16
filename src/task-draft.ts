@@ -1,3 +1,5 @@
+import { stripInvisibleFillers } from "./visible-text";
+
 /** The window event a terminal sends to ask the app to open the Assign work dialog filled in from a selection; it only opens the dialog and creates nothing. */
 export const TASK_DRAFT_EVENT = "hrig:terminal-task-draft";
 /** The most characters the suggested subject keeps, the three dots of a cut included. */
@@ -28,7 +30,7 @@ const has = (target: object, key: string) =>
 const plain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Control, zero-width, bidirectional-override, invisible tag characters and lone surrogates are dropped. */
+/** Control, zero-width except ZWJ, bidirectional-override, invisible tag characters and lone surrogates are dropped; approved fillers are stripped before review. */
 function hidden(code: number) {
   return (
     code < 32 ||
@@ -36,7 +38,9 @@ function hidden(code: number) {
     code === 0xad ||
     code === 0x61c ||
     code === 0x180e ||
-    (code >= 0x200b && code <= 0x200f) ||
+    (code >= 0x200b && code <= 0x200c) ||
+    code === 0x200e ||
+    code === 0x200f ||
     (code >= 0x2028 && code <= 0x202e) ||
     (code >= 0x2060 && code <= 0x206f) ||
     code === 0xfeff ||
@@ -48,13 +52,15 @@ function hidden(code: number) {
 const CSI = /\u001b\[[0-?]*[ -/]*[@-~]/g;
 const OSC = /\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g;
 
-/** The selection as text: at most MAX_READ characters read, every line break a line feed, terminal escape sequences removed, hidden characters dropped; tab and line feed are the only control characters kept. */
+/** The selection as text: at most MAX_READ characters read, every line break a line feed, terminal escape sequences and approved fillers removed, hidden characters except ZWJ dropped; tab and line feed are the only control characters kept. */
 function clean(value: string): string {
-  const flat = value
-    .slice(0, MAX_READ)
-    .replace(/\r\n|[\r\u0085\u2028\u2029]/g, "\n")
-    .replace(CSI, "")
-    .replace(OSC, "");
+  const flat = stripInvisibleFillers(
+    value
+      .slice(0, MAX_READ)
+      .replace(/\r\n|[\r\u0085\u2028\u2029]/g, "\n")
+      .replace(CSI, "")
+      .replace(OSC, ""),
+  );
   let text = "";
   for (const char of flat) {
     const code = char.codePointAt(0)!;
