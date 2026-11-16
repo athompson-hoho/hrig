@@ -9,6 +9,8 @@ export type SearchOutcome = {
   matches: SearchMatch[];
   truncated: boolean;
   reason: string;
+  timedOutFiles?: string[];
+  timedOutFileCount?: number;
 };
 
 /** Every search option off: the literal, case-insensitive search of old. */
@@ -57,8 +59,22 @@ export function readSearchOutcome(result: unknown): SearchOutcome {
     result && !Array.isArray(result) && typeof result === "object"
       ? (result as { reason?: unknown }).reason
       : "";
-  const known = reason === "matches" || reason === "files" || reason === "time";
-  return { matches, truncated: known, reason: known ? String(reason) : "" };
+  const known = ["matches", "files", "time", "cancelled"].includes(String(reason));
+  const value = result && !Array.isArray(result) && typeof result === "object"
+    ? (result as Record<string, unknown>)
+    : {};
+  const timedOutFileCount = Number.isSafeInteger(value.timedOutFileCount) && Number(value.timedOutFileCount) > 0
+    ? Number(value.timedOutFileCount)
+    : 0;
+  const timedOutFiles = Array.isArray(value.timedOutFiles)
+    ? value.timedOutFiles.filter((file): file is string => typeof file === "string").slice(0, 20)
+    : [];
+  return {
+    matches,
+    truncated: known || timedOutFileCount > 0,
+    reason: known ? String(reason) : "",
+    ...(timedOutFileCount ? { timedOutFiles, timedOutFileCount } : {}),
+  };
 }
 
 /** The note under the search box: the literal sentence stays as it was when no option is on. */
@@ -74,11 +90,19 @@ export function searchNote(options: SearchOptions): string {
 
 /** The status line shown when a search stopped early; empty when it ran to the end. */
 export function stopNote(outcome: SearchOutcome): string {
+  const notes: string[] = [];
   if (outcome.reason === "matches")
-    return "Showing the first 200 matches; there may be more. Narrow the search to see others.";
+    notes.push("Partial results: showing the first 200 matches; narrow the search to see others.");
   if (outcome.reason === "files")
-    return "Stopped after 20,000 files; matches in files not reached are not shown.";
+    notes.push("Partial results: stopped after 20,000 files; matches in files not reached are not shown.");
   if (outcome.reason === "time")
-    return "Stopped at the time limit; only the matches found so far are shown.";
-  return "";
+    notes.push("Partial results: the scaled time limit was reached; matches found so far are shown.");
+  if (outcome.reason === "cancelled")
+    notes.push("Search canceled; matches found so far are shown.");
+  if (outcome.timedOutFileCount) {
+    const shown = outcome.timedOutFiles?.length ?? 0;
+    const examples = shown ? ` (${outcome.timedOutFiles!.join(", ")}${outcome.timedOutFileCount > shown ? ", …" : ""})` : "";
+    notes.push(`Partial results: ${outcome.timedOutFileCount} ${outcome.timedOutFileCount === 1 ? "file" : "files"} timed out and were skipped${examples}.`);
+  }
+  return notes.join(" ");
 }

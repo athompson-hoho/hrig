@@ -733,6 +733,14 @@ test("content-search view", () => {
       reason: "time",
     },
   );
+  assert.deepEqual(
+    view.readSearchOutcome({ matches: [row], truncated: true, reason: "cancelled" }),
+    { matches: [row], truncated: true, reason: "cancelled" },
+  );
+  assert.deepEqual(
+    view.readSearchOutcome({ matches: [], timedOutFiles: ["slow.ts"], timedOutFileCount: 1 }),
+    { matches: [], truncated: true, reason: "", timedOutFiles: ["slow.ts"], timedOutFileCount: 1 },
+  );
   for (const junk of [
     null,
     undefined,
@@ -789,7 +797,15 @@ test("content-search view", () => {
   );
   assert.match(
     view.stopNote({ matches: [], truncated: true, reason: "time" }),
-    /time limit/,
+    /scaled time limit/,
+  );
+  assert.match(
+    view.stopNote({ matches: [row], truncated: true, reason: "cancelled" }),
+    /Search canceled; matches found so far are shown/,
+  );
+  assert.match(
+    view.stopNote({ matches: [], truncated: false, reason: "", timedOutFiles: ["slow.ts"], timedOutFileCount: 1 }),
+    /slow\.ts/,
   );
 });
 
@@ -798,6 +814,8 @@ test("content-search wiring", () => {
   const viewSource = read("src/content-search-view.ts");
   const matcher = read("electron/content-search.cjs");
   const featuresSource = read("electron/features.cjs");
+  const mainSource = read("electron/main.cjs");
+  const preloadSource = read("electron/preload.cjs");
   const code = (text) =>
     text
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -820,6 +838,14 @@ test("content-search wiring", () => {
   );
   assert.ok(panels.includes("const outcome = readSearchOutcome(result);"));
   assert.ok(panels.includes("setStopped(stopNote(outcome));"));
+  assert.ok(panels.includes("window.hrig.searchProject(connection"));
+  assert.ok(panels.includes("window.hrig.cancelProjectSearch(id)"));
+  assert.ok(panels.includes("Cancel search"));
+  assert.ok(mainSource.includes('handle("editor:search"'));
+  assert.ok(mainSource.includes('ipcMain.on("editor:cancel-search"'));
+  assert.ok(mainSource.includes("editorSearchKey(event, id)"));
+  assert.ok(preloadSource.includes('searchProject: invoke("editor:search")'));
+  assert.ok(preloadSource.includes('ipcRenderer.send("editor:cancel-search", id)'));
   assert.ok(panels.includes("{searchNote(options)}"));
   assert.ok(!panels.includes('action({ op: "searchText"'));
   assert.ok(!panels.includes("Literal, case-insensitive search."));
@@ -855,7 +881,7 @@ test("content-search wiring", () => {
     "validation runs before anything is sent",
   );
   assert.ok(
-    body.includes("{ ...a, options: search.options }"),
+    /options:\s*\{\s*\.\.\.search\.options/.test(body),
     "Python only gets the validated options",
   );
   assert.ok(
@@ -1334,6 +1360,8 @@ test("content-search backstop", async () => {
   assert.equal(cs.compileQuery({ query: "foo" }).scan, null);
   assert.equal(cs.compileQuery({ query: "foo", wholeWord: true }).scan, null);
   assert.equal(cs.LIMITS.FILE_MS, 2000);
+  assert.equal(cs.LIMITS.BUDGET_PER_FILE_MS, 1);
+  assert.equal(cs.LIMITS.MAX_BUDGET_MS, 30000);
   // A runaway match is stopped by the time limit instead of hanging the process.
   const started = Date.now();
   assert.equal(risky.scan("a".repeat(1000) + "\n", 200, 300), null);
@@ -1385,6 +1413,14 @@ test("content-search backstop", async () => {
   assert.equal(budget.remaining(), 70);
   now = 500;
   assert.equal(budget.remaining(), 0);
+  const scalable = cs.createBudget(() => now, 10);
+  now += 10;
+  assert.equal(scalable.expired(), true);
+  scalable.extend(15);
+  assert.equal(scalable.expired(), false);
+  assert.equal(scalable.remaining(), 15);
+  scalable.extend(50000);
+  assert.equal(scalable.limit(), cs.LIMITS.MAX_BUDGET_MS);
   // Through the whole search: the answer says it ran out of time, and the other files are not lost before it.
   const root = await project({
     "bad.txt": "a".repeat(1000) + "\n",
@@ -1402,8 +1438,11 @@ test("content-search backstop", async () => {
       Date.now() - t0 < 1500,
       "the per-file limit given by the hook ends the scan",
     );
-    assert.equal(found.reason, "time");
+    assert.equal(found.reason, "");
     assert.equal(found.truncated, true);
+    assert.equal(at(found), "ok.txt:1", "a slow file does not hide later files");
+    assert.deepEqual(found.timedOutFiles, ["bad.txt"]);
+    assert.equal(found.timedOutFileCount, 1);
     const benign = await search(root, "^\\s*x.*", {
       regex: true,
       wholeWord: false,
@@ -1420,7 +1459,7 @@ test("content-search backstop", async () => {
   // The same on the Python side: a hostile pattern sent by hand is abandoned at the budget.
   if (pythonOk) {
     const dir = await project({
-      "a.txt": "a".repeat(40) + "\n",
+      "a.txt": "a".repeat(1000) + "\n",
       "b.txt": "b\n",
     });
     try {
@@ -1470,6 +1509,27 @@ test("content-search backstop", async () => {
         "no Python syntax warning",
       );
       assert.equal(JSON.parse(fine.stdout).matches.length, 1);
+      await fs.writeFile(path.join(dir, "b.txt"), "b\n");
+      const skippedFile = run({
+        op: "searchText",
+        root: dir,
+        path: "",
+        query: ".*.*.*b",
+        options: {
+          regex: true,
+          wholeWord: false,
+          budgetMs: 5000,
+          budgetPerFileMs: 0,
+          maxBudgetMs: 5000,
+          fileMs: 300,
+        },
+      });
+      assert.equal(skippedFile.status, 0, skippedFile.stderr);
+      const skippedAnswer = JSON.parse(skippedFile.stdout);
+      assert.equal(skippedAnswer.reason, "");
+      assert.equal(skippedAnswer.timedOutFileCount, 1);
+      assert.deepEqual(skippedAnswer.timedOutFiles, ["a.txt"]);
+      assert.deepEqual(skippedAnswer.matches.map((row) => row.path), ["b.txt"]);
       // The alarm can fire anywhere in the walk, not only inside a pattern search: it ends the answer, not the script.
       const wide = await project(
         Object.fromEntries(
@@ -1503,11 +1563,53 @@ test("content-search backstop", async () => {
   assert.deepEqual(requires, ["node:vm"]);
   const featuresSource = read("electron/features.cjs");
   for (const token of [
-    "signal.setitimer(signal.ITIMER_REAL,max(budget,1)/1000.0)",
+    "def arm():",
     "except Budget: return False",
     "signal.setitimer(signal.ITIMER_REAL,0)",
   ])
     assert.ok(featuresSource.includes(token), token);
+});
+
+test("content-search cancellation keeps matches found before cancel", async () => {
+  const root = await project({
+    "a.txt": "needle\nneedle\n",
+    "b.txt": "needle\n",
+  });
+  const controller = new AbortController();
+  try {
+    const canceled = await search(
+      root,
+      "needle",
+      { regex: false, wholeWord: false },
+      { signal: controller.signal, onMatch: () => controller.abort() },
+    );
+    assert.equal(canceled.reason, "cancelled");
+    assert.equal(canceled.truncated, true);
+    assert.equal(canceled.matches.length, 1);
+    assert.equal(at(canceled), "a.txt:1");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("content-search budget scales with visited files", async () => {
+  const root = await project(
+    Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`f${i}.txt`, "needle\n"])),
+  );
+  let clock = 0;
+  try {
+    const found = await search(
+      root,
+      "needle",
+      { regex: false, wholeWord: false },
+      { budgetMs: 5, budgetPerFileMs: 100, maxBudgetMs: 2000, now: () => clock++ },
+    );
+    assert.equal(found.scanned, 12);
+    assert.equal(found.matches.length, 12);
+    assert.equal(found.reason, "");
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test("content-search docs", () => {
@@ -1523,7 +1625,7 @@ test("content-search docs", () => {
     "**Regular expression** (the `.*` button)",
     "**Whole word** (the `Word` button)",
     "**Files** (the `Files` button)",
-    "With every option off nothing changes",
+    "With every option off, matching remains literal and case-insensitive.",
     "A glob without a slash matches a file or folder name at any depth",
     "Globs are case-sensitive.",
     "Braces and character classes are not supported",
@@ -1544,20 +1646,22 @@ test("content-search docs", () => {
     `| Folder depth (local) | ${L.MAX_DEPTH} |`,
     `| Line shown | ${L.MAX_TEXT} characters |`,
     `the first ${L.MAX_LINE.toLocaleString("en-US")} characters`,
-    `| Time | ${L.BUDGET_MS / 1000} seconds for the whole search |`,
-    "A literal search with no option reads whole lines, however long.",
+    `| Time | ${L.BUDGET_MS / 1000} seconds base, plus up to ${(L.MAX_BUDGET_MS - L.BUDGET_MS) / 1000} seconds scaled by files visited (${L.MAX_BUDGET_MS / 1000} seconds total) |`,
+    "A literal search reads whole lines, however long.",
+    "Cancel stops the running search; it does not clear those matches.",
+    "per-file limit skips that file",
     "private context with a two second limit",
     "Residual risk, stated plainly",
     "not a proof",
     "not measured inside the packaged app",
-    "25 second limit",
+    "60 second command limit",
     "separate worker process is a larger change and is not part of this feature",
     "## Local, WSL and SSH",
     "Python `re` module",
     "`\\p{...}`",
     "Python splits lines at more characters than a line feed",
     "## Not included",
-    "Replace in files, grouping matches by file, streaming or cancelling a running search, context lines around a match",
+    "Replace in files, grouping matches by file, streaming results while a search runs, context lines around a match",
   ];
   const flat = doc.replace(/ +/g, " ");
   for (const claim of claims) assert.ok(flat.includes(claim), claim);

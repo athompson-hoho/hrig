@@ -15,6 +15,8 @@ const LIMITS = Object.freeze({
   MAX_TEXT: 250,
   MAX_DEPTH: 25,
   BUDGET_MS: 10000,
+  BUDGET_PER_FILE_MS: 1,
+  MAX_BUDGET_MS: 30000,
   MAX_UNBOUNDED: 3,
   MAX_DOUBLINGS: 10,
   MAX_REPEAT: 1000,
@@ -489,12 +491,20 @@ function compileGlobs(includeText = "", excludeText = "") {
 }
 
 /** A wall-clock budget over an injected clock; a budget of Infinity never expires. */
-function createBudget(now, ms) {
+function createBudget(now, ms, maxMs = LIMITS.MAX_BUDGET_MS) {
   const start = now();
+  let budgetMs = ms === Infinity ? Infinity : Math.min(ms, maxMs);
   return {
-    expired: () => ms !== Infinity && now() - start >= ms,
+    extend: (extraMs) => {
+      if (budgetMs !== Infinity && Number.isFinite(extraMs) && extraMs > 0)
+        budgetMs = Math.min(maxMs, budgetMs + extraMs);
+    },
+    expired: () => budgetMs !== Infinity && now() - start >= budgetMs,
     remaining: () =>
-      ms === Infinity ? Infinity : Math.max(0, ms - (now() - start)),
+      budgetMs === Infinity
+        ? Infinity
+        : Math.max(0, budgetMs - (now() - start)),
+    limit: () => budgetMs,
   };
 }
 
@@ -537,6 +547,9 @@ function prepare(request, remote = false, hooks = {}) {
       include: globs.include,
       exclude: globs.exclude,
       budgetMs,
+      budgetPerFileMs: LIMITS.BUDGET_PER_FILE_MS,
+      maxBudgetMs: LIMITS.MAX_BUDGET_MS,
+      fileMs: LIMITS.FILE_MS,
       ...(hooks.maxFiles ? { maxFiles: hooks.maxFiles } : {}),
     },
     test: compiled.test,

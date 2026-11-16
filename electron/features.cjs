@@ -89,16 +89,33 @@ async function assessmentProvider(connection, request) {
 }
 
 // Program source is encoded; request payloads travel on stdin, not command lines.
-async function python(connection, source, request) {
+async function python(connection, source, request, executionOptions = {}) {
   const program =
     "import base64;exec(base64.b64decode(" +
     JSON.stringify(Buffer.from(source).toString("base64")) +
     "))";
-  return core.parseJson(
-    await core.remote(connection, `python3 -c ${core.quote(program)}`, {
-      input: JSON.stringify(request),
-    }),
+  const output = await core.remote(
+    connection,
+    `python3 -c ${core.quote(program)}`,
+    { input: JSON.stringify(request), ...executionOptions },
   );
+  if (output && typeof output === "object" && output.aborted === true) {
+    const matches = [];
+    const timedOutFiles = [];
+    let timedOutFileCount = 0;
+    for (const line of String(output.stdout || "").split(/\r?\n/)) {
+      try {
+        const event = JSON.parse(line);
+        if (event?.event === "match") matches.push(event.match);
+        if (event?.event === "file-timeout") {
+          timedOutFileCount++;
+          if (timedOutFiles.length < 20 && typeof event.path === "string") timedOutFiles.push(event.path);
+        }
+      } catch {}
+    }
+    return { matches, truncated: true, reason: "cancelled", timedOutFiles, timedOutFileCount };
+  }
+  return core.parseJson(output);
 }
 const NVM =
   'HRIG_RIG_PATH=$(command -v rig 2>/dev/null || true); if ! command -v node >/dev/null 2>&1 || [ -z "$HRIG_RIG_PATH" ] || [ "${HRIG_RIG_PATH#/mnt/}" != "$HRIG_RIG_PATH" ]; then if [ -s "$HOME/.nvm/nvm.sh" ]; then export NVM_DIR="$HOME/.nvm"; . "$NVM_DIR/nvm.sh" --no-use; nvm use --silent default >/dev/null 2>&1 || true; fi; fi; unset HRIG_RIG_PATH; ';
@@ -266,9 +283,9 @@ elif op=='rename':
  os.rename(target,dest);print(json.dumps({'renamed':True}))
 elif op=='searchText':
  import time
- out=[];scanned=0;reason='';query=a.get('query','');o=a.get('options')
+ out=[];scanned=0;reason='';timed_out_files=[];timed_out_file_count=0;query=a.get('query','');o=a.get('options')
  if not query: raise Exception('Enter search text')
- low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs');cap=(o or {}).get('maxFiles') or 20000
+ low=query.lower();pattern=None;started=time.monotonic();budget=(o or {}).get('budgetMs');budget_per_file=(o or {}).get('budgetPerFileMs') or 0;budget_max=(o or {}).get('maxBudgetMs') or budget;cap=(o or {}).get('maxFiles') or 20000;file_ms=(o or {}).get('fileMs') or 2000
  if o is not None and (o.get('regex') or o.get('wholeWord')):
   src=query if o.get('regex') else re.escape(query)
   if o.get('wholeWord'): src=r'(?<!\\w)(?:'+src+r')(?!\\w)'
@@ -276,13 +293,27 @@ elif op=='searchText':
   except re.error as e: raise Exception('Invalid regular expression: '+str(e)[:160])
  inc=(o or {}).get('include') or [];exc=(o or {}).get('exclude') or []
  import signal
- st={'late':False,'re':False}
+ st={'late':False,'re':False,'file_deadline':None,'file_timed_out':False}
  class Budget(BaseException): pass
+ class FileBudget(BaseException): pass
+ def arm():
+  if budget is None or not hasattr(signal,'setitimer'): return
+  elapsed=(time.monotonic()-started)*1000
+  remain=max(budget-elapsed,1)
+  if st['re'] and st['file_deadline'] is not None:
+   remain=min(remain,max((st['file_deadline']-time.monotonic())*1000,1))
+  signal.setitimer(signal.ITIMER_REAL,remain/1000.0)
  def alarm(sig,frm):
-  st['late']=True
-  if st['re']: raise Budget()
+  current=time.monotonic();elapsed=(current-started)*1000
+  if st['re'] and st['file_deadline'] is not None and current>=st['file_deadline'] and elapsed<budget:
+   st['file_timed_out']=True
+   raise FileBudget()
+  if elapsed>=budget:
+   st['late']=True
+   if st['re']: raise Budget()
+  else: arm()
  if budget is not None and hasattr(signal,'setitimer'):
-  signal.signal(signal.SIGALRM,alarm);signal.setitimer(signal.ITIMER_REAL,max(budget,1)/1000.0)
+  signal.signal(signal.SIGALRM,alarm);arm()
  def spent(): return budget is not None and (st['late'] or (time.monotonic()-started)*1000>=budget)
  def nm(pat,name):
   p=n=0;star=-1;mark=0
@@ -311,28 +342,48 @@ elif op=='searchText':
  def hit(text):
   if not pattern: return low in text.lower()
   st['re']=True
-  try: return bool(pattern.search(text[:1000]))
+  st['file_deadline']=time.monotonic()+file_ms/1000.0
+  try:
+   arm()
+   return bool(pattern.search(text[:1000]))
+  except FileBudget: return False
   except Budget: return False
-  finally: st['re']=False
+  finally:
+   st['re']=False;st['file_deadline']=None
+   if budget is not None and hasattr(signal,'setitimer'): arm()
+ def emit(kind,**values):
+  if (o or {}).get('streamProgress'): print(json.dumps({'event':kind,**values}),flush=True)
+ def add_match(row): out.append(row);emit('match',match=row)
  for folder,dirs,files in os.walk(root,followlinks=False):
   dirs[:]=[d for d in dirs if d not in ['.git','node_modules','dist','.venv','.next','release'] and not os.path.islink(os.path.join(folder,d))]
   for name in files:
    scanned+=1;p=os.path.join(folder,name)
+   if budget is not None:
+    budget=min(budget_max,budget+budget_per_file)
+    if st['late'] and (time.monotonic()-started)*1000<budget: st['late']=False
+    arm()
    if spent(): reason='time';break
    if os.path.islink(p): continue
    rel=os.path.relpath(p,root).replace(os.sep,'/')
+   st['file_timed_out']=False
    try:
     content=read(p)['content'] if allowed(rel) else ''
     for line,text in enumerate(content.splitlines(),1):
      if spent(): reason='time';break
-     if hit(text): out.append({'path':rel,'line':line,'text':text[:250]})
+     if hit(text): add_match({'path':rel,'line':line,'text':text[:250]})
+     if st['file_timed_out']: break
      if len(out)>=200: break
    except (OSError,UnicodeError,Exception): pass
+   if st['file_timed_out']:
+    timed_out_file_count+=1
+    if len(timed_out_files)<20: timed_out_files.append(rel)
+    emit('file-timeout',path=rel)
    if reason or len(out)>=200 or scanned>=cap: break
   if reason or len(out)>=200 or scanned>=cap: break
  if budget is not None and hasattr(signal,'setitimer'): signal.setitimer(signal.ITIMER_REAL,0)
+ if st['late'] and not reason: reason='time'
  reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=cap else '')
- print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned}))
+ print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned,'timedOutFiles':timed_out_files,'timedOutFileCount':timed_out_file_count}))
 `;
 function revision(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
@@ -357,12 +408,21 @@ async function edit(connection, a, hooks = {}) {
     a.op === "searchText"
       ? contentSearch.prepare(a, connection.kind !== "local", hooks)
       : null;
-  if (connection.kind !== "local")
-    return python(
-      connection,
-      EDIT_PY,
-      search && !search.legacy ? { ...a, options: search.options } : a,
-    );
+  if (connection.kind !== "local") {
+    const request =
+      search && !search.legacy
+        ? {
+            ...a,
+            options: {
+              ...search.options,
+              ...(hooks.signal ? { streamProgress: true } : {}),
+            },
+          }
+        : a;
+    return python(connection, EDIT_PY, request, hooks.signal
+      ? { signal: hooks.signal, returnOnAbort: true, timeout: contentSearch.LIMITS.MAX_BUDGET_MS + 30000 }
+      : {});
+  }
   const target = await core.localPath(
     a.root,
     a.path,
@@ -415,15 +475,38 @@ async function edit(connection, a, hooks = {}) {
     const budget = contentSearch.createBudget(
       hooks.now || Date.now,
       search.budgetMs,
+      hooks.maxBudgetMs || contentSearch.LIMITS.MAX_BUDGET_MS,
     );
     const maxFiles = hooks.maxFiles || contentSearch.LIMITS.MAX_FILES;
+    const budgetPerFile = hooks.budgetPerFileMs ?? contentSearch.LIMITS.BUDGET_PER_FILE_MS;
     let count = 0;
     let timedOut = false;
+    let canceled = false;
+    let timedOutFileCount = 0;
+    const timedOutFiles = [];
+    const isCanceled = () => Boolean(hooks.signal?.aborted);
+    const addResult = (match) => {
+      results.push(match);
+      if (typeof hooks.onMatch === "function") hooks.onMatch(match);
+    };
+    const result = (reason) => ({
+      matches: results,
+      truncated: Boolean(reason || timedOutFileCount),
+      reason,
+      scanned: count,
+      timedOutFiles,
+      timedOutFileCount,
+    });
+    const noteTimedOutFile = (relative) => {
+      timedOutFileCount++;
+      if (timedOutFiles.length < 20) timedOutFiles.push(relative);
+    };
     const scan = async (folder, depth = 0) => {
-      if (depth > 25) return;
+      if (depth > contentSearch.LIMITS.MAX_DEPTH || isCanceled()) return;
       for (const e of await fs
         .readdir(folder, { withFileTypes: true })
         .catch(() => [])) {
+        if (isCanceled()) { canceled = true; return; }
         if (budget.expired()) {
           timedOut = true;
           return;
@@ -444,10 +527,13 @@ async function edit(connection, a, hooks = {}) {
         if (e.isDirectory()) await scan(full, depth + 1);
         else {
           count++;
+          budget.extend(budgetPerFile);
           const rel = path.relative(target, full).replaceAll("\\", "/");
           try {
             if (search.allows(rel) && (await fs.stat(full)).size <= 2000000) {
-              const data = await fs.readFile(full);
+              if (isCanceled()) { canceled = true; return; }
+              const data = await fs.readFile(full, { signal: hooks.signal });
+              if (isCanceled()) { canceled = true; return; }
               if (!data.includes(0)) {
                 const text = data.toString("utf8");
                 const lines = text.split(/\r?\n/);
@@ -455,27 +541,28 @@ async function edit(connection, a, hooks = {}) {
                   const hits = search.scan(
                     text,
                     200 - results.length,
-                    Math.min(
-                      hooks.fileMs || contentSearch.LIMITS.FILE_MS,
-                      budget.remaining(),
-                    ),
+                    Math.min(hooks.fileMs || contentSearch.LIMITS.FILE_MS, budget.remaining()),
                   );
-                  if (hits === null) timedOut = true;
+                  if (hits === null) {
+                    if (budget.expired()) timedOut = true;
+                    else noteTimedOutFile(rel);
+                  }
                   else
                     for (const i of hits)
-                      results.push({
+                      addResult({
                         path: rel,
                         line: i + 1,
                         text: lines[i].slice(0, 250),
                       });
                 } else
                   for (const [i, line] of lines.entries()) {
+                    if (isCanceled()) { canceled = true; break; }
                     if (budget.expired()) {
                       timedOut = true;
                       break;
                     }
                     if (search.test(line))
-                      results.push({
+                      addResult({
                         path: rel,
                         line: i + 1,
                         text: line.slice(0, 250),
@@ -484,21 +571,25 @@ async function edit(connection, a, hooks = {}) {
                   }
               }
             }
-          } catch {}
+          } catch (error) {
+            if (isCanceled() || error?.name === "AbortError") canceled = true;
+          }
         }
-        if (timedOut || count >= maxFiles || results.length >= 200) return;
+        if (timedOut || canceled || count >= maxFiles || results.length >= 200) return;
       }
     };
     await scan(target);
     if (search.legacy) return results;
-    const reason = timedOut
+    const reason = canceled || isCanceled()
+      ? "cancelled"
+      : timedOut
       ? "time"
       : results.length >= 200
         ? "matches"
         : count >= maxFiles
           ? "files"
           : "";
-    return { matches: results, truncated: reason !== "", reason, scanned: count };
+    return result(reason);
   }
 }
 const relaunchSession = require("./session-relaunch.cjs").createSessionRelaunch({ inventory: c => core.inventory(c), runRig, parseJson: core.parseJson });

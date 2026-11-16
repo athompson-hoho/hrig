@@ -9,7 +9,7 @@ function createBackend({
   return {
     inventory: (c) => core.inventory(c),
     doctor: (c) => features.diagnose(c),
-    edit: (c, r) => features.edit(c, r),
+    edit: (c, r, hooks) => features.edit(c, r, hooks),
     file: (c, r) => core.fileOperation(c, r),
     git: (c, root) => core.gitStatus(c, root),
     queue: (c, rig) => core.queue(c, rig),

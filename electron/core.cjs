@@ -65,7 +65,7 @@ function transport(connection, command, interactive = false) {
   return { file: process.platform === "win32" ? "ssh.exe" : "ssh", args };
 }
 function execute(file, args, options = {}) {
-  const { input, acceptExitCodes = [], captureStderr = false, exitResult = false, ...executionOptions } = options;
+  const { input, acceptExitCodes = [], captureStderr = false, exitResult = false, returnOnAbort = false, ...executionOptions } = options;
   return new Promise((resolve, reject) => {
     const child = execFile(
       file,
@@ -78,6 +78,10 @@ function execute(file, args, options = {}) {
         ...executionOptions,
       },
       (error, stdout, stderr) => {
+        if (error && executionOptions.signal?.aborted && returnOnAbort) {
+          resolve({ stdout, aborted: true });
+          return;
+        }
         const raw = (
           stderr ||
           stdout ||

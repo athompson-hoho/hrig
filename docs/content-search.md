@@ -8,7 +8,7 @@ The search box under Project tools looks for text in the files of the open proje
 - **Whole word** (the `Word` button): the characters just before and just after a match must not be letters, digits or an underscore, in any script. It works with plain text and with a regular expression.
 - **Files** (the `Files` button): shows an Include and an Exclude field. Each takes a comma separated list of globs. A file is searched when it matches an include glob (or there is none) and no exclude glob.
 
-With every option off nothing changes: the same files are read in the same order and the same lines match.
+With every option off, matching remains literal and case-insensitive. The same traversal, file and result limits, and structured search status apply whether or not an option is enabled.
 
 ## Globs
 
@@ -43,19 +43,19 @@ Examples that work: `TODO\d+`, `foo.*bar`, `^\s*import .* from`, `(foo|bar)baz`,
 | Folder depth (local)                                     | 25                                         |
 | Line shown                                               | 250 characters                             |
 | Line tested by a regular expression or whole word search | the first 1,000 characters                 |
-| Time                                                     | 10 seconds for the whole search            |
+| Time                                                     | 10 seconds base, plus up to 20 seconds scaled by files visited (30 seconds total) |
 
-A literal search with no option reads whole lines, however long. When a search stops early the panel says why: the first 200 matches are shown, the 20,000 file limit was reached, or the 10 second budget ran out. The list is then partial, and in the last two cases files that were not reached are not shown. On a very large project at roughly a millisecond per file the time limit can come before the file limit.
+A literal search reads whole lines, however long. The initial 10 second time budget grows by 1 millisecond for each file visited, up to 30 seconds. When a search stops at the time or file limit, reaches 200 matches, or is canceled, the panel labels the results as partial and keeps the matches found so far. Cancel stops the running search; it does not clear those matches. A risky regular expression that reaches its two second per-file limit skips that file, reports its path (up to 20 paths are listed), and continues with later files. These per-file timeouts do not by themselves stop the whole search.
 
 ## How a runaway pattern is contained
 
 JavaScript and Python regular expressions backtrack, and a hostile pattern on a long line can take very long. Three layers act, in this order.
 
 1. The pre-check above refuses the pattern shapes that grow without bound, and the line limit keeps each test small.
-2. The clock is read between files and between lines, so a search ends at the time limit and returns what it has.
-3. A pattern that passes but can still be slow (two or more unbounded repeats, or more than three doubling points) is run for each file in a private context with a two second limit (a vm context). When the limit passes, the search stops and says it ran out of time. On a remote connection the Python script sets an alarm for the time budget and abandons a runaway match in the same way where the host supports it (Linux and macOS).
+2. The clock is read between files and between lines. The budget scales with visited files and has a 30 second ceiling; reaching it returns visible partial results.
+3. A pattern that passes but can still be slow (two or more unbounded repeats, or more than three doubling points) is run for each file in a private context with a two second limit (a vm context). When that per-file limit passes, the file is skipped and reported while later files continue. On a remote connection the Python script sets an alarm for the file and total budgets where the host supports it (Linux and macOS).
 
-Residual risk, stated plainly: the pre-check is a heuristic, not a proof, and an ordinary pattern still runs on the main process for up to two seconds before the limit stops it. The vm limit has been measured to stop a runaway match on the Node version used for the tests; it was not measured inside the packaged app, and a different engine version could behave differently. On a remote connection a host without the alarm (for example Windows over SSH) relies on the pre-check and on the 25 second limit the app puts on every remote command. Running every search in a separate worker process is a larger change and is not part of this feature.
+Residual risk, stated plainly: the pre-check is a heuristic, not a proof, and an ordinary pattern still runs on the main process for up to two seconds before the limit stops it. The vm limit has been measured to stop a runaway match on the Node version used for the tests; it was not measured inside the packaged app, and a different engine version could behave differently. On a remote connection a host without the alarm (for example Windows over SSH) relies on the pre-check and on the 60 second command limit used for searches. Running every search in a separate worker process is a larger change and is not part of this feature.
 
 ## Local, WSL and SSH
 
@@ -68,4 +68,4 @@ Local searches run in the app with JavaScript regular expressions (Unicode, case
 
 ## Not included
 
-Replace in files, grouping matches by file, streaming or cancelling a running search, context lines around a match, and running the search in a worker thread are not part of this feature.
+Replace in files, grouping matches by file, streaming results while a search runs, context lines around a match, and running the search in a worker thread are not part of this feature.

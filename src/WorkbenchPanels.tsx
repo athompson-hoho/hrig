@@ -278,24 +278,54 @@ export function ProjectTools({
   const [searchResult, setSearchResult] = useState({ scope: "", generation: 0 });
   const searchScope = JSON.stringify([pinConnectionIdentity(connection), root]);
   const [busy, setBusy] = useState(false);
+  const activeSearchId = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [path, setPath] = useState("");
   const [destination, setDestination] = useState("");
+  useEffect(() => () => {
+    const id = activeSearchId.current;
+    if (id) window.hrig.cancelProjectSearch(id);
+  }, [searchScope]);
+  const runSearch = async (request: any) => {
+    if (busy || !request?.query) return;
+    const id = window.crypto.randomUUID();
+    activeSearchId.current = id;
+    setError("");
+    setStopped("Searching project contents…");
+    setBusy(true);
+    try {
+      const result = await window.hrig.searchProject(connection, { ...request, root }, id);
+      if (activeSearchId.current !== id) return;
+      const outcome = readSearchOutcome(result);
+      setMatches(outcome.matches);
+      setStopped(stopNote(outcome));
+      setSearchResult(previous => ({ scope: searchScope, generation: previous.generation + 1 }));
+    } catch (e) {
+      if (activeSearchId.current === id) {
+        setError((e as Error).message);
+        setStopped("");
+      }
+    } finally {
+      if (activeSearchId.current === id) {
+        activeSearchId.current = null;
+        setBusy(false);
+      }
+    }
+  };
+  const cancelSearch = () => {
+    const id = activeSearchId.current;
+    if (!id) return;
+    setStopped("Canceling search…");
+    window.hrig.cancelProjectSearch(id);
+  };
   const action = async (request: any) => {
     setError("");
     setBusy(true);
     try {
-      const result = await window.hrig.edit(connection, { ...request, root });
-      if (request.op === "searchText") {
-        const outcome = readSearchOutcome(result);
-        setMatches(outcome.matches);
-        setStopped(stopNote(outcome));
-        setSearchResult(previous => ({ scope: searchScope, generation: previous.generation + 1 }));
-      } else {
-        onChanged();
-        if (request.op === "create") onFile(request.path);
-        if (request.op === "rename") onFile(request.destination);
-      }
+      await window.hrig.edit(connection, { ...request, root });
+      onChanged();
+      if (request.op === "create") onFile(request.path);
+      if (request.op === "rename") onFile(request.destination);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -320,7 +350,7 @@ export function ProjectTools({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && query)
-                action(buildSearchRequest(query, options));
+                runSearch(buildSearchRequest(query, options));
             }}
             placeholder="Find text in this project…"
           />
@@ -356,10 +386,15 @@ export function ProjectTools({
           <button
             className="primary-button"
             disabled={busy || !query}
-            onClick={() => action(buildSearchRequest(query, options))}
+            onClick={() => runSearch(buildSearchRequest(query, options))}
           >
             Search text
           </button>
+          {busy && activeSearchId.current && (
+            <button type="button" className="secondary-button" onClick={cancelSearch}>
+              Cancel search
+            </button>
+          )}
         </div>
       </label>
       {showFilters && (

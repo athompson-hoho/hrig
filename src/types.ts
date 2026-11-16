@@ -208,6 +208,23 @@ export interface HrigAPI {
       allowMissing?: boolean;
     },
   ): Promise<any>;
+  searchProject(
+    connection: Connection,
+    request: {
+      op: "searchText";
+      root: string;
+      path?: string;
+      query: string;
+      options?: {
+        regex: boolean;
+        wholeWord: boolean;
+        include?: string;
+        exclude?: string;
+      };
+    },
+    requestId: string,
+  ): Promise<any>;
+  cancelProjectSearch(requestId: string): void;
   seatMessage(
     connection: Connection,
     request: { op: "prepare"; id: string; message: string } | { op: "send"; id: string; token: string },

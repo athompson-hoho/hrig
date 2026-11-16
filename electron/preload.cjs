@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld("hrig", {
   doctor: invoke("connection:doctor"),
   exportDiagnostics: invoke('diagnostics:export'),
   edit: invoke("editor:operation"),
+  searchProject: invoke("editor:search"),
+  cancelProjectSearch: (id) => ipcRenderer.send("editor:cancel-search", id),
   rigAction: invoke("rig:action"),
   seatPrompt: invoke("seat:prompt"),
   inventoryCache: invoke("inventory:cache"),

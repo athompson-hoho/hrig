@@ -24,6 +24,7 @@ const { spawn } = require("node:child_process");
 const net = require("node:net");
 const tunnels = new Map();
 const terminals = new Map();
+const activeEditorSearches = new Map();
 let mainWindow;
 let persist = Promise.resolve();
 let latestState = "";
@@ -72,6 +73,8 @@ handle('terminal:log', async (_event, request) => {
 });
 let logShutdown = false;
 app.on('before-quit', event => {
+  for (const controller of activeEditorSearches.values()) controller.abort();
+  activeEditorSearches.clear();
   if (logShutdown) return;
   event.preventDefault();
   let timer;
@@ -344,6 +347,26 @@ handle("rig:assess", (_event, connection, request) =>
 handle("editor:operation", (_event, connection, request) =>
   backend.edit(connection, request),
 );
+const validSearchId = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const editorSearchKey = (event, id) => `${event.sender.id}:${id}`;
+handle("editor:search", async (event, connection, request, id) => {
+  if (!validSearchId(id) || request?.op !== "searchText")
+    throw new Error("Invalid project search request.");
+  const key = editorSearchKey(event, id);
+  if (activeEditorSearches.has(key)) throw new Error("This project search is already running.");
+  const controller = new AbortController();
+  activeEditorSearches.set(key, controller);
+  try {
+    return await backend.edit(connection, request, { signal: controller.signal });
+  } finally {
+    if (activeEditorSearches.get(key) === controller) activeEditorSearches.delete(key);
+  }
+});
+ipcMain.on("editor:cancel-search", (event, id) => {
+  try { trusted(event); } catch { return; }
+  if (!validSearchId(id)) return;
+  activeEditorSearches.get(editorSearchKey(event, id))?.abort();
+});
 handle("ports:list", (_event, connection) => features.ports(connection));
 require('./seat-notifications.cjs').registerSeatNotifications({ handle, Notification });
 handle("attention:notify", (_event, title, body) => {
