@@ -732,7 +732,7 @@ export default function App() {
     }
   }, [inventory, preferences["notifications.desktop"], pinOwner, inventoryError,
     inventoryHealth.current.key, inventoryHealth.current.verified,
-    inventoryHealth.current.failures, inventoryHealth.current.stale]);
+    inventoryHealth.current.failures]);
   // User-level only (a project override cannot change what is stored on disk or restored at start).
   const cacheInventoryOn = state.preferences?.["rig.cacheInventory"] === true;
   cacheInventoryPref.current = cacheInventoryOn;
