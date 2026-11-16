@@ -661,6 +661,12 @@ test("pod-broadcast integration: app uses the reviewed dialog and send boundary,
   assert.ok(files.length > 20, "found the sources");
   assert.ok(read("src/PodBroadcast.tsx").includes('from "./pod-broadcast"'));
   assert.ok(read("src/PodBroadcast.tsx").includes('from "./pod-broadcast-send"'));
+  assert.ok(
+    read("src/PodBroadcast.tsx").includes(
+      '<pre>{textCheck.ok ? textCheck.text : text || "(empty)"}</pre>',
+    ),
+    "the exact text preview must show the sanitized text that will be sent",
+  );
   assert.ok(read("src/App.tsx").includes('setModal("podBroadcast")'));
   assert.ok(read("src/App.tsx").includes('<PodBroadcast'));
   assert.ok(read("src/pod-broadcast-send.ts").includes("sendMessage"));

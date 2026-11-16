@@ -126,7 +126,7 @@ export default function PodBroadcast({
           <textarea aria-label="Exact message to send" rows={5} maxLength={MAX_TEXT_CHARS * 2} value={text} disabled={busy} onChange={(event) => { setText(event.target.value); setConfirmation(""); setResults([]); }} />
         </label>
         {!textCheck.ok && text.length > 0 && <p className="pod-broadcast-excluded">Message cannot be sent: {textCheck.reason}.</p>}
-        <p className="pod-broadcast-exact"><strong>Exact text preview</strong><pre>{text || "(empty)"}</pre></p>
+        <p className="pod-broadcast-exact"><strong>Exact text preview</strong><pre>{textCheck.ok ? textCheck.text : text || "(empty)"}</pre></p>
         <p className="field-note">A message starting with “-” is refused to prevent it being read as a command-line option. The message is not saved in HRig history.</p>
         <label className="field-label">
           TYPE {phrase || "THE RECIPIENT COUNT"} TO CONFIRM
