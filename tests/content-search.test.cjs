@@ -1526,6 +1526,7 @@ test("content-search backstop", async () => {
       });
       assert.equal(skippedFile.status, 0, skippedFile.stderr);
       const skippedAnswer = JSON.parse(skippedFile.stdout);
+      assert.equal(skippedAnswer.truncated, true, "a skipped remote file makes the search partial");
       assert.equal(skippedAnswer.reason, "");
       assert.equal(skippedAnswer.timedOutFileCount, 1);
       assert.deepEqual(skippedAnswer.timedOutFiles, ["a.txt"]);

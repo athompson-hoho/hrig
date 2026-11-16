@@ -383,7 +383,7 @@ elif op=='searchText':
  if budget is not None and hasattr(signal,'setitimer'): signal.setitimer(signal.ITIMER_REAL,0)
  if st['late'] and not reason: reason='time'
  reason=reason or ('matches' if len(out)>=200 else 'files' if scanned>=cap else '')
- print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason),'reason':reason,'scanned':scanned,'timedOutFiles':timed_out_files,'timedOutFileCount':timed_out_file_count}))
+ print(json.dumps(out if o is None else {'matches':out,'truncated':bool(reason or timed_out_file_count),'reason':reason,'scanned':scanned,'timedOutFiles':timed_out_files,'timedOutFileCount':timed_out_file_count}))
 `;
 function revision(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
