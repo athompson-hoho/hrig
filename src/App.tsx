@@ -2252,7 +2252,7 @@ export default function App() {
         (tab.config as PanelConfig).connection.id === connectionId &&
         !(tab.config as PanelConfig).mode,
     );
-    if (board) model.doAction(Actions.selectTab(board.id));
+    if (board?.id) model.doAction(Actions.selectTab(board.id));
     else addPanel("queue", "Task queue", { connection: target });
   };
   useEffect(

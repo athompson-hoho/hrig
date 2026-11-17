@@ -744,6 +744,8 @@ test("window-title channels: the bridge and the channel list are pinned, the new
     "files:git",
     "files:operation",
     "files:pick",
+    "human-item:notify",
+    "human-item:open-queue",
     "integrations:open",
     "integrations:operation",
     "mobile:operation",
