@@ -472,4 +472,8 @@ export const sourceColors = [
   "#2c2720",
   "#564a35",
   "#c5b38e",
+  "#91b4ec",
+  "#98e2c2",
+  "#dfc28e",
+  "#ed929d",
 ];

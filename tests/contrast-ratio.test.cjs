@@ -41,6 +41,16 @@ function round2(n) {
 const HC = "high-contrast";
 const BLACK = "#000000";
 const ACCENTS = ["theme", "mint", "blue", "violet", "amber"];
+const X08_SOURCE_COLORS = ["#91b4ec", "#98e2c2", "#dfc28e", "#ed929d"];
+
+test("contrast-ratio W13-9: every X08 stylesheet token is defined, themed and measurable", () => {
+  const scan = scanStylesheets();
+  assert.deepEqual([...scan.undefinedTokens].sort(), []);
+  for (const source of X08_SOURCE_COLORS) {
+    assert.ok(sourceColors.includes(source), source + " is in the theme palette");
+    assert.ok(scan.defined.has(source.slice(1)), source + " is defined in :root");
+  }
+});
 
 test("contrast-ratio rules: parseHex, relativeLuminance, contrastRatio, meets and checkPairs follow WCAG 2.x on known values, exact boundaries, alpha and bad input", () => {
   assert.deepEqual(parseHex("#fff"), { r: 255, g: 255, b: 255 });
@@ -359,13 +369,16 @@ const OTHER_THEMES = {
   "gruvbox-dark": "b8d5e283561fbc9a",
 };
 
-test("contrast-ratio pins: themeColor gives every theme except High Contrast exactly the colors it gave before this phase", () => {
-  assert.equal(sourceColors.length, 472);
+test("contrast-ratio pins: themeColor gives every legacy source color in every theme exactly the colors it gave before this phase", () => {
+  const legacySourceColors = sourceColors.filter(
+    (source) => !X08_SOURCE_COLORS.includes(source),
+  );
+  assert.equal(legacySourceColors.length, 472);
   for (const id of Object.keys(OTHER_THEMES)) {
     assert.ok(theme.themes[id], id + " is a theme");
     const hash = crypto.createHash("sha256");
     for (const accent of ACCENTS)
-      for (const source of sourceColors)
+      for (const source of legacySourceColors)
         hash.update(theme.themeColor(source, id, accent) + "\n");
     assert.equal(hash.digest("hex").slice(0, 16), OTHER_THEMES[id], id);
   }
@@ -628,18 +641,13 @@ function describePair(r) {
 
 test("contrast-ratio derived: every text, border and control color the stylesheets draw in High Contrast is measured on the real themeColor output and meets WCAG 2.x", () => {
   const scan = scanStylesheets();
-  // The :root block defines exactly the 472 colors applyTheme re-colors.
+  // The :root block defines exactly the 476 colors applyTheme re-colors.
   assert.deepEqual(
     [...scan.defined].sort(),
     sourceColors.map((s) => s.slice(1).toLowerCase()).sort(),
   );
-  // Four colors are used by the stylesheets but defined nowhere, so they are not themed in any theme (a finding of this phase; they cannot be measured).
-  assert.deepEqual([...scan.undefinedTokens].sort(), [
-    "91b4ec",
-    "98e2c2",
-    "dfc28e",
-    "ed929d",
-  ]);
+  // Every stylesheet token resolves through the source palette and real theme mapping.
+  assert.deepEqual([...scan.undefinedTokens].sort(), []);
   const results = checkPairs(scan.pairs);
   assert.ok(results.filter((r) => r.kind === "text").length >= 250);
   assert.ok(results.filter((r) => r.kind === "non-text").length >= 100);
