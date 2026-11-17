@@ -90,6 +90,7 @@ export default function TaskBoard({
   const [body, setBody] = useState("");
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
+  const [csvBom, setCsvBom] = useState(false);
   // The draft the open Assign work dialog was prepared from, while that dialog is open.
   const [prepared, setPrepared] = useState<TaskDraft | null>(null);
   // The card that last had focus (the board's one tab stop) and, while a refresh lands, the board that had focus.
@@ -202,14 +203,19 @@ export default function TaskBoard({
     }
   };
   // Saves the tasks the board shows and nothing else: one row per shown task in the fixed export columns, never a whole task or its body (see task-export.ts). It only reads the list; nothing is sent and no task changes.
-  const exportShown = (format: ExportFormat, list: any[], at: number) => {
+  const exportShown = (
+    format: ExportFormat,
+    list: any[],
+    at: number,
+    includeCsvBom = false,
+  ) => {
     try {
       const set = exportRows(list, at, {
         tags: itemTags,
         age: ageOf,
         reason: reasonOf,
       });
-      const file = exportFile(format, set.rows, at);
+      const file = exportFile(format, set.rows, at, includeCsvBom);
       downloadText(file.name, file.text, file.type);
       setNotice(exportNotice(format, set.rows.length, set.total));
     } catch (e) {
@@ -346,13 +352,22 @@ export default function TaskBoard({
         </button>
         <button
           className="small-button"
-          onClick={() => exportShown("csv", visible, now)}
+          onClick={() => exportShown("csv", visible, now, csvBom)}
           disabled={!shown}
           title={exportCsv.title}
         >
           <Download size={13} />
           {exportCsv.text}
         </button>
+        <label className="small-button" title="Add a UTF-8 BOM to CSV for Excel">
+          <input
+            type="checkbox"
+            aria-label="Include UTF-8 BOM in CSV for Excel"
+            checked={csvBom}
+            onChange={(event) => setCsvBom(event.currentTarget.checked)}
+          />
+          CSV BOM
+        </label>
         <button
           className="small-button"
           onClick={() => exportShown("md", visible, now)}

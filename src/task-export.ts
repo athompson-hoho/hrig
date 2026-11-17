@@ -114,7 +114,7 @@ function csvCell(value: unknown): string {
 /** One markdown table cell: one line, cut, and the characters that make a table, code, a link, an image or HTML are escaped with a backslash. */
 function mdCell(value: unknown): string {
   const text = cut(clean(value, false).replace(/ {2,}/g, " ").trim(), MAX_CELL);
-  return text.replace(/[\\|`<>[\]]/g, "\\$&");
+  return text.replace(/[\\|`<>[\]*_#&]/g, "\\$&");
 }
 
 /** The rows of a list: only the entries that are objects, at most 1000. */
@@ -179,15 +179,15 @@ export function exportRows(
   return { rows, total };
 }
 
-/** The rows as CSV: a header line, then one line per row, lines ending in CRLF, cells quoted as RFC 4180 asks, and every cell that a spreadsheet could read as a formula prefixed with a single quote. */
-export function toCsv(rows: unknown): string {
+/** The rows as CSV: a header line, then one line per row, lines ending in CRLF, cells quoted as RFC 4180 asks, every cell that a spreadsheet could read as a formula prefixed with a single quote, and an optional UTF-8 byte order mark. */
+export function toCsv(rows: unknown, includeBom = false): string {
   const lines = [EXPORT_COLUMNS.join(",")];
   for (const row of listOf(rows))
     lines.push(EXPORT_COLUMNS.map((c) => csvCell(cellOf(row, c))).join(","));
-  return lines.join("\r\n") + "\r\n";
+  return (includeBom ? "\ufeff" : "") + lines.join("\r\n") + "\r\n";
 }
 
-/** The rows as a markdown pipe table, lines ending in a line feed; every cell is one line and its pipes, backslashes, backticks, angle brackets and square brackets are escaped. */
+/** The rows as a markdown pipe table, lines ending in a line feed; every cell is one line and its pipes, backslashes, backticks, angle brackets, square brackets, asterisks, underscores, number signs and ampersands are escaped. */
 export function toMarkdown(rows: unknown): string {
   const lines = [
     "| " + EXPORT_COLUMNS.join(" | ") + " |",
@@ -223,16 +223,17 @@ export function exportName(format: ExportFormat, at: number): string {
   );
 }
 
-/** The file for a format: the name for the time, the text of the rows and the media type; any other format throws. */
+/** The file for a format: the name for the time, the text of the rows and the media type; CSV includes a UTF-8 byte order mark only when requested, and any other format throws. */
 export function exportFile(
   format: ExportFormat,
   rows: unknown,
   at: number,
+  includeCsvBom = false,
 ): ExportFile {
   if (format === "csv")
     return {
       name: exportName("csv", at),
-      text: toCsv(rows),
+      text: toCsv(rows, includeCsvBom),
       type: "text/csv;charset=utf-8",
     };
   if (format === "md")

@@ -113,6 +113,42 @@ const CSV_BLOCKED =
 const NOTE =
   "Exports only the tasks shown, without task bodies. Review before sharing.";
 
+test("task-export W13-6: markdown structural characters stay literal and CSV BOM is explicit opt-in", async () => {
+  const text = "*star* _under_ # heading &amp;";
+  const mdCell = (value) =>
+    mdCells(lib.toMarkdown([row({ title: value })]).split("\n")[2])[1];
+  assert.equal(mdCell(text), "\\*star\\* \\_under\\_ \\# heading \\&amp;");
+
+  const csv = lib.toCsv([row({ title: "日本語" })]);
+  assert.equal(csv, CSV_HEADER + "i,日本語,s,o,,,\r\n");
+  const bomCsv = lib.toCsv([row({ title: "日本語" })], true);
+  assert.equal(bomCsv, "\ufeff" + csv);
+  assert.equal(lib.exportFile("csv", [row({ title: "日本語" })], AT, true).text, bomCsv);
+
+  const board = boardHarness();
+  try {
+    await board.flush();
+    const option = board.all().find(
+      (node) =>
+        node.type === "input" &&
+        node.props["aria-label"] === "Include UTF-8 BOM in CSV for Excel",
+    );
+    assert.ok(option, "the board exposes a labeled CSV BOM opt-in");
+    assert.equal(option.props.type, "checkbox");
+    assert.equal(option.props.checked, false);
+    option.props.onChange({
+      target: { checked: true },
+      currentTarget: { checked: true },
+    });
+    board.click(board.exports()[0]);
+    const file = await board.file();
+    assert.ok(file.bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf])));
+    assert.equal(file.text, "\ufeff" + CSV_ALL);
+  } finally {
+    board.unmount();
+  }
+});
+
 function boardHarness({ rows = ROWS } = {}) {
   const slots = [];
   const deps = [];
@@ -148,6 +184,11 @@ function boardHarness({ rows = ROWS } = {}) {
     },
   };
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots))
@@ -903,7 +944,8 @@ test("task-export markdown: a pipe table with one line per row, every cell one l
     ["[click](javascript:alert(1))", "\\[click\\](javascript:alert(1))"],
     ["![i](http://h.example/p.png)", "!\\[i\\](http://h.example/p.png)"],
     ["[ref]: http://h.example", "\\[ref\\]: http://h.example"],
-    ["&lt;b&gt; &amp;", "&lt;b&gt; &amp;"],
+    ["&lt;b&gt; &amp;", "\\&lt;b\\&gt; \\&amp;"],
+    ["*em* _em_ # heading & entity", "\\*em\\* \\_em\\_ \\# heading \\& entity"],
     ["=1+1", "=1+1"],
     ["-x @y +z", "-x @y +z"],
     ["a\nb", "a b"],
@@ -941,7 +983,7 @@ test("task-export markdown: a pipe table with one line per row, every cell one l
   for (const line of lines.slice(0, 3)) assert.equal(mdCells(line).length, 7);
   assert.ok(!trick.includes("\r"));
 
-  // Whatever the text, each row is one line of seven cells, and no cell holds an unescaped pipe, backtick, angle bracket or square bracket.
+  // Whatever the text, each row is one line of seven cells, and no cell holds an unescaped Markdown structure character.
   const next = seeded(13);
   const alphabet = [
     "|",
@@ -951,6 +993,10 @@ test("task-export markdown: a pipe table with one line per row, every cell one l
     ">",
     "[",
     "]",
+    "*",
+    "_",
+    "#",
+    "&",
     "!",
     "(",
     ")",
@@ -973,7 +1019,7 @@ test("task-export markdown: a pipe table with one line per row, every cell one l
       assert.equal(cells.length, 7, JSON.stringify([input, line]));
       for (const value of cells)
         assert.ok(
-          !/[|`<>[\]]/.test(bare(value)),
+          !/[|`<>[\]*_#&]/.test(bare(value)),
           JSON.stringify([input, value]),
         );
     }
@@ -1601,13 +1647,14 @@ test("task-export wiring: the module is pure with the exports that are pinned, t
     1,
     "the readers are the board's own, lent as they are",
   );
-  assert.equal(count(board, "exportFile(format, set.rows, at)"), 1);
+  assert.equal(count(board, "exportFile(format, set.rows, at, includeCsvBom)"), 1);
   assert.equal(
     count(board, "exportNotice(format, set.rows.length, set.total)"),
     1,
   );
-  assert.equal(count(board, 'exportShown("csv", visible, now)'), 1);
+  assert.equal(count(board, 'exportShown("csv", visible, now, csvBom)'), 1);
   assert.equal(count(board, 'exportShown("md", visible, now)'), 1);
+  assert.equal(count(board, 'aria-label="Include UTF-8 BOM in CSV for Excel"'), 1);
   assert.equal(
     count(board, "Date.now()"),
     1,
@@ -1749,12 +1796,13 @@ test("task-export docs: TASKS.md has one Exporting tasks section that says which
   say(paragraphs[2], [
     "In a CSV file, a cell is quoted when it holds a comma, a quote or a line break (a quote is doubled and a line break stays inside the cell)",
     "lines end in CRLF",
-    "UTF-8 without a byte order mark",
+    "UTF-8 without a byte order mark by default",
+    "Check `CSV BOM` to add a UTF-8 byte order mark for Excel",
     "(in Excel, Data, From Text/CSV)",
     "A cell that a spreadsheet could read as a formula, because after any spaces it starts with `=`, `+`, `-` or `@`, or it starts with a tab or a carriage return, gets a single quote in front of it so that it opens as text",
     "this also marks plain text that starts with a minus sign, which is accepted, and the quote shows in the cell",
     "A markdown file is a pipe table: line breaks become spaces",
-    "pipes, backslashes, backticks, angle brackets and square brackets are escaped",
+    "pipes, backslashes, backticks, angle brackets, square brackets, asterisks, underscores, number signs and ampersands are escaped",
     "a title cannot add a column, a link, an image or HTML",
     "(a viewer may still turn a plain web address into a link)",
   ]);
