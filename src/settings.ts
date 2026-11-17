@@ -607,7 +607,7 @@ export const schema: Setting[] = [
     category: "Notifications",
     label: "Notify about queue items for me",
     description:
-      "Notify when a new Task queue item addressed to a person appears (a human@host, human@kernel or name@external destination). Off by default and separate from Desktop attention notifications: this setting alone is the opt-in. Read only: HRig reads the queue list it already reads, and never claims, answers or changes an item or sends anything to a seat. The notification gives the count and at most the first item's summary, cut to 80 characters, never an item's text, id or address. Items already waiting when you turn it on or switch connection, and quiet updates, do not notify.",
+      "Notify when a new Task queue item needs a person: it is addressed to a person (human@host, human@kernel or name@external), or it is an active task addressed to an agent seat and blocked on a person. Off by default and separate from Desktop attention notifications: this setting alone is the opt-in. Read only: HRig reads the queue list it already reads, and never claims, answers or changes an item or sends anything to a seat. The silent notification gives the count and at most the first item's summary, cut to 80 characters, never an item's text, id or address. Clicking opens the Task queue for that connection. Items already waiting when you turn it on or switch connection, and quiet updates, do not notify.",
   },
   {
     key: "notifications.seatNeedsInputSound",

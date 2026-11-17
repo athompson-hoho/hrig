@@ -7,10 +7,10 @@ import { NO_SEEN, nextHumanPoll, type HumanSeen } from "./human-items";
 const FALLBACK_SECONDS = 15;
 
 /**
- * Opt-in desktop notification for new queue items addressed to a person.
+ * Opt-in desktop notification for new queue items that need a person.
  * Reads the queue list the app already reads (window.hrig.queue, read only)
  * every intervalSeconds while enabled, and tells the person through the
- * existing attention notification. It never changes a row and sends nothing
+ * existing desktop notification system. It never changes a row and sends nothing
  * to a seat or shell. The first answer on a connection only seeds what is
  * already there; a failed read is skipped and tried again, after the same
  * quick retries and backoff the inventory refresh uses.
@@ -56,7 +56,7 @@ export function useHumanItemNotices(options: {
         seen.current = step.seen;
         if (step.notice) {
           void window.hrig
-            .notifyAttention(step.notice.title, step.notice.body)
+            .notifyHumanItem(step.notice.title, step.notice.body, connection.id)
             .catch(() => {});
           logRef.current(step.notice.entry);
         }

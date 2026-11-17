@@ -106,10 +106,30 @@ export function isHumanAddressed(item: unknown): boolean {
   );
 }
 
-/** True when the row is addressed to a person, is still waiting (pending, in-progress or blocked) and is not a quiet update. */
+/** A valid non-human destination in the daemon's seat@rig form. */
+function isSeatAddress(address: string): boolean {
+  return (
+    /^[A-Za-z0-9._:-]+@[A-Za-z0-9._:-]+$/.test(address) &&
+    !HUMAN_ADDRESS_PATTERNS.some((pattern) => pattern.test(address))
+  );
+}
+
+/** True for a blocked task addressed to an agent seat and explicitly waiting on a person. */
+function isBlockedOnPerson(item: Record<string, unknown>): boolean {
+  const destination = short(item, ["destinationSession", "destination"]);
+  const blockedOn = short(item, ["blockedOn"]);
+  return (
+    short(item, ["state", "status"]).toLowerCase() === "blocked" &&
+    isSeatAddress(destination) &&
+    HUMAN_ADDRESS_PATTERNS.some((pattern) => pattern.test(blockedOn))
+  );
+}
+
+/** True when a row needs a person: it is addressed directly to one or is an agent-seat task blocked on one; it must still be active and not a quiet update. */
 export function isOpenHumanItem(item: unknown): boolean {
-  if (!isHumanAddressed(item)) return false;
+  if (!plain(item)) return false;
   const row = item as Record<string, unknown>;
+  if (!isHumanAddressed(row) && !isBlockedOnPerson(row)) return false;
   return (
     ACTIVE_STATES.includes(short(row, ["state", "status"]).toLowerCase()) &&
     short(row, ["humanIntent"]).toLowerCase() !== QUIET_INTENT

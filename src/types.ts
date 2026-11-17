@@ -252,6 +252,8 @@ export interface HrigAPI {
   ): Promise<{ url: string; localPort: number }>;
   closePreview(connection: Connection, port: number): Promise<void>;
   notifyAttention(title: string, body: string): Promise<void>;
+  notifyHumanItem(title: string, body: string, connectionId: string): Promise<boolean>;
+  onOpenHumanItemQueue(callback: (connectionId: string) => void): () => void;
   notifySeatAttention(request: SeatAttentionRequest): Promise<SeatAttentionResult>;
   onResume(callback: () => void): () => void;
   loadState(): Promise<WorkspaceState | null>;

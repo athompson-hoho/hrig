@@ -2242,6 +2242,23 @@ export default function App() {
     setTaskDraft({tabId, draft: {...draft, suggested: cfg.seat ? cfg.seat.name + "@" + cfg.seat.rigName : ""}});
   };
   useEffect(() => onTaskDraft((id, draft) => openTaskDraft.current(id, draft)), []);
+  const openHumanItemQueue = useRef<(connectionId: string) => void>(() => undefined);
+  openHumanItemQueue.current = (connectionId) => {
+    const target = state.connections.find((item) => item.id === connectionId);
+    if (!target) return;
+    const board = allTabs().find(
+      (tab) =>
+        tab.component === "queue" &&
+        (tab.config as PanelConfig).connection.id === connectionId &&
+        !(tab.config as PanelConfig).mode,
+    );
+    if (board) model.doAction(Actions.selectTab(board.id));
+    else addPanel("queue", "Task queue", { connection: target });
+  };
+  useEffect(
+    () => window.hrig.onOpenHumanItemQueue((id) => openHumanItemQueue.current(id)),
+    [],
+  );
   const droppedNow = droppedIds(droppedTerminals, terminalTabs.map(t => (t.config as PanelConfig).terminalId!));
   const reconnectDropped = () => {
     const count = reconnectAllDropped(droppedNow, id => sendTerminalCommand(id, "reconnect-dropped"));

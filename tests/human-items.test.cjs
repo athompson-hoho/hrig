@@ -1,6 +1,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
@@ -144,7 +145,7 @@ function hookHarness({
     notifyFails: false,
     props: { enabled, connection, intervalSeconds, refresh: 0 },
   };
-  const calls = { queue: [], notify: [], log: [], timers: [] };
+  const calls = { queue: [], notify: [], notifyContext: [], log: [], timers: [] };
   const timers = new Map();
   let timerId = 0;
   const before = {
@@ -162,8 +163,9 @@ function hookHarness({
         ? Promise.reject(new Error("rig is not reachable"))
         : Promise.resolve(state.rows);
     },
-    notifyAttention: (title, body) => {
+    notifyHumanItem: (title, body, connectionId) => {
       calls.notify.push([title, body]);
+      calls.notifyContext.push(connectionId);
       return state.notifyFails
         ? Promise.reject(new Error("no notifications here"))
         : Promise.resolve();
@@ -1051,9 +1053,77 @@ test("human-items real: a row for a person from another rig is dropped by a rig 
     lib.isOpenHumanItem(
       agent("qb", { blockedOn: "human@host", state: "blocked" }),
     ),
-    false,
-    "a row parked on a person is addressed to its seat, so it is not for the person here",
+    true,
+    "a blocked task addressed to an agent seat is still for the person it is waiting on",
   );
+});
+
+test("human-items notify for active agent-seat tasks blocked on a person and notification click opens that connection's Task queue", async () => {
+  const waiting = agent("blocked-q", {
+    state: "blocked",
+    destinationSession: "dev-alt@hrig",
+    blockedOn: "human@host",
+    summary: "Approve the rollout",
+  });
+  assert.equal(lib.isOpenHumanItem(waiting), true);
+  assert.deepEqual(lib.newHumanItems([waiting], new Set()).fresh, [
+    { id: "blocked-q", subject: "Approve the rollout" },
+  ]);
+
+  const h = hookHarness({ rows: [] });
+  try {
+    await h.start();
+    h.state.rows = [waiting];
+    await h.fire();
+    assert.deepEqual(h.calls.notify, [
+      ["1 new item for you", "Approve the rollout"],
+    ]);
+    assert.deepEqual(h.calls.notifyContext, [CONNECTION.id]);
+  } finally {
+    h.close();
+  }
+
+  const handlers = new Map();
+  let notification;
+  class FakeNotification extends EventEmitter {
+    static isSupported() { return true; }
+    constructor(options) { super(); this.options = options; notification = this; }
+    show() { this.shown = true; }
+  }
+  const actions = [];
+  const window = {
+    webContents: {
+      isDestroyed: () => false,
+      send: (channel, connectionId) => actions.push(["send", channel, connectionId]),
+    },
+    isMinimized: () => true,
+    restore: () => actions.push(["restore"]),
+    show: () => actions.push(["show"]),
+    focus: () => actions.push(["focus"]),
+  };
+  require("../electron/human-item-notifications.cjs").registerHumanItemNotifications({
+    handle: (channel, callback) => handlers.set(channel, callback),
+    Notification: FakeNotification,
+    getWindow: () => window,
+  });
+  const notify = handlers.get("human-item:notify");
+  assert.equal(
+    notify(null, ...h.calls.notify[0], h.calls.notifyContext[0]),
+    true,
+  );
+  assert.deepEqual(notification.options, {
+    title: "1 new item for you",
+    body: "Approve the rollout",
+    silent: true,
+  });
+  assert.equal(notification.shown, true);
+  notification.emit("click");
+  assert.deepEqual(actions, [
+    ["restore"],
+    ["show"],
+    ["focus"],
+    ["send", "human-item:open-queue", CONNECTION.id],
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -1114,11 +1184,11 @@ test("human-items wiring: the module is pure, the hook reads the queue list and 
   );
   assert.deepEqual(
     [...hookCode.matchAll(/hrig\s*\.\s*(\w+)/g)].map((m) => m[1]).sort(),
-    ["notifyAttention", "queue"],
+    ["notifyHumanItem", "queue"],
     "the only bridge calls: read the queue list, show a notification",
   );
   assert.equal(count(hookCode, "window.hrig.queue(connection)"), 1);
-  assert.equal(count(hookCode, ".notifyAttention("), 1);
+  assert.equal(count(hookCode, ".notifyHumanItem("), 1);
   assert.ok(
     !/\b(document|localStorage|sessionStorage|fetch|setInterval|Date|XMLHttpRequest|addEventListener|requestAnimationFrame)\b/.test(
       hookCode,
@@ -1154,24 +1224,31 @@ test("human-items wiring: the module is pure, the hook reads the queue list and 
     "App's own seat notification call is the one the long-list chain made",
   );
   assert.equal(count(app, "notifications.humanItems"), 1);
+  assert.ok(app.includes("window.hrig.onOpenHumanItemQueue("));
+  assert.ok(read("electron/main.cjs").includes("registerHumanItemNotifications"));
+  assert.ok(read("electron/preload.cjs").includes('onOpenHumanItemQueue:'));
   assert.equal(count(read("src/settings.ts"), "notifications.humanItems"), 2);
 
   const mentions = (text) =>
-    /human-items|useHumanItemNotices|humanItems/.test(text);
+    /human-items|useHumanItemNotices|humanItems|notifyHumanItem|onOpenHumanItemQueue|human-item/.test(text);
   for (const file of fs.readdirSync(path.join(root, "src")))
     assert.equal(
       mentions(read("src/" + file)),
-      ["App.tsx", "settings.ts", "useHumanItemNotices.ts"].includes(file),
+      ["App.tsx", "settings.ts", "types.ts", "useHumanItemNotices.ts"].includes(file),
       file,
     );
   for (const file of fs.readdirSync(path.join(root, "electron")))
-    assert.ok(!mentions(read("electron/" + file)), "electron/" + file);
+    assert.equal(
+      mentions(read("electron/" + file)),
+      ["main.cjs", "preload.cjs", "human-item-notifications.cjs"].includes(file),
+      "electron/" + file,
+    );
   assert.ok(!mentions(read("src/styles.css")));
 });
 
 test("human-items docs: TASKS.md says what counts as addressed to a person, that only new items notify and what is taken in silently, how it reads, what the notification holds, and that nothing is sent or changed", () => {
   const doc = read("TASKS.md");
-  const heading = "\n### Notification for items addressed to you\n";
+  const heading = "\n### Notification for items that need you\n";
   assert.ok(!/[^\n -~]/.test(doc), "plain ASCII");
   assert.ok(doc.startsWith("# Task board\n\n"));
   assert.equal(count(doc, heading), 1);
@@ -1201,17 +1278,17 @@ test("human-items docs: TASKS.md says what counts as addressed to a person, that
   const schema = (key) => settings.schema.find((row) => row.key === key);
   const refresh = settings.defaults["workspace.refreshInterval"];
   say(paragraphs[0], [
-    "a new queue item addressed to a person",
+    "a new queue item needs a person",
     "It is off by default",
     "Notify about queue items for me under Notifications in Settings (`notifications.humanItems`)",
     "separate from Desktop needs-input notifications and needs nothing else turned on",
     "`human@host`, `human@kernel`, `human-name@host`, `human-name@kernel` or `name@external`",
     "which is how OpenRig names a person",
-    "still pending, in-progress or blocked",
+    "Directly addressed items must still be pending, in-progress or blocked",
+    "or when it is an active blocked task addressed to an agent seat and its `blockedOn` address is a person",
     "A quiet update (`--human-intent " +
       lib.QUIET_INTENT +
       "`) is not an ask and does not notify",
-    "a task parked on a person is addressed to its own seat, so it does not notify either",
   ]);
   say(paragraphs[1], [
     "Only new items notify",
@@ -1238,7 +1315,7 @@ test("human-items docs: TASKS.md says what counts as addressed to a person, that
     "It never shows an item's text, id, address or tags",
     "the Activity list gets one matching line",
     "This is read only: HRig never claims, answers, resolves or changes an item and sends nothing to a seat or shell",
-    "the notification is silent and clicking it does nothing",
+    "The notification is silent; clicking opens the Task queue for the connection that found the item",
     "Windows notification preferences still apply",
   ]);
   // The names and numbers the page uses are the code's.

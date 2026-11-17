@@ -387,6 +387,11 @@ handle("attention:notify", (_event, title, body) => {
       silent: true,
     }).show();
 });
+require("./human-item-notifications.cjs").registerHumanItemNotifications({
+  handle,
+  Notification,
+  getWindow: () => mainWindow,
+});
 handle("preview:open", async (_event, connection, port) => {
   core.validateConnection(connection);
   port = Number(port);

@@ -59,6 +59,12 @@ contextBridge.exposeInMainWorld("hrig", {
   openPreview: invoke("preview:open"),
   closePreview: invoke("preview:close"),
   notifyAttention: invoke("attention:notify"),
+  notifyHumanItem: invoke("human-item:notify"),
+  onOpenHumanItemQueue: (callback) => {
+    const listener = (_event, connectionId) => callback(connectionId);
+    ipcRenderer.on("human-item:open-queue", listener);
+    return () => ipcRenderer.removeListener("human-item:open-queue", listener);
+  },
   notifySeatAttention: invoke("seat:notify-attention"),
   onResume: (callback) => {
     const listener = () => callback();
