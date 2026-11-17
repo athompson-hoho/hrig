@@ -139,5 +139,5 @@ test("the setting is opt-in, documented, and wired through preload, types, App a
   assert.match(app, /\.setSpellcheck\(wanted\)/);
   const main = read("electron/main.cjs");
   assert.match(main, /registerSpellcheck\(/);
-  assert.ok(main.indexOf("registerSpellcheck(") < main.indexOf("app.whenReady().then(createWindow)"));
+  assert.ok(main.indexOf("registerSpellcheck(") < main.indexOf("app.whenReady().then("));
 });
