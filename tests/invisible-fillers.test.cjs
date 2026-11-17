@@ -50,6 +50,35 @@ test("shared visible text cleaner strips every approved filler, including astral
   assert.equal(visibleText.stripInvisibleFillers(`a${high}${low}b`), `a🐀b`);
 });
 
+test("shared visible text cleaner preserves a complete subdivision-flag tag sequence but strips standalone tags", () => {
+  const englandFlag = "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}";
+  assert.equal(visibleText.stripInvisibleFillers(`before${englandFlag}after`), `before${englandFlag}after`);
+  assert.equal(visibleText.stripInvisibleFillers(`before\u{e0067}after`), "beforeafter");
+  assert.equal(visibleText.stripInvisibleFillers(`before\u{1f3f4}\u{e0067}after`), "before\u{1f3f4}after");
+
+  const { normalizeTitle } = load("src/panel-title.ts");
+  const { buildWindowTitle } = load("src/window-title.ts");
+  const mainWindowTitle = require(path.join(root, "electron/window-title.cjs"));
+  const { cleanNote } = load("src/seat-notes.ts");
+  const { previewOf } = load("src/terminal-paste-history.ts");
+  const { draftFromSelection } = load("src/task-draft.ts");
+  const { podGroups, validateBroadcastText } = load("src/pod-broadcast.ts");
+  assert.equal(normalizeTitle(englandFlag), englandFlag);
+  assert.equal(buildWindowTitle({ enabled: true, panel: englandFlag }), `${englandFlag} - hRig`);
+  assert.equal(mainWindowTitle.windowTitle(`${englandFlag} - hRig`), `${englandFlag} - hRig`);
+  assert.equal(cleanNote(englandFlag), englandFlag);
+  assert.equal(previewOf(englandFlag).text, englandFlag);
+  assert.equal(draftFromSelection(englandFlag).subject, englandFlag);
+  assert.deepEqual(validateBroadcastText(englandFlag), { ok: true, text: englandFlag });
+  assert.equal(
+    podGroups([{
+      id: "seat-1", rigId: "rig-1", rigName: englandFlag, name: englandFlag,
+      pod: englandFlag, runtime: "codex", status: "running", session: "bot@hrig",
+    }])[0].seats[0].name,
+    englandFlag,
+  );
+});
+
 test("markdown preview strips fillers while retaining joined emoji", () => {
   const { parseMarkdown } = load("src/markdown-safe.ts");
   const result = parseMarkdown(`Name${fillerRun} ${joinedEmoji}`);

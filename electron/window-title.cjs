@@ -6,14 +6,43 @@ const SEPARATOR = " - ";
 const MAX_TITLE = 100;
 const MAX_INPUT = 1024;
 const ENDING = SEPARATOR + APP_TITLE;
-// Lone surrogates, control characters (white space is handled apart), invisible fillers, zero-width and direction characters, annotation marks and tag characters. The zero-width joiner and the variation selectors stay: emoji sequences need them.
+// Lone surrogates, control characters (white space is handled apart), invisible fillers, zero-width and direction characters, annotation marks and standalone tag characters. Complete black-flag subdivision sequences stay intact.
 const DROPPED =
-  /[\ud800-\udfff]|[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufff9-\ufffb]|[\u{e0000}-\u{e007f}]/gu;
+  /[\ud800-\udfff]|[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u180e\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u206f\u2800\u3164\uffa0\ufff9-\ufffb]/gu;
+
+function stripUnprotectedTags(value) {
+  const characters = Array.from(value);
+  let kept = "";
+  for (let index = 0; index < characters.length; index++) {
+    const code = characters[index].codePointAt(0);
+    if (code === 0x1f3f4) {
+      let end = index + 1;
+      while (
+        end < characters.length &&
+        end - index <= 7 &&
+        characters[end].codePointAt(0) >= 0xe0061 &&
+        characters[end].codePointAt(0) <= 0xe007a
+      )
+        end++;
+      const count = end - index - 1;
+      if (
+        count >= 3 &&
+        count <= 7 &&
+        characters[end]?.codePointAt(0) === 0xe007f
+      ) {
+        kept += characters.slice(index, end + 1).join("");
+        index = end;
+        continue;
+      }
+    }
+    if (code < 0xe0000 || code > 0xe007f) kept += characters[index];
+  }
+  return kept;
+}
 
 function windowTitle(value) {
   if (typeof value !== "string") return APP_TITLE;
-  const text = value
-    .slice(0, MAX_INPUT)
+  const text = stripUnprotectedTags(value.slice(0, MAX_INPUT))
     .replace(DROPPED, "")
     .replace(/\s+/g, " ")
     .trim();

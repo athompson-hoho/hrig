@@ -20,9 +20,9 @@ export interface PastePreview {
 // Only this much of a paste is looked at to find its first line with text, so a huge entry stays cheap.
 const SCAN_LIMIT = 4096;
 
-// Control characters (the tab stays and is collapsed later), approved invisible fillers, zero-width, direction and other invisible formatting characters, tag characters and lone surrogates: none of them can be shown, and some could reorder what the person reads. The zero-width joiner and variation selectors stay, so emoji sequences stay whole.
+// Control characters (the tab stays and is collapsed later), approved invisible fillers, zero-width, direction and other invisible formatting characters, standalone tag characters and lone surrogates: none of them can be shown, and some could reorder what the person reads. The zero-width joiner, variation selectors and valid black-flag subdivision sequences stay, so emoji sequences stay whole.
 const HIDDEN =
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u{00ad}\u{061c}\u{180e}\u{200b}\u{200c}\u{200e}\u{200f}\u{2028}-\u{202e}\u{2060}-\u{206f}\u{feff}\u{fff9}-\u{fffb}\ud800-\udfff\u{e0000}-\u{e007f}]/gu;
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u{00ad}\u{061c}\u{180e}\u{200b}\u{200c}\u{200e}\u{200f}\u{2028}-\u{202e}\u{2060}-\u{206f}\u{feff}\u{fff9}-\u{fffb}\ud800-\udfff]/gu;
 
 const SPACES = /\s+/gu;
 

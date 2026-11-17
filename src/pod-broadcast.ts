@@ -114,7 +114,12 @@ function short(value: unknown): string {
 function clean(value: unknown): string {
   if (typeof value !== "string") return "";
   const head = stripInvisibleFillers(value.slice(0, MAX_LABEL * 4))
-    .replace(HIDDEN, (char) => (char === "\u200d" ? char : ""))
+    .replace(HIDDEN, (char) => {
+      const code = char.codePointAt(0)!;
+      return char === "\u200d" || (code >= 0xe0000 && code <= 0xe007f)
+        ? char
+        : "";
+    })
     .trim();
   let out = "";
   let count = 0;
@@ -345,7 +350,11 @@ export function validateBroadcastText(value: unknown): TextCheck {
   const body = text.replace(/[\n\t]/g, "");
   if (CONTROL.test(body)) return { ok: false, reason: "control characters" };
   for (const char of body)
-    if (char !== "\u200d" && FORMAT.test(char))
+    if (
+      char !== "\u200d" &&
+      !(char.codePointAt(0)! >= 0xe0000 && char.codePointAt(0)! <= 0xe007f) &&
+      FORMAT.test(char)
+    )
       return { ok: false, reason: "hidden characters" };
   return { ok: true, text };
 }

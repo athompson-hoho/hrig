@@ -30,7 +30,7 @@ const has = (target: object, key: string) =>
 const plain = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Control, zero-width except ZWJ, bidirectional-override, invisible tag characters and lone surrogates are dropped; approved fillers are stripped before review. */
+/** Control, zero-width except ZWJ, bidirectional-override, standalone tag characters and lone surrogates are dropped; approved fillers are stripped before review. Valid black-flag subdivision sequences are preserved. */
 function hidden(code: number) {
   return (
     code < 32 ||
@@ -44,8 +44,7 @@ function hidden(code: number) {
     (code >= 0x2028 && code <= 0x202e) ||
     (code >= 0x2060 && code <= 0x206f) ||
     code === 0xfeff ||
-    (code >= 0xd800 && code <= 0xdfff) ||
-    (code >= 0xe0000 && code <= 0xe007f)
+    (code >= 0xd800 && code <= 0xdfff)
   );
 }
 

@@ -46,8 +46,7 @@ function hidden(code: number): boolean {
     code === 0x200f ||
     (code >= 0x202a && code <= 0x202e) ||
     (code >= 0x2060 && code <= 0x2064) ||
-    (code >= 0x2066 && code <= 0x2069) ||
-    (code >= 0xe0000 && code <= 0xe007f)
+    (code >= 0x2066 && code <= 0x2069)
   );
 }
 
@@ -60,7 +59,7 @@ function bare(code: number): boolean {
   );
 }
 
-/** Cleans a typed or stored panel title: white space and line breaks become one space, control, zero-width, direction-override, tag and approved filler characters are dropped, the ends are trimmed and the rest is cut at max characters (default MAX_TITLE, never splitting an astral character). Null when nothing visible is left or the input is not text, which means no custom title. */
+/** Cleans a typed or stored panel title: white space and line breaks become one space, control, zero-width, direction-override, standalone tag and approved filler characters are dropped, valid black-flag subdivision sequences are preserved, the ends are trimmed and the rest is cut at max characters (default MAX_TITLE, never splitting an astral character). Null when nothing visible is left or the input is not text, which means no custom title. */
 export function normalizeTitle(
   input: unknown,
   max: number = MAX_TITLE,
