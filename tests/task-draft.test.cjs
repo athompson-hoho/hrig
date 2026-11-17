@@ -1,6 +1,7 @@
 "use strict";
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
+const { performance } = require("node:perf_hooks");
 const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
@@ -825,6 +826,20 @@ test("task-draft secret: a private key block is refused without repeating it, a 
     "Prepared from a terminal selection, cut to the first " +
       MAX_BODY.toLocaleString("en-US") +
       " characters. Review the subject, the brief and the owner: nothing is created until you press Create assigned task. Selections can contain secrets: review before creating.",
+  );
+});
+
+test("task-draft complexity: an incomplete private-key header with 99k spaces returns promptly", () => {
+  const { draftFromSelection } = lib;
+  const selection = "-----BEGIN" + " ".repeat(99_000) + "x";
+  const started = performance.now();
+  const draft = draftFromSelection(selection);
+  const elapsedMs = performance.now() - started;
+
+  assert.equal(draft.ok, true, "a non-key selection remains eligible");
+  assert.ok(
+    elapsedMs < 1000,
+    `99k-space incomplete header took ${elapsedMs.toFixed(1)} ms`,
   );
 });
 
