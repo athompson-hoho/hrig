@@ -8,7 +8,7 @@ The search box under Project tools looks for text in the files of the open proje
 - **Whole word** (the `Word` button): the characters just before and just after a match must not be letters, digits or an underscore, in any script. It works with plain text and with a regular expression.
 - **Files** (the `Files` button): shows an Include and an Exclude field. Each takes a comma separated list of globs. A file is searched when it matches an include glob (or there is none) and no exclude glob.
 
-With every option off, matching remains literal and case-insensitive. The same traversal, file and result limits, and structured search status apply whether or not an option is enabled.
+The UI sends an options object on every search, including when all optional controls are off. With the default values, matching is literal and case-insensitive. The same traversal, file and result limits, time budget, and structured stop status apply whether or not an optional control is enabled.
 
 ## Globs
 
