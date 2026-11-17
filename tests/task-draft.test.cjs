@@ -729,6 +729,16 @@ test("task-draft secret: a private key block is refused without repeating it, a 
         !refused.error.includes("ssh to host"),
     );
   }
+  for (const header of [
+    dash + "begin rsa private key" + dash,
+    dash + "BEGIN RSA\nPRIVATE KEY" + dash,
+    dash + "BEGIN OPENSSH\r\nPRIVATE KEY" + dash,
+  ]) {
+    const refused = draftFromSelection(header + "\nMIIEvQ-secret-material");
+    assert.equal(refused.ok, false, header);
+    assert.ok(refused.error.includes("private key"), header);
+    assert.ok(!refused.error.includes("MIIEvQ-secret-material"), header);
+  }
   // A header split by an invisible character is the same header once the character is gone.
   assert.equal(
     draftFromSelection(
