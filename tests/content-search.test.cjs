@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
+const fsSync = require("node:fs");
 const Module = require("node:module");
 const { spawnSync } = require("node:child_process");
 const { buildSync } = require("esbuild");
@@ -1590,6 +1591,80 @@ test("content-search cancellation keeps matches found before cancel", async () =
     assert.equal(at(canceled), "a.txt:1");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("remote content-search abort promptly returns streamed matches", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "hrig-search-ssh-"));
+  const marker = path.join(dir, "request.json");
+  const ssh = path.join(dir, "ssh");
+  const previousPath = process.env.PATH;
+  const match = { path: "src/a.ts", line: 1, text: "needle before cancel" };
+  await fs.writeFile(
+    ssh,
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", chunk => input += chunk);
+process.stdin.on("end", () => {
+  const request = JSON.parse(input);
+  if (!request.options?.streamProgress) {
+    process.stderr.write("streaming was not enabled");
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(JSON.stringify({event:"match", match:${JSON.stringify(match)}}) + "\\n", () => {
+    fs.writeFileSync(${JSON.stringify(marker)}, JSON.stringify(request));
+    setTimeout(() => {}, 10000);
+  });
+});
+`,
+    { mode: 0o700 },
+  );
+  await fs.chmod(ssh, 0o700);
+  process.env.PATH = dir + path.delimiter + previousPath;
+  const controller = new AbortController();
+  const remote = { id: "remote", kind: "ssh", host: "synthetic.invalid" };
+  const started = Date.now();
+  const pending = features.edit(
+    remote,
+    {
+      op: "searchText",
+      root: "/project",
+      path: "",
+      query: "needle",
+      options: { regex: false, wholeWord: false },
+    },
+    { signal: controller.signal },
+  );
+  try {
+    const deadline = Date.now() + 2000;
+    while (!fsSync.existsSync(marker) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(fsSync.existsSync(marker), "remote stream started");
+    const request = JSON.parse(await fs.readFile(marker, "utf8"));
+    assert.equal(request.options.streamProgress, true);
+
+    controller.abort();
+    const result = await Promise.race([
+      pending,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("remote abort did not settle promptly")), 1500),
+      ),
+    ]);
+    assert.ok(Date.now() - started < 1500, "abort returns before the remote timeout");
+    assert.deepEqual(result, {
+      matches: [match],
+      truncated: true,
+      reason: "cancelled",
+      timedOutFiles: [],
+      timedOutFileCount: 0,
+    });
+  } finally {
+    controller.abort();
+    process.env.PATH = previousPath;
+    await fs.rm(dir, { recursive: true, force: true });
   }
 });
 
