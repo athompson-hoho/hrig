@@ -115,13 +115,15 @@ export function OrphanSeatNotesManager({
   notes: SeatNotes | undefined;
   liveSeatIds: readonly string[];
   available: boolean;
-  onDelete: (keys: readonly string[]) => void;
+  onDelete: (keys: readonly string[], bulk: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pendingKeys, setPendingKeys] = useState<readonly string[] | null>(null);
+  const [pendingBulk, setPendingBulk] = useState(false);
   const orphans = available ? orphanSeatNotes(notes, connectionId, liveSeatIds) : [];
   const bulkDeleteAvailable = available && liveSeatIds.length > 0;
   const pending = pendingKeys?.filter((key) => orphans.some((row) => row.key === key)) || [];
+  const bulkConfirmationUnavailable = pendingBulk && !bulkDeleteAvailable;
   const title = "Manage orphaned seat notes";
   return (
     <>
@@ -155,7 +157,10 @@ export function OrphanSeatNotesManager({
                       type="button"
                       className="secondary-button"
                       aria-label={`Delete note for ${note.seatId}`}
-                      onClick={() => setPendingKeys([note.key])}
+                      onClick={() => {
+                        setPendingBulk(false);
+                        setPendingKeys([note.key]);
+                      }}
                     >
                       Delete...
                     </button>
@@ -166,7 +171,10 @@ export function OrphanSeatNotesManager({
                 <button className="secondary-button" onClick={() => setOpen(false)}>Close</button>
                 <button className="secondary-button" aria-label="Delete all orphan notes" disabled={!bulkDeleteAvailable}
                   title={bulkDeleteAvailable ? undefined : "At least one verified live seat is required for bulk deletion"}
-                  onClick={() => setPendingKeys(orphans.map((row) => row.key))}>
+                  onClick={() => {
+                    setPendingBulk(true);
+                    setPendingKeys(orphans.map((row) => row.key));
+                  }}>
                   Delete all {orphans.length} orphan notes...
                 </button>
               </div>
@@ -187,20 +195,30 @@ export function OrphanSeatNotesManager({
       {open && pendingKeys && (
         <Modal
           title="Confirm note deletion"
-          subtitle={pending.length
-            ? `Delete ${pending.length === 1 ? "this note" : `these ${pending.length} notes`} for seats no longer present in ${connectionName}'s verified inventory? This cannot be undone.`
-            : "These notes are no longer orphaned in the current inventory. Nothing will be deleted."}
-          onClose={() => setPendingKeys(null)}
+          subtitle={bulkConfirmationUnavailable
+            ? "Bulk deletion requires a fresh verified inventory with at least one live seat. Nothing will be deleted."
+            : pending.length
+              ? `Delete ${pending.length === 1 ? "this note" : `these ${pending.length} notes`} for seats no longer present in ${connectionName}'s verified inventory? This cannot be undone.`
+              : "These notes are no longer orphaned in the current inventory. Nothing will be deleted."}
+          onClose={() => {
+            setPendingKeys(null);
+            setPendingBulk(false);
+          }}
         >
           <div className="modal-actions">
-            <button className="secondary-button" onClick={() => setPendingKeys(null)}>Cancel</button>
+            <button className="secondary-button" onClick={() => {
+              setPendingKeys(null);
+              setPendingBulk(false);
+            }}>Cancel</button>
             <button
               className="primary-button"
               aria-label="Confirm deletion of orphan notes"
-              disabled={!pending.length || !available}
+              disabled={!pending.length || !available || (pendingBulk && liveSeatIds.length === 0)}
               onClick={() => {
-                if (pending.length && available) onDelete(pending);
+                if (pending.length && available && (!pendingBulk || liveSeatIds.length > 0))
+                  onDelete(pending, pendingBulk);
                 setPendingKeys(null);
+                setPendingBulk(false);
                 setOpen(false);
               }}
             >

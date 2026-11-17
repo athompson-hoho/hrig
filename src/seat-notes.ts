@@ -123,13 +123,15 @@ export function orphanSeatNotes(
     });
 }
 
-/** Removes only selected notes that are still orphaned for this connection; returns the input unchanged if none qualify. */
+/** Removes selected notes that are still orphaned for this connection; bulk mode also requires a non-empty live-seat list. */
 export function removeOrphanSeatNotes(
   notes: SeatNotes,
   connectionId: string,
   liveSeatIds: readonly string[],
   selectedKeys: readonly string[],
+  bulk = false,
 ): SeatNotes {
+  if (bulk && liveSeatIds.length === 0) return notes;
   const selected = new Set(selectedKeys);
   const removable = orphanSeatNotes(notes, connectionId, liveSeatIds)
     .filter((note) => selected.has(note.key));

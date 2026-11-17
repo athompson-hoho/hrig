@@ -2916,12 +2916,13 @@ export default function App() {
                 notes={state.seatNotes}
                 orphanNotesAvailable={pinsAvailable && inventoryHealth.current.verified &&
                   !inventoryHealth.current.stale && !inventoryError}
-                onDeleteOrphanNotes={(keys) => {
+                onDeleteOrphanNotes={(keys, bulk) => {
                   const latest = attentionContext.current;
                   const owner = pinConnectionIdentity(connection);
                   if (latest.connection?.id !== connection.id || latest.inventoryError ||
                       !latest.inventory || inventoryHealth.current.key !== owner ||
-                      !inventoryHealth.current.verified || inventoryHealth.current.stale) return;
+                      !inventoryHealth.current.verified || inventoryHealth.current.stale ||
+                      (bulk && latest.inventory.seats.length === 0)) return;
                   setState((s) => {
                     const currentConnection = s.connections.find((c) => c.id === s.activeConnection) ||
                       s.connections[0] || local;
@@ -2929,13 +2930,15 @@ export default function App() {
                     const current = attentionContext.current;
                     if (current.connection?.id !== currentConnection.id || current.inventoryError ||
                         !current.inventory || inventoryHealth.current.key !== pinConnectionIdentity(currentConnection) ||
-                        !inventoryHealth.current.verified || inventoryHealth.current.stale) return s;
+                        !inventoryHealth.current.verified || inventoryHealth.current.stale ||
+                        (bulk && current.inventory.seats.length === 0)) return s;
                     const before = normalizeSeatNotes(s.seatNotes);
                     const after = removeOrphanSeatNotes(
                       before,
                       currentConnection.id,
                       current.inventory.seats.map((seat: Seat) => seat.id),
                       keys,
+                      bulk,
                     );
                     return after === before ? s : { ...s, seatNotes: after };
                   });

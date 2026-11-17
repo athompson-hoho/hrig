@@ -483,6 +483,56 @@ test("orphan-note manager keeps one-note confirmation but disables bulk deletion
   assert.deepEqual(deleted, [["c1|rig-1:gone"]]);
 });
 
+test("bulk orphan deletion rechecks empty or stale inventory at confirmation and write time", () => {
+  const notes = { "c1|rig-1:gone": { text: "keep until reviewed", updatedAt: 2 } };
+  const deleted = [];
+  const props = {
+    connectionId: "c1",
+    connectionName: "Work SSH",
+    notes,
+    liveSeatIds: ["rig-1:live"],
+    available: true,
+    onDelete: (keys, bulk) => deleted.push({ keys: [...keys], bulk }),
+  };
+  const emptyDuringConfirm = orphanNotesHarness(props);
+  emptyDuringConfirm.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
+  emptyDuringConfirm.button("Delete all orphan notes").props.onClick();
+  emptyDuringConfirm.setProps({ liveSeatIds: [] });
+  assert.equal(emptyDuringConfirm.button("Confirm deletion of orphan notes").props.disabled, true);
+  emptyDuringConfirm.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted, [], "a forced click cannot bypass the empty-inventory confirmation guard");
+
+  const staleDuringConfirm = orphanNotesHarness(props);
+  staleDuringConfirm.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
+  staleDuringConfirm.button("Delete all orphan notes").props.onClick();
+  staleDuringConfirm.setProps({ available: false });
+  assert.equal(staleDuringConfirm.button("Confirm deletion of orphan notes").props.disabled, true);
+  staleDuringConfirm.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted, [], "a forced click cannot bypass the stale-inventory confirmation guard");
+
+  const key = "c1|rig-1:gone";
+  const liveBulk = orphanNotesHarness(props);
+  liveBulk.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
+  liveBulk.button("Delete all orphan notes").props.onClick();
+  liveBulk.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted, [{ keys: [key], bulk: true }], "bulk intent stays explicit even when all selects only one key");
+
+  const liveSingle = orphanNotesHarness(props);
+  liveSingle.all().find((n) => n.type === "button" && n.props["aria-label"]?.startsWith("Manage orphaned seat notes")).props.onClick();
+  liveSingle.button("Delete note for rig-1:gone").props.onClick();
+  liveSingle.button("Confirm deletion of orphan notes").props.onClick();
+  assert.deepEqual(deleted[1], { keys: [key], bulk: false }, "a one-note operation remains distinct");
+
+  const bulkResult = lib.removeOrphanSeatNotes(notes, "c1", [], [key], true);
+  assert.equal(bulkResult, notes, "the data helper rejects explicit bulk mode with no live seats");
+  const singleResult = lib.removeOrphanSeatNotes(notes, "c1", [], [key]);
+  assert.equal(singleResult[key], undefined, "the explicit single-note operation remains available");
+
+  const app = collapse(stripComments(read("src/App.tsx")));
+  assert.ok(app.includes("onDeleteOrphanNotes={(keys, bulk) => {"), "the app receives explicit single-vs-bulk intent");
+  assert.ok(app.includes("|| (bulk && current.inventory.seats.length === 0)) return s;"), "the state write rechecks an empty live-seat list");
+});
+
 test("orphan-note manager has a distinct visible and accessible label from per-seat Notes buttons", () => {
   const notes = { "c1|rig-1:gone": { text: "review me", updatedAt: 2 } };
   const manager = orphanNotesHarness({
@@ -1147,7 +1197,7 @@ test("seat-notes wiring: the module is pure and documented, the dialog has five 
   assert.ok(sidebar.includes("fileRevision, notes, orphanNotesAvailable, onDeleteOrphanNotes, onNote, activeFile, }: {"));
   assert.ok(
     sidebar.includes(
-      "notes?: SeatNotes; orphanNotesAvailable: boolean; onDeleteOrphanNotes: (keys: readonly string[]) => void; onNote?: (seat: Seat, text: string) => void; activeFile?: ActiveFileTarget | null; }) {",
+      "notes?: SeatNotes; orphanNotesAvailable: boolean; onDeleteOrphanNotes: (keys: readonly string[], bulk: boolean) => void; onNote?: (seat: Seat, text: string) => void; activeFile?: ActiveFileTarget | null; }) {",
     ),
   );
   assert.ok(sidebar.includes("available={orphanNotesAvailable && !inventoryError && !!inventory}"));

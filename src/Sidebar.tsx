@@ -112,7 +112,7 @@ export default function Sidebar({
   fileRevision: number;
   notes?: SeatNotes;
   orphanNotesAvailable: boolean;
-  onDeleteOrphanNotes: (keys: readonly string[]) => void;
+  onDeleteOrphanNotes: (keys: readonly string[], bulk: boolean) => void;
   onNote?: (seat: Seat, text: string) => void;
   activeFile?: ActiveFileTarget | null;
 }) {
