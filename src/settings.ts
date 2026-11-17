@@ -31,6 +31,7 @@ export const defaults = {
   "terminal.fontSize": 13,
   "terminal.fontFamily":
     '"Cascadia Code", "Cascadia Mono", Consolas, monospace',
+  "terminal.ligatures": false,
   "terminal.lineHeight": 1.28,
   "terminal.cursorStyle": "bar",
   "terminal.cursorBlink": true,
@@ -342,6 +343,13 @@ export const schema: Setting[] = [
     category: "Terminal",
     label: "Terminal font family",
     description: "Installed monospace font family for terminal panels.",
+  },
+  {
+    key: "terminal.ligatures",
+    category: "Terminal",
+    label: "Font ligatures",
+    description:
+      "Join supported character sequences in terminals. Off by default. When enabled, HRig may ask to read local font data for the selected terminal font; if denied or unavailable, built-in fallback ranges are used. Applies to open terminals immediately.",
   },
   {
     key: "terminal.lineHeight",

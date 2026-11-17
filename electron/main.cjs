@@ -10,6 +10,7 @@ const {
   safeStorage,
   shell,
   clipboard,
+  session,
 } = require("electron");
 const path = require("node:path");
 if(process.platform!=='win32')process.env.PATH=[path.join(require('node:os').homedir(),'.local','bin'),'/opt/homebrew/bin','/usr/local/bin',process.env.PATH || '/usr/bin:/bin'].join(path.delimiter);
@@ -21,6 +22,7 @@ const features = require("./features.cjs");
 const rigControl = require("./rig-control.cjs").createRigControl(features.runRig, (connection,args,timeout,root) => features.runRig(connection,args,timeout,root,true));
 const backend=require("./backend.cjs").createBackend();
 const { spawn } = require("node:child_process");
+const { registerLocalFontsPermission } = require("./local-fonts-permission.cjs");
 const net = require("node:net");
 const tunnels = new Map();
 const terminals = new Map();
@@ -635,7 +637,14 @@ if (app.requestSingleInstanceLock()) {
       mainWindow.focus();
     }
   });
-  app.whenReady().then(createWindow);
+  app.whenReady().then(() => {
+    registerLocalFontsPermission({
+      session: session.defaultSession,
+      dialog,
+      getWindow: () => mainWindow,
+    });
+    return createWindow();
+  });
 } else app.quit();
 app.on("window-all-closed", () => {
   for (const tunnel of tunnels.values()) tunnel.process.kill();

@@ -71,6 +71,7 @@ Search highlight: while you search, the words you typed are marked in the name a
 | `editor.autoReload` | `true` | Refresh an unmodified buffer when its file changes externally. Unsaved edits always remain protected. |
 | `terminal.fontSize` | `13` | Live terminal text size in pixels; existing PTY sessions stay attached. |
 | `terminal.fontFamily` | `"Cascadia Code", "Cascadia Mono", Consolas, monospace` | Installed monospace font family for terminal panels. |
+| `terminal.ligatures` | `false` | Join supported character sequences in terminals. Off by default. When enabled, HRig may ask to read local font data for the selected terminal font; if denied or unavailable, built-in fallback ranges are used. Applies to open terminals immediately. See TERMINALS.md. |
 | `terminal.lineHeight` | `1.28` | Spacing between terminal lines as a multiplier. |
 | `terminal.cursorStyle` | `bar` | Shape of the terminal cursor. |
 | `terminal.cursorBlink` | `true` | Animate the terminal cursor when the terminal has focus. |

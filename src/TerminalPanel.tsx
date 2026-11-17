@@ -54,6 +54,7 @@ export default function TerminalPanel({
   const colorTheme = themeId(preferences);
   const hostTint = useHostTint(config.connection);
   const terminalRef = useRef<Terminal | null>(null);
+  const ligaturesAddonRef = useRef<{ dispose: () => void } | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const localShell = useRef(preferences["terminal.localShell"]).current;
   const host = useRef<HTMLDivElement>(null);
@@ -369,6 +370,8 @@ export default function TerminalPanel({
           term.buffer.active.baseY,
           term.buffer.active.viewportY,
         );
+      ligaturesAddonRef.current?.dispose();
+      ligaturesAddonRef.current = null;
       term.dispose();
       if (terminalRef.current === term) {
         terminalRef.current = null;
@@ -376,6 +379,41 @@ export default function TerminalPanel({
       }
     };
   }, [config.terminalId, config.seat?.session, attempt]);
+  useEffect(() => {
+    let cancelled = false;
+    const dispose = () => {
+      ligaturesAddonRef.current?.dispose();
+      ligaturesAddonRef.current = null;
+    };
+    dispose();
+    if (!preferences["terminal.ligatures"]) return;
+    const term = terminalRef.current;
+    if (!term) return;
+    void import("@xterm/addon-ligatures")
+      .then(({ LigaturesAddon }) => {
+        if (cancelled || terminalRef.current !== term) return;
+        const addon = new LigaturesAddon();
+        try {
+          term.loadAddon(addon);
+          ligaturesAddonRef.current = addon;
+        } catch {
+          addon.dispose();
+        }
+      })
+      .catch(() => {
+        // A missing browser font API or addon failure must not interrupt the PTY.
+      });
+    return () => {
+      cancelled = true;
+      dispose();
+    };
+  }, [
+    preferences["terminal.ligatures"],
+    preferences["terminal.fontFamily"],
+    config.terminalId,
+    config.seat?.session,
+    attempt,
+  ]);
   const [terminalsOpen, setTerminalsOpen] = useState(openTerminalCount);
   useEffect(() => {
     const id = config.terminalId;
