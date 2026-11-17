@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type FocusEvent,
   type KeyboardEvent,
@@ -94,6 +95,7 @@ export default function TaskBoard({
   // The card that last had focus (the board's one tab stop) and, while a refresh lands, the board that had focus.
   const [stop, setStop] = useState<Stop | null>(null);
   const [held, setHeld] = useState<Element | null>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let active = true;
     const load = () =>
@@ -468,6 +470,7 @@ export default function TaskBoard({
           )}
         <div
           className="task-board"
+          ref={boardRef}
           role="group"
           aria-label="Tasks by state. Use the arrow keys, Home and End to move between tasks."
           onKeyDown={onBoardKey}
@@ -536,6 +539,11 @@ export default function TaskBoard({
             setCreate(false);
             setSelected(null);
           }}
+          returnFocusFallback={() =>
+            boardRef.current?.querySelector<HTMLElement>(
+              '.task-card[tabindex="0"]',
+            )
+          }
           wide
         >
           {error && <ErrorBox error={error} />}{" "}

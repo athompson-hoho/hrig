@@ -137,9 +137,12 @@ function openDialog(specs, props = {}) {
   const body = { name: "body", focus() {} };
   const opener = {
     name: "opener",
+    isConnected: true,
     focus() {
-      doc.activeElement = opener;
-      dom.log.push("opener");
+      if (opener.isConnected) {
+        doc.activeElement = opener;
+        dom.log.push("opener");
+      }
     },
   };
   const doc = { activeElement: opener, body };
@@ -476,6 +479,30 @@ test("focus-trap modal: the real dialog skips disabled, hidden and tabindex -1 e
   }
 });
 
+test("focus-trap modal: a detached opener returns focus to its supplied live fallback", () => {
+  let replacement;
+  withDialog(
+    [{ name: "close" }, { name: "field", tag: "input" }, { name: "go" }],
+    (d) => {
+      replacement = {
+        name: "current task card",
+        isConnected: true,
+        focus() {
+          d.doc.activeElement = replacement;
+          d.log.push(replacement.name);
+        },
+      };
+      d.opener.isConnected = false;
+      d.focusOn("go");
+      d.log.length = 0;
+      d.close();
+      assert.equal(d.focused(), "current task card");
+      assert.deepEqual(d.log, ["current task card"]);
+    },
+    { returnFocusFallback: () => replacement },
+  );
+});
+
 // ---- the status roles ----
 
 test("focus-trap roles: an error box is an alert and a loading message a status, nothing else in the file gained a role and the file still exports the same six components", () => {
@@ -764,7 +791,9 @@ test("focus-trap wiring: the module is plain ASCII, pure, has no import and the 
     'window.addEventListener("keydown", handler);',
     'window.removeEventListener("keydown", handler);',
     "// Respect a destination that an action already focused outside this dialog.",
-    "if (!active || active === document.body || dialog?.contains(active)) previous?.focus();",
+    "if (!active || active === document.body || dialog?.contains(active)) {",
+    "if (previous?.isConnected) previous.focus();",
+    "else returnFocusFallbackRef.current?.()?.focus();",
     "}, [title]);",
     'role="dialog"\n        aria-modal="true"\n        aria-label={title}',
   ])

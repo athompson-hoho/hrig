@@ -105,6 +105,11 @@ function boardHarness({ rows = ROWS } = {}) {
     },
   };
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots))
@@ -548,6 +553,7 @@ test("task-board-nav keys: Up and Down, Home and End stay in the column, Left an
     { shiftKey: true },
     { ctrlKey: true, altKey: true },
     { isComposing: true },
+    { nativeEvent: { isComposing: true } },
     { defaultPrevented: true },
   ])
     for (const k of NAV)
@@ -1288,6 +1294,11 @@ test("task-board-nav wiring: the module is pure and only the board uses it, the 
   );
   assert.equal(count(board, ".click("), 0, "a key never clicks a card");
   assert.equal(count(board, "document.activeElement"), 2);
+  assert.ok(board.includes('ref={boardRef}'), "the task board has a focus fallback root");
+  assert.ok(
+    board.includes("returnFocusFallback={() => boardRef.current?.querySelector"),
+    "the modal returns focus to the board's current tab stop when its opener detached",
+  );
   assert.equal(count(board, 'typeof document === "undefined"'), 2);
   const handler = between(board, "const onBoardKey =", "const onBoardFocus =");
   assert.ok(

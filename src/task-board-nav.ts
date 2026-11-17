@@ -88,12 +88,14 @@ export function boardColumns<T>(visible: T[]): BoardColumn<T>[] {
 export function navKey(event: unknown): string | null {
   const e = typeof event === "string" ? { key: event } : event;
   if (!plain(e)) return null;
+  const native = plain(e.nativeEvent) ? e.nativeEvent : null;
   if (
     e.ctrlKey ||
     e.altKey ||
     e.metaKey ||
     e.shiftKey ||
     e.isComposing ||
+    native?.isComposing ||
     e.defaultPrevented
   )
     return null;

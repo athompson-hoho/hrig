@@ -45,17 +45,21 @@ export function Modal({
   subtitle,
   children,
   onClose,
+  returnFocusFallback,
   wide = false,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
+  returnFocusFallback?: () => HTMLElement | null | undefined;
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
+  const returnFocusFallbackRef = useRef(returnFocusFallback);
   closeRef.current = onClose;
+  returnFocusFallbackRef.current = returnFocusFallback;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     const dialog = ref.current;
@@ -87,7 +91,10 @@ export function Modal({
       window.removeEventListener("keydown", handler);
       const active = document.activeElement;
       // Respect a destination that an action already focused outside this dialog.
-      if (!active || active === document.body || dialog?.contains(active)) previous?.focus();
+      if (!active || active === document.body || dialog?.contains(active)) {
+        if (previous?.isConnected) previous.focus();
+        else returnFocusFallbackRef.current?.()?.focus();
+      }
     };
   }, [title]);
   return (
