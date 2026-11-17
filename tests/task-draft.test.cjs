@@ -108,6 +108,11 @@ function boardHarness({ seats = SEATS, rows = ROWS } = {}) {
     },
   };
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots))
@@ -304,6 +309,11 @@ function mountTools(selection) {
   let tree = null;
   let render = () => {};
   const react = {
+    useRef(initial) {
+      const i = hook++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState: (initial) => {
       const i = hook++;
       if (!(i in slots)) slots[i] = initial;

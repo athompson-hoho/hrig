@@ -171,6 +171,11 @@ function boardHarness({ rows = ROWS, seats = SEATS } = {}) {
     },
   };
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots))

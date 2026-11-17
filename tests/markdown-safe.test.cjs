@@ -281,6 +281,11 @@ function boardHarness({ details = [DETAIL], rows = ROWS, seats = SEATS } = {}) {
   const same = (a, b) =>
     a && b && a.length === b.length && a.every((d, k) => d === b[k]);
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots))
@@ -1078,6 +1083,11 @@ function bodyView(input) {
   const same = (a, b) =>
     a && b && a.length === b.length && a.every((d, k) => d === b[k]);
   const react = {
+    useRef(initial) {
+      const i = cursor++;
+      if (!(i in slots)) slots[i] = { current: initial };
+      return slots[i];
+    },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots)) slots[i] = initial;
