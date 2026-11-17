@@ -95,4 +95,3 @@ test("local-font permission is explicitly decided for the trusted app window and
   assert.equal(await denied.request(denied.trustedContents, "local-fonts"), false);
   assert.equal(denied.calls.prompts, 1, "denial is remembered for this app session");
 });
-
